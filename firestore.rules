@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- HELPER FUNCTIONS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      // Check if user has 'admin' custom claim OR 'admin' role in 'users' collection
+      return isSignedIn() && 
+        ((request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true) || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    
+    // --- USERS ---
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      
+      // Allow users to create their own doc (e.g. on signup)
+      allow create: if isOwner(uid) || isAdmin();
+      
+      // Allow users to update their own doc
+      allow update: if isOwner(uid) || isAdmin();
+                    
+      allow delete: if isAdmin() || (resource.data.isShadow == true && resource.data.email == request.auth.token.email);
+    }
+    
+    // --- EVENTS ---
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // --- REGISTRATIONS ---
+    match /registrations/{registrationId} {
+      allow read: if isSignedIn() && 
+                   (resource.data.playerId == request.auth.uid || 
+                    resource.data.player2Id == request.auth.uid || 
+                    isAdmin());
+      
+      allow create: if isSignedIn() && request.resource.data.playerId == request.auth.uid || isAdmin();
+      
+      allow update: if isSignedIn() && 
+                     (resource.data.playerId == request.auth.uid || isAdmin()) &&
+                     (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['partnerStatus'])); 
+      
+      allow delete: if isAdmin();
+    }
+    
+    // --- TEAMS ---
+    match /teams/{teamId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() || isAdmin();
+    }
+
+    // --- MEDIA LIBRARY ---
+    match /media_library/{mediaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // --- NOTIFICATIONS ---
+    match /notifications/{notificationId} {
+      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin();
+    }
+  }
+}
