@@ -18,7 +18,7 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp, runTransaction, collection, query, where, getDocs, writeBatch, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, User, ArrowLeft } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/context/ToastContext";
@@ -405,13 +405,6 @@ function SignInContent() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-                <button
-                    onClick={() => router.push("/dashboard")}
-                    className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-                >
-                    <ArrowLeft className="h-5 w-5" />
-                    <span>Back to Dashboard</span>
-                </button>
                 <div className="text-center">
                     <div className="flex justify-center mb-4">
                         <Image src="/logo.svg" alt="App Logo" width={64} height={64} priority />
