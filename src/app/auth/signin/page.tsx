@@ -1,15 +1,13 @@
-//1. Imports and Setup
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-
+    sendEmailVerification,
     GoogleAuthProvider,
     signInWithPopup,
     UserCredential,
@@ -17,26 +15,71 @@ import {
     browserLocalPersistence,
     onAuthStateChanged
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp, runTransaction, collection, query, where, getDocs, deleteDoc, writeBatch, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, runTransaction, collection, query, where, getDocs, writeBatch, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/context/ToastContext";
-import { cn } from "@/lib/utils";
+import Image from "next/image";
 
-// 2. Form Validation Schema
-// The code uses Zod to define a validation schema for the authentication form:
+// ------------------------------------------------------------------
+// 📧 EMAIL VERIFICATION SWITCH 📧
+// "on" = Enforce verification and send emails.
+// "off" = Skip verification entirely (allows unverified users to login).
+export const EMAIL_VERIFICATION_ON: string = "off";
+// Note: I exported this so other components can theoretically import it, 
+// but you likely need to apply this logic in your Layout file too.
+// ------------------------------------------------------------------
+
+// Form Validation Schema
 const authSchema = z.object({
     mode: z.enum(["signin", "signup"]),
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(6, "Password must be at least 6 characters"),
+    email: z.string().trim().toLowerCase().email("Invalid email address"),
+    password: z.string().min(1, "Password is required"),
     confirmPassword: z.string().optional(),
     fullName: z.string().optional(),
     rememberMe: z.boolean().optional(),
 }).superRefine((data, ctx) => {
     if (data.mode === "signup") {
+        const password = data.password;
+        if (password.length < 8) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Password must be at least 8 characters",
+                path: ["password"],
+            });
+        }
+        if (!/[A-Z]/.test(password)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Password must contain at least one uppercase letter",
+                path: ["password"],
+            });
+        }
+        if (!/[a-z]/.test(password)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Password must contain at least one lowercase letter",
+                path: ["password"],
+            });
+        }
+        if (!/[0-9]/.test(password)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Password must contain at least one number",
+                path: ["password"],
+            });
+        }
+        if (!/[!@#$%^&*]/.test(password)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Password must contain at least one special character (!@#$%^&*)",
+                path: ["password"],
+            });
+        }
+
         if (!data.fullName || data.fullName.trim() === "") {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
@@ -62,7 +105,7 @@ const authSchema = z.object({
 
 type AuthFormValues = z.infer<typeof authSchema>;
 
-export default function SignInPage() {
+function SignInContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { showToast } = useToast();
@@ -73,11 +116,8 @@ export default function SignInPage() {
 
     // Account Linking State
     const [showLinkAccountModal, setShowLinkAccountModal] = useState(false);
-    const [pendingCred, setPendingCred] = useState<any>(null);
     const [existingEmail, setExistingEmail] = useState("");
 
-    //4. Form Setup
-    //The component uses react-hook-form with Zod validation:
     const form = useForm<AuthFormValues>({
         resolver: zodResolver(authSchema),
         defaultValues: {
@@ -99,62 +139,68 @@ export default function SignInPage() {
         }
     }, [form, isSignUp]);
 
-    // Add this debugging code to your component
+    // Debugging code
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
                 console.log("Current authenticated user:", {
                     uid: user.uid,
                     email: user.email,
-                    displayName: user.displayName,
-                    providerData: user.providerData
+                    emailVerified: user.emailVerified, // Log verification status
+                    verificationConfig: EMAIL_VERIFICATION_ON
                 });
-            } else {
-                console.log("No user is currently authenticated");
             }
         });
-
         return () => unsubscribe();
     }, []);
 
-    const handleSuccess = (user: UserCredential) => {
+    const handleSuccess = (user: UserCredential | { user: { emailVerified: boolean } }) => {
+        // ------------------------------------------------------------------
+        // [MODIFIED LOGIC] Check Config First
+        // ------------------------------------------------------------------
+        if (EMAIL_VERIFICATION_ON === "on") {
+            // Only enforce verification if the switch is explicitly "on"
+            const isVerified = user.user.emailVerified;
+
+            // Logic: If on signup, strict check. If existing user, we usually enforce it too 
+            // depending on your app rules. Here we enforce it for newly signed up users mainly.
+            if (isSignUp && !isVerified) {
+                showToast("Account created! Please verify your email to continue.", "warning");
+                return; // BLOCK access
+            }
+        } else {
+            console.log("Email verification skipped due to configuration.");
+        }
+
         showToast(isSignUp ? "Account created successfully!" : "Signed in successfully!", "success");
         const returnTo = searchParams.get("returnTo") || "/player";
         router.push(returnTo);
     };
 
-    const handleError = (error: any) => {
+    const handleError = (error: unknown) => {
+        const err = error as { code?: string; message?: string };
         let message = "An error occurred.";
-        if (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+        if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
             message = "Invalid email or password.";
-            console.warn("Auth Error:", error.code);
-        } else if (error.code === "auth/email-already-in-use") {
+        } else if (err.code === "auth/email-already-in-use") {
             message = "Email is already in use. Please sign in.";
-            console.warn("Auth Error:", error.code);
-        } else if (error.code === "auth/account-exists-with-different-credential") {
+        } else if (err.code === "auth/account-exists-with-different-credential") {
             message = "An account already exists with the same email address but different sign-in credentials.";
-            console.warn("Auth Error:", error.code);
-        } else if (error.code === "auth/popup-closed-by-user") {
+        } else if (err.code === "auth/popup-closed-by-user") {
             message = "Sign-in popup closed.";
-            console.warn("Auth Error:", error.code);
         } else {
             console.error("Auth Error:", error);
-            message = error.message || message;
+            message = err.message || message;
         }
         showToast(message, "error");
     };
 
-    //5. Main Authentication Functions
-    //Email/Password Authentication
     const onSubmit = async (data: AuthFormValues) => {
         setIsLoading(true);
         try {
             let userCred: UserCredential | undefined;
             if (isSignUp) {
-                // Validation handled by Zod schema
                 userCred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-
-
 
                 const user = userCred.user;
                 const userDocRef = doc(db, "users", user.uid);
@@ -169,8 +215,6 @@ export default function SignInPage() {
                     const shadowDoc = querySnapshot.docs[0];
                     const shadowData = shadowDoc.data();
                     const shadowUid = shadowDoc.id;
-
-                    console.log(`Found shadow profile (${shadowUid}). Merging into new account (${user.uid})...`);
 
                     const batch = writeBatch(db);
 
@@ -190,9 +234,6 @@ export default function SignInPage() {
                     await batch.commit();
                     showToast("Account reclaimed successfully!", "success");
 
-
-                    // TODO: When implementing Admin User Creation, ensure 'createdBy' is set to the Admin's UID.
-
                     if (data.rememberMe) {
                         localStorage.setItem("rememberedEmail", data.email);
                     } else {
@@ -205,10 +246,24 @@ export default function SignInPage() {
                         email: data.email,
                         fullName: data.fullName || "",
                         registrationStatus: "active",
-                        createdBy: user.uid, // Self-created
+                        createdBy: user.uid,
                         createdAt: serverTimestamp(),
                     });
                 }
+
+                // [FIX] Only send Verification Email if ON
+                if (EMAIL_VERIFICATION_ON === "on") {
+                    try {
+                        await sendEmailVerification(userCred.user);
+                    } catch (emailError) {
+                        console.error("Failed to send verification email:", emailError);
+                        showToast("Account created, but failed to send verification email.", "info");
+                    }
+                }
+
+                showToast("Account created!" + (EMAIL_VERIFICATION_ON === "on" ? " Please verify email." : ""), "success");
+                handleSuccess(userCred);
+
             } else {
                 userCred = await signInWithEmailAndPassword(auth, data.email, data.password);
                 if (!userCred) throw new Error("Failed to sign in");
@@ -221,13 +276,12 @@ export default function SignInPage() {
                         transaction.set(userDocRef, {
                             uid: currentUserCred.user.uid,
                             email: currentUserCred.user.email,
-                            fullName: currentUserCred.user.displayName || "", // Mapping Auth displayName to fullName
+                            fullName: currentUserCred.user.displayName || "",
                             registrationStatus: "active",
-                            createdBy: currentUserCred.user.uid, // Self-created
+                            createdBy: currentUserCred.user.uid,
                             createdAt: serverTimestamp(),
                         });
                     } else {
-                        // Update existing user to active
                         transaction.update(userDocRef, {
                             registrationStatus: "active"
                         });
@@ -239,11 +293,10 @@ export default function SignInPage() {
                 } else {
                     localStorage.removeItem("rememberedEmail");
                 }
-            }
 
-            if (userCred) {
                 handleSuccess(userCred);
             }
+
         } catch (error) {
             handleError(error);
         } finally {
@@ -261,84 +314,65 @@ export default function SignInPage() {
             const user = result.user;
             const userDocRef = doc(db, "users", user.uid);
 
-            // 1. Check if the REAL user profile already exists
             const userDocSnap = await getDoc(userDocRef);
 
             if (!userDocSnap.exists()) {
-                console.log("New user detected. Checking for Shadow Profile...");
-
-                // 2. Query for a Shadow User with the same email
                 const usersRef = collection(db, "users");
                 const q = query(usersRef, where("email", "==", user.email), where("isShadow", "==", true));
                 const querySnapshot = await getDocs(q);
 
                 if (!querySnapshot.empty) {
-                    // --- MERGE SCENARIO ---
-                    const shadowDoc = querySnapshot.docs[0]; // Assuming only 1 shadow profile per email
+                    const shadowDoc = querySnapshot.docs[0];
                     const shadowData = shadowDoc.data();
                     const shadowUid = shadowDoc.id;
 
-                    console.log(`Found shadow profile (${shadowUid}). Merging into new account (${user.uid})...`);
-
                     const batch = writeBatch(db);
-
-                    // A. Create NEW document with merged data
                     batch.set(userDocRef, {
-                        ...shadowData, // Copy all stats/notes from shadow
-                        uid: user.uid, // OVERWRITE with new Real UID
+                        ...shadowData,
+                        uid: user.uid,
                         email: user.email,
-                        fullName: user.displayName || shadowData.fullName || "", // Mapping Auth displayName to fullName
-                        photoUrl: user.photoURL || "", // Mapping Auth photoURL to photoUrl
-                        isShadow: false, // No longer a shadow
+                        fullName: user.displayName || shadowData.fullName || "",
+                        photoUrl: user.photoURL || "",
+                        isShadow: false,
                         registrationStatus: "active",
-                        createdAt: shadowData.createdAt || serverTimestamp(), // Keep original creation date if possible
-                        claimedAt: serverTimestamp(), // Track when they claimed it
-                        previousUid: shadowUid // OPTIONAL: Keep ref to old ID in case you need to fix links later
+                        createdAt: shadowData.createdAt || serverTimestamp(),
+                        claimedAt: serverTimestamp(),
+                        previousUid: shadowUid
                     });
-
-                    // B. Delete the OLD shadow document
                     const shadowDocRef = doc(db, "users", shadowUid);
                     batch.delete(shadowDocRef);
-
                     await batch.commit();
-                    showToast("Account reclaimed successfully! Your stats are merged.", "success");
+                    showToast("Account reclaimed successfully!", "success");
 
                 } else {
-                    // --- BRAND NEW USER SCENARIO ---
-                    console.log("No shadow profile found. Creating fresh account.");
                     await setDoc(userDocRef, {
                         uid: user.uid,
                         email: user.email,
-                        fullName: user.displayName || "", // Mapping Auth displayName to fullName
-                        photoUrl: user.photoURL || "", // Mapping Auth photoURL to photoUrl
+                        fullName: user.displayName || "",
+                        photoUrl: user.photoURL || "",
                         role: "player",
                         isShadow: false,
                         registrationStatus: "active",
-                        createdBy: user.uid, // Self-created
+                        createdBy: user.uid,
                         createdAt: serverTimestamp(),
                     });
                 }
             } else {
-                // --- EXISTING USER LOGIN ---
-                // Just update the photo if needed
                 if (user.photoURL && userDocSnap.data().photoUrl !== user.photoURL) {
                     await updateDoc(userDocRef, { photoUrl: user.photoURL });
                 }
-                // Ensure active status
                 if (userDocSnap.data().registrationStatus !== "active") {
                     await updateDoc(userDocRef, { registrationStatus: "active" });
                 }
             }
-
             handleSuccess(result);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Sign-in failed:", error);
-            if (error.code === "auth/account-exists-with-different-credential") {
-                const email = error.customData?.email;
-                const pendingCredential = GoogleAuthProvider.credentialFromError(error);
-                if (email && pendingCredential) {
+            const err = error as { code?: string; customData?: { email?: string }; message?: string };
+            if (err.code === "auth/account-exists-with-different-credential") {
+                const email = err.customData?.email;
+                if (email) {
                     setExistingEmail(email);
-                    setPendingCred(pendingCredential);
                     setShowLinkAccountModal(true);
                     return;
                 }
@@ -372,6 +406,9 @@ export default function SignInPage() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
                 <div className="text-center">
+                    <div className="flex justify-center mb-4">
+                        <Image src="/logo.svg" alt="App Logo" width={64} height={64} priority />
+                    </div>
                     <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
                         {isSignUp ? "Create an account" : "Welcome back"}
                     </h2>
@@ -387,6 +424,7 @@ export default function SignInPage() {
                         onClick={handleGoogleSignIn}
                         isLoading={isLoading}
                     >
+                        {/* Google SVG */}
                         <svg className="h-5 w-5" viewBox="0 0 24 24">
                             <path
                                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -431,14 +469,11 @@ export default function SignInPage() {
                 </div>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                    {/* Hidden Mode Field */}
                     <input type="hidden" {...form.register("mode")} />
 
                     {isSignUp && (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none" htmlFor="fullName">
-                                Full Name
-                            </label>
+                            <label className="text-sm font-medium leading-none" htmlFor="fullName">Full Name</label>
                             <div className="relative">
                                 <User className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                                 <Input
@@ -457,9 +492,7 @@ export default function SignInPage() {
                     )}
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium leading-none" htmlFor="email">
-                            Email address
-                        </label>
+                        <label className="text-sm font-medium leading-none" htmlFor="email">Email address</label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                             <Input
@@ -477,9 +510,7 @@ export default function SignInPage() {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium leading-none" htmlFor="password">
-                            Password
-                        </label>
+                        <label className="text-sm font-medium leading-none" htmlFor="password">Password</label>
                         <div className="relative">
                             <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                             <Input
@@ -503,66 +534,60 @@ export default function SignInPage() {
                         )}
                     </div>
 
-                    {
-                        isSignUp && (
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none" htmlFor="confirmPassword">
-                                    Confirm Password
-                                </label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                                    <Input
-                                        id="confirmPassword"
-                                        type={showConfirmPassword ? "text" : "password"}
-                                        placeholder="••••••••"
-                                        className="pl-10 pr-10"
-                                        {...form.register("confirmPassword")}
-                                        disabled={isLoading}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                                    >
-                                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                    </button>
-                                </div>
-                                {form.formState.errors.confirmPassword && (
-                                    <p className="text-sm text-red-500">{form.formState.errors.confirmPassword.message}</p>
-                                )}
+                    {isSignUp && (
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium leading-none" htmlFor="confirmPassword">Confirm Password</label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                                <Input
+                                    id="confirmPassword"
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    placeholder="••••••••"
+                                    className="pl-10 pr-10"
+                                    {...form.register("confirmPassword")}
+                                    disabled={isLoading}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                >
+                                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
                             </div>
-                        )
-                    }
+                            {form.formState.errors.confirmPassword && (
+                                <p className="text-sm text-red-500">{form.formState.errors.confirmPassword.message}</p>
+                            )}
+                        </div>
+                    )}
 
-                    {
-                        !isSignUp && (
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="checkbox"
-                                        id="rememberMe"
-                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        {...form.register("rememberMe")}
-                                        disabled={isLoading}
-                                    />
-                                    <label
-                                        htmlFor="rememberMe"
-                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                    >
-                                        Remember me
-                                    </label>
-                                </div>
-                                <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-                                    Forgot password?
-                                </a>
+                    {!isSignUp && (
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="rememberMe"
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    {...form.register("rememberMe")}
+                                    disabled={isLoading}
+                                />
+                                <label
+                                    htmlFor="rememberMe"
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                >
+                                    Remember me
+                                </label>
                             </div>
-                        )
-                    }
+                            <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                                Forgot password?
+                            </a>
+                        </div>
+                    )}
 
                     <Button type="submit" className="w-full h-11 text-base" isLoading={isLoading}>
                         {isSignUp ? "Create account" : "Sign in"}
                     </Button>
-                </form >
+                </form>
 
                 <div className="text-center text-sm">
                     <span className="text-gray-600">
@@ -576,36 +601,77 @@ export default function SignInPage() {
                         {isSignUp ? "Sign in" : "Sign up"}
                     </button>
                 </div>
-            </div >
+            </div>
 
-            {/* Account Linking Modal (Simplified) */}
-            {
-                showLinkAccountModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4">
-                            <h3 className="text-lg font-bold">Account Exists</h3>
-                            <p className="text-sm text-gray-600">
-                                An account with the email <strong>{existingEmail}</strong> already exists.
-                                Please sign in with your password to link your Google account.
-                            </p>
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setShowLinkAccountModal(false)}>Cancel</Button>
-                                <Button onClick={() => {
-                                    setShowLinkAccountModal(false);
-                                    setIsSignUp(false); // Ensure we are in sign-in mode
-                                    form.setValue("mode", "signin"); // Update mode
-                                    form.setValue("email", existingEmail);
-                                    // Focus password
-                                    document.getElementById("password")?.focus();
-                                    showToast("Please enter your password to link accounts", "info");
-                                }}>
-                                    Sign in to Link
-                                </Button>
-                            </div>
+            {/* Account Linking Modal */}
+            {showLinkAccountModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4">
+                        <h3 className="text-lg font-bold">Account Exists</h3>
+                        <p className="text-sm text-gray-600">
+                            An account with the email <strong>{existingEmail}</strong> already exists.
+                            Please sign in with your password to link your Google account.
+                        </p>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setShowLinkAccountModal(false)}>Cancel</Button>
+                            <Button onClick={() => {
+                                setShowLinkAccountModal(false);
+                                setIsSignUp(false);
+                                form.setValue("mode", "signin");
+                                form.setValue("email", existingEmail);
+                                document.getElementById("password")?.focus();
+                                showToast("Please enter your password to link accounts", "info");
+                            }}>
+                                Sign in to Link
+                            </Button>
                         </div>
                     </div>
-                )
-            }
-        </div >
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default function SignInPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+            <SignInContent />
+        </Suspense>
+    );
+
+}
+export function TestEmailButton() {
+    const [status, setStatus] = useState("Idle");
+
+    const testSend = async () => {
+        const user = auth.currentUser;
+        if (!user) {
+            setStatus("No user logged in. Sign in first.");
+            return;
+        }
+
+        setStatus("Sending...");
+        console.log("Attempting to send verification to:", user.email);
+
+        try {
+            await sendEmailVerification(user);
+            setStatus("✅ Success! Firebase accepted the request.");
+            console.log("Firebase sent the email successfully.");
+        } catch (error: any) {
+            setStatus(`❌ Error: ${error.code} - ${error.message}`);
+            console.error("Full Email Error:", error);
+        }
+    };
+
+    return (
+        <div className="p-4 bg-gray-100 border rounded">
+            <p>Current Status: <strong>{status}</strong></p>
+            <button
+                onClick={testSend}
+                className="bg-blue-600 text-white px-4 py-2 mt-2 rounded"
+            >
+                Force Send Verification Email
+            </button>
+        </div>
     );
 }

@@ -5,8 +5,8 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { auth, db, storage } from "@/lib/firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { onAuthStateChanged, User, sendEmailVerification } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, Upload, User as UserIcon, Camera } from "lucide-react";
+import { Loader2, User as UserIcon, Camera } from "lucide-react";
 import Image from "next/image";
+
+// ------------------------------------------------------------------
+// 📧 EMAIL VERIFICATION SWITCH 📧
+// Set to "on" to enable email verification, "off" to disable.
+const EMAIL_VERIFICATION_ON: string = "on";
+// ------------------------------------------------------------------
 
 // Schema
 const profileSchema = z.object({
@@ -45,9 +51,11 @@ export default function PlayerProfilePage() {
     const [saving, setSaving] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [isVerified, setIsVerified] = useState(false); // Added state
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<ProfileFormValues>({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(profileSchema) as any,
         defaultValues: {
             fullName: "",
@@ -68,47 +76,56 @@ export default function PlayerProfilePage() {
     });
 
     useEffect(() => {
+        const fetchProfile = async (uid: string) => {
+            try {
+                const docRef = doc(db, "users", uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    form.reset({
+                        fullName: data.fullName || data.fullname || "",
+                        gender: (data.gender?.toLowerCase() as ProfileFormValues["gender"]) || "male",
+                        phone: data.phone || "",
+                        notes: data.notes || "",
+                        hand: (data.hand?.toLowerCase() as ProfileFormValues["hand"]) || "right",
+                        registrationStatus: data.registrationStatus || "pending",
+                        position: (data.position?.toLowerCase() as ProfileFormValues["position"]) || "right",
+                        role: data.role || "player",
+                        skillLevel: (data.skillLevel?.toLowerCase() as ProfileFormValues["skillLevel"]) || (data.skilllevel?.toLowerCase() as ProfileFormValues["skillLevel"]) || "beginner",
+                        nickname: data.nickname || "",
+                        isShadow: data.isShadow || false,
+                        isAdmin: data.isAdmin || false,
+                        location: data.location || "",
+                        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth.seconds * 1000).toISOString().split('T')[0] : "",
+                    });
+                    setPhotoUrl(data.photoUrl || null);
+                }
+            } catch (error) {
+                console.error("Error fetching profile:", error);
+                showToast("Failed to load profile", "error");
+            }
+        };
+
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
+                // Reload user to get the latest 'emailVerified' status
+                await currentUser.reload();
                 setUser(currentUser);
-                await fetchProfile(currentUser.uid);
+
+                const isEmailVerified = currentUser.emailVerified || EMAIL_VERIFICATION_ON === "off";
+                setIsVerified(isEmailVerified);
+
+                // Only fetch profile if verified (or if verification is disabled)
+                if (isEmailVerified) {
+                    await fetchProfile(currentUser.uid);
+                }
             } else {
                 router.push("/auth/signin?returnTo=/player");
             }
             setLoading(false);
         });
         return () => unsubscribe();
-    }, [router]);
-
-    const fetchProfile = async (uid: string) => {
-        try {
-            const docRef = doc(db, "users", uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                form.reset({
-                    fullName: data.fullName || data.fullname || "",
-                    gender: (data.gender?.toLowerCase() as any) || "male",
-                    phone: data.phone || "",
-                    notes: data.notes || "",
-                    hand: (data.hand?.toLowerCase() as any) || "right",
-                    registrationStatus: data.registrationStatus || "pending",
-                    position: (data.position?.toLowerCase() as any) || "right",
-                    role: data.role || "player",
-                    skillLevel: (data.skillLevel?.toLowerCase() as any) || (data.skilllevel?.toLowerCase() as any) || "beginner",
-                    nickname: data.nickname || "",
-                    isShadow: data.isShadow || false,
-                    isAdmin: data.isAdmin || false,
-                    location: data.location || "",
-                    dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth.seconds * 1000).toISOString().split('T')[0] : "",
-                });
-                setPhotoUrl(data.photoUrl || null);
-            }
-        } catch (error) {
-            console.error("Error fetching profile:", error);
-            showToast("Failed to load profile", "error");
-        }
-    };
+    }, [router, form, showToast]);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -199,6 +216,18 @@ export default function PlayerProfilePage() {
         });
     };
 
+    const handleResendVerification = async () => {
+        if (user) {
+            try {
+                await sendEmailVerification(user);
+                showToast("Verification email resent! Check your inbox.", "success");
+            } catch (error) {
+                console.error("Error sending verification email:", error);
+                showToast("Error sending email. Try again later.", "error");
+            }
+        }
+    };
+
     const onSubmit: SubmitHandler<ProfileFormValues> = async (data) => {
         if (!user) return;
         setSaving(true);
@@ -226,11 +255,42 @@ export default function PlayerProfilePage() {
         );
     }
 
+    if (!loading && user && !isVerified) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center space-y-6 bg-gray-50 p-4">
+                <div className="flex justify-center mb-4">
+                    <Image src="/logo.svg" alt="App Logo" width={80} height={80} priority />
+                </div>
+                <div className="text-center space-y-2 max-w-md">
+                    <h1 className="text-2xl font-bold text-red-600">Email Not Verified</h1>
+                    <p className="text-gray-600">
+                        Please check your email <strong>{user.email}</strong> to verify your account.
+                        You must verify your email to access your profile.
+                    </p>
+                </div>
+                <div className="flex gap-4">
+                    <Button onClick={handleResendVerification} variant="outline">
+                        Resend Verification Email
+                    </Button>
+                    <Button
+                        onClick={() => window.location.reload()}
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                        I have verified, Refresh Page
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl mx-auto space-y-8">
                 <div className="bg-white shadow rounded-lg p-6 sm:p-8">
-                    <div className="border-b border-gray-200 pb-6 mb-6">
+                    <div className="border-b border-gray-200 pb-6 mb-6 text-center">
+                        <div className="flex justify-center mb-4">
+                            <Image src="/logo.svg" alt="App Logo" width={64} height={64} priority />
+                        </div>
                         <h1 className="text-2xl font-bold text-gray-900">Player Profile</h1>
                         <p className="mt-1 text-sm text-gray-500">
                             Manage your player information and preferences.
@@ -315,7 +375,7 @@ export default function PlayerProfilePage() {
                         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Gender</label>
-                                <Select onValueChange={(val) => form.setValue("gender", val as any)} defaultValue={form.getValues("gender")}>
+                                <Select onValueChange={(val) => form.setValue("gender", val as ProfileFormValues["gender"])} defaultValue={form.getValues("gender")}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select gender" />
                                     </SelectTrigger>
@@ -330,7 +390,7 @@ export default function PlayerProfilePage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Skill Level</label>
-                                <Select onValueChange={(val) => form.setValue("skillLevel", val as any)} defaultValue={form.getValues("skillLevel")}>
+                                <Select onValueChange={(val) => form.setValue("skillLevel", val as ProfileFormValues["skillLevel"])} defaultValue={form.getValues("skillLevel")}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select skill level" />
                                     </SelectTrigger>
@@ -347,7 +407,7 @@ export default function PlayerProfilePage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Hand</label>
-                                <Select onValueChange={(val) => form.setValue("hand", val as any)} defaultValue={form.getValues("hand")}>
+                                <Select onValueChange={(val) => form.setValue("hand", val as ProfileFormValues["hand"])} defaultValue={form.getValues("hand")}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select hand" />
                                     </SelectTrigger>
@@ -362,7 +422,7 @@ export default function PlayerProfilePage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Position</label>
-                                <Select onValueChange={(val) => form.setValue("position", val as any)} defaultValue={form.getValues("position")}>
+                                <Select onValueChange={(val) => form.setValue("position", val as ProfileFormValues["position"])} defaultValue={form.getValues("position")}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select position" />
                                     </SelectTrigger>
@@ -384,7 +444,7 @@ export default function PlayerProfilePage() {
                                 <label className="text-sm font-medium text-gray-700">Role</label>
                                 <Select
                                     onValueChange={(val) => {
-                                        form.setValue("role", val as any);
+                                        form.setValue("role", val as ProfileFormValues["role"]);
                                         // Sync isAdmin based on role
                                         if (val === "admin") {
                                             form.setValue("isAdmin", true);
@@ -405,7 +465,7 @@ export default function PlayerProfilePage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">Registration Status</label>
-                                <Select onValueChange={(val) => form.setValue("registrationStatus", val as any)} defaultValue={form.getValues("registrationStatus")}>
+                                <Select onValueChange={(val) => form.setValue("registrationStatus", val as ProfileFormValues["registrationStatus"])} defaultValue={form.getValues("registrationStatus")}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select status" />
                                     </SelectTrigger>
