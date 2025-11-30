@@ -34,8 +34,7 @@ service cloud.firestore {
     
     // --- EVENTS ---
     match /events/{eventId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
     
     // --- REGISTRATIONS ---
@@ -58,6 +57,12 @@ service cloud.firestore {
     match /teams/{teamId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn() || isAdmin();
+    }
+    
+    // --- CLUBS ---
+    match /clubs/{clubId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // --- MEDIA LIBRARY ---
