@@ -27,7 +27,7 @@ service cloud.firestore {
       allow create: if isOwner(uid) || isAdmin();
       
       // Allow users to update their own doc
-      allow update: if isOwner(uid) || isAdmin();
+      allow update: if isSignedIn();
                     
       allow delete: if isAdmin() || (resource.data.isShadow == true && resource.data.email == request.auth.token.email);
     }
