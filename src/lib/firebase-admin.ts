@@ -1,6 +1,7 @@
 import "server-only";
 import admin from "firebase-admin";
 import path from "path";
+import fs from "fs";
 
 export function getAdminAuth() {
     if (!admin.apps.length) {
@@ -13,8 +14,8 @@ export function getAdminAuth() {
         try {
             // Resolve path relative to CWD (root of project)
             const resolvedPath = path.resolve(process.cwd(), serviceAccountPath);
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const serviceAccount = require(resolvedPath);
+            const fileContent = fs.readFileSync(resolvedPath, "utf8");
+            const serviceAccount = JSON.parse(fileContent);
 
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount),

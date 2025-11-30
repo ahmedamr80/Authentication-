@@ -1,0 +1,35 @@
+
+> firebase-auth-app@0.1.0 lint
+> eslint
+
+
+C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\src\app\auth\signin\page.tsx
+  121:12  warning  'isLinking' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  405:91  error    Unexpected any. Specify a different type                @typescript-eslint/no-explicit-any
+  419:11  warning  'handleLinkAccount' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\src\app\player\page.tsx
+    9:23   warning  'setDoc' is defined but never used                                                                               @typescript-eslint/no-unused-vars
+   17:19   warning  'Upload' is defined but never used                                                                               @typescript-eslint/no-unused-vars
+   52:49   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   89:8    warning  React Hook useEffect has a missing dependency: 'fetchProfile'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   99:60   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  102:56   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  104:64   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  106:68   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  106:111  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  369:96   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  384:100  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  401:94   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  416:98   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  438:70   error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  459:108  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+
+C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\src\components\ui\input.tsx
+  4:18  error  An interface declaring no members is equivalent to its supertype  @typescript-eslint/no-empty-object-type
+
+C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\src\components\ui\textarea.tsx
+  5:18  error  An interface declaring no members is equivalent to its supertype  @typescript-eslint/no-empty-object-type
+
+Γ£û 20 problems (15 errors, 5 warnings)
+

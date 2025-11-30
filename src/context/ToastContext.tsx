@@ -3,15 +3,15 @@ import React, { createContext, useContext, useState, useCallback } from "react";
 import { Toast } from "@/components/ui/toast";
 
 interface ToastContextType {
-    showToast: (message: string, type?: "success" | "error" | "info") => void;
+    showToast: (message: string, type?: "success" | "error" | "info" | "warning") => void;
 }
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
-    const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
 
-    const showToast = useCallback((message: string, type: "success" | "error" | "info" = "info") => {
+    const showToast = useCallback((message: string, type: "success" | "error" | "info" | "warning" = "info") => {
         setToast({ message, type });
     }, []);
 

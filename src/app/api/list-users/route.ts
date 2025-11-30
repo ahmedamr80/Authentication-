@@ -41,10 +41,11 @@ export async function GET(request: Request) {
             users,
             pageToken: listUsersResult.pageToken,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Error listing users:", error);
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         return NextResponse.json(
-            { error: "Internal Server Error", details: error.message },
+            { error: "Internal Server Error", details: errorMessage },
             { status: 500 }
         );
     }
