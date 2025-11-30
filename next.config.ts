@@ -9,9 +9,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    allowedOrigins: ["*"],
-  },
+  allowedDevOrigins: ["*"],
 };
 
 export default nextConfig;
