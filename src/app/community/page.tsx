@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PlayerCard, PlayerData } from "@/components/PlayerCard";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, Users, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/context/ToastContext";
 
 export default function CommunityPage() {
+    const router = useRouter();
     const [players, setPlayers] = useState<PlayerData[]>([]);
     const [loading, setLoading] = useState(true);
     const { showToast } = useToast();
@@ -57,6 +60,15 @@ export default function CommunityPage() {
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
             <div className="max-w-7xl mx-auto space-y-8">
+                <Button
+                    variant="ghost"
+                    onClick={() => router.push("/dashboard")}
+                    className="text-gray-600 hover:text-gray-900 mb-4"
+                >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to Dashboard
+                </Button>
+
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-green-100 rounded-full">
                         <Users className="w-8 h-8 text-green-600" />
