@@ -4,6 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
+packages = ["unzip"]
 
 [workflows]
 runButton = "Project"
@@ -36,3 +37,12 @@ externalPort = 80
 [[ports]]
 localPort = 43133
 externalPort = 3000
+
+[[ports]]
+localPort = 44103
+externalPort = 3001
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["npm", "run", "start"]
+build = ["npm", "run", "build"]
