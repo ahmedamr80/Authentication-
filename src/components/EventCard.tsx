@@ -29,12 +29,25 @@ export interface EventData {
     };
 }
 
+export const calculateEventStatus = (event: EventData): "Active" | "Upcoming" | "Past" | "Cancelled" => {
+    if (event.cancellationMessage) return "Cancelled";
+
+    const now = new Date();
+    const eventDate = event.dateTime.toDate();
+    const endDate = new Date(eventDate.getTime() + event.duration * 60000);
+
+    if (now >= eventDate && now < endDate) return "Active";
+    if (now < eventDate) return "Upcoming";
+    return "Past";
+};
+
 interface EventCardProps {
     event: EventData;
 }
 
 export function EventCard({ event }: EventCardProps) {
     const eventDate = event.dateTime.toDate();
+    const dynamicStatus = calculateEventStatus(event);
     const formattedDate = eventDate.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
@@ -67,12 +80,12 @@ export function EventCard({ event }: EventCardProps) {
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold text-gray-900 shadow-sm">
                     {event.pricePerPlayer === 0 ? "Free" : `${event.pricePerPlayer} AED`}
                 </div>
-                <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm ${event.status === 'Active' ? 'bg-green-500' :
-                    event.status === 'Upcoming' ? 'bg-blue-500' :
-                        event.status === 'Cancelled' ? 'bg-red-500' :
+                <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm ${dynamicStatus === 'Active' ? 'bg-green-500' :
+                    dynamicStatus === 'Upcoming' ? 'bg-blue-500' :
+                        dynamicStatus === 'Cancelled' ? 'bg-red-500' :
                             'bg-gray-500'
                     }`}>
-                    {event.status}
+                    {dynamicStatus}
                 </div>
             </div>
 
