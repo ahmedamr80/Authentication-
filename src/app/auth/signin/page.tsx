@@ -173,7 +173,7 @@ function SignInContent() {
         }
 
         showToast(isSignUp ? "Account created successfully!" : "Signed in successfully!", "success");
-        const returnTo = searchParams.get("returnTo") || "/player";
+        const returnTo = searchParams.get("returnTo") || "/dashboard";
         router.push(returnTo);
     };
 
@@ -657,8 +657,9 @@ export function TestEmailButton() {
             await sendEmailVerification(user);
             setStatus("✅ Success! Firebase accepted the request.");
             console.log("Firebase sent the email successfully.");
-        } catch (error: any) {
-            setStatus(`❌ Error: ${error.code} - ${error.message}`);
+        } catch (error: unknown) {
+            const err = error as { code?: string; message?: string };
+            setStatus(`❌ Error: ${err.code} - ${err.message}`);
             console.error("Full Email Error:", error);
         }
     };
