@@ -76,5 +76,9 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isAdmin();
     }
+    // --- COUNTERS ---
+    match /counters/{counterId} {
+      allow read, update: if isSignedIn();
+    }
   }
 }

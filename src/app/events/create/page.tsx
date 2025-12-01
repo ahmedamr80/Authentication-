@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { collection, addDoc, Timestamp, query, orderBy, getDocs } from "firebase/firestore";
+import { collection, doc, runTransaction, Timestamp, query, orderBy, getDocs } from "firebase/firestore";
 import { auth, db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Loader2, Save, ArrowLeft, Camera, MapPin, Calendar } from "lucide-react";
@@ -79,6 +79,15 @@ export default function CreateEventPage() {
         fetchClubs();
     }, []);
 
+    const isValidUrl = (url: string) => {
+        try {
+            new URL(url);
+            return url.startsWith("http://") || url.startsWith("https://");
+        } catch (e) {
+            return false;
+        }
+    };
+
     const handleInputChange = (field: keyof CreateEventFormData, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
@@ -155,10 +164,35 @@ export default function CreateEventPage() {
                 createdAt: Timestamp.now(),
             };
 
-            const docRef = await addDoc(collection(db, "events"), eventData);
+            let newEventId = "";
+
+            await runTransaction(db, async (transaction) => {
+                const counterRef = doc(db, "counters", "events");
+                const counterDoc = await transaction.get(counterRef);
+
+                if (!counterDoc.exists()) {
+                    throw new Error("Counter document does not exist!");
+                }
+
+                const lastIndex = counterDoc.data().lastIndex || 0;
+                const newIndex = lastIndex + 1;
+
+                // Format: EVENT010
+                newEventId = `EVENT${String(newIndex).padStart(3, '0')}`;
+
+                const eventRef = doc(db, "events", newEventId);
+
+                // Add the custom eventId to the data as well
+                transaction.set(eventRef, {
+                    ...eventData,
+                    eventId: newEventId
+                });
+
+                transaction.update(counterRef, { lastIndex: newIndex });
+            });
 
             showToast("Event created successfully!", "success");
-            router.push(`/events/${docRef.id}`);
+            router.push(`/events/${newEventId}`);
         } catch (error) {
             console.error("Error creating event:", error);
             showToast("Failed to create event", "error");
@@ -335,7 +369,7 @@ export default function CreateEventPage() {
                                 <div className="flex flex-col items-center sm:items-start">
                                     <div className="relative group cursor-pointer" onClick={() => document.getElementById('logo-upload')?.click()}>
                                         <div className="h-32 w-32 rounded-lg overflow-hidden border-2 border-gray-200 bg-gray-100 relative">
-                                            {formData.logoUrl ? (
+                                            {formData.logoUrl && isValidUrl(formData.logoUrl) ? (
                                                 <Image
                                                     src={formData.logoUrl}
                                                     alt="Event Logo"
@@ -374,7 +408,11 @@ export default function CreateEventPage() {
                                         placeholder="https://example.com/image.jpg"
                                         value={formData.logoUrl}
                                         onChange={(e) => handleInputChange("logoUrl", e.target.value)}
+                                        className={formData.logoUrl && !isValidUrl(formData.logoUrl) ? "border-red-500 focus-visible:ring-red-500" : ""}
                                     />
+                                    {formData.logoUrl && !isValidUrl(formData.logoUrl) && (
+                                        <p className="text-xs text-red-500">Please enter a valid URL (starting with http:// or https://)</p>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -1,81 +1,155 @@
-# Firebase Auth App
+# Padel Community Platform
 
-A minimal, production-oriented sign-in app using Next.js 14+, Firebase v9, and Tailwind CSS.
+A production-grade padel community platform built with Next.js, Firebase, and Tailwind CSS. Connect with players, discover events, find clubs, and manage your padel journey.
+
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Quick Start](#quick-start)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Overview
+
+The Padel Community Platform is a comprehensive digital ecosystem designed for the padel community. Whether you're joining matches, discovering courts, connecting with players, or managing profiles—everything is here.
+
+### Key Highlights
+
+- **Secure Multi-Provider Authentication** (Email/Password, Google, Apple)
+- **Comprehensive Event Management** (Browse, filter, search, create)
+- **Community Features** (Player discovery, profiles, connections)
+- **Club Directory** (Explore partner venues)
+- **User Profiles** (Statistics, preferences, media)
+- **Enterprise Security** (Server-side validation, protected APIs)
 
 ## Features
-- **Authentication**: Email/Password, Google Sign-In, Apple Sign-In (placeholder).
-- **Security**: Server-side Admin SDK usage, protected API endpoints.
-- **UX**: "Remember Me", Password Visibility, Account Linking, Toast Notifications.
-- **Tech Stack**: Next.js (App Router), TypeScript, Tailwind CSS, Zod, React Hook Form.
 
-## Setup Instructions
+### 🔐 Authentication & Security
+- Email/Password registration and login
+- Google OAuth integration
+- Apple Sign-In support
+- "Remember Me" functionality
+- Account linking for returning players
+- Server-side Admin SDK usage
+- Protected API endpoints with API key authentication
+- Secure password requirements (8+ chars, uppercase, lowercase, number, special char)
 
-### 1. Prerequisites
+### 📅 Event Management
+- Browse all padel events in real-time
+- Advanced filtering (Active, Upcoming, Past, Cancelled)
+- Full-text search functionality
+- Create and manage events
+- Dynamic event status calculation
+- Event details and registration
+
+### 👥 Community Features
+- Discover padel players
+- View comprehensive player profiles
+- Player statistics and rankings
+- Community connection
+
+### 🏢 Club Directory
+- Partner club listings with details
+- Court information
+- Easy club discovery and exploration
+
+### 👤 Profile Management
+- Personalized player profiles
+- Player statistics
+- Profile picture management
+- Account settings
+
+### 📸 Media Library
+- Photo uploads and storage
+- Video support
+- Media organization
+
+## Tech Stack
+
+| Category | Technology |
+|----------|-------------|
+| **Framework** | Next.js 16 (App Router) |
+| **Language** | TypeScript 5 |
+| **Styling** | Tailwind CSS 4 |
+| **UI Components** | Radix UI |
+| **Icons** | Lucide React |
+| **Forms** | React Hook Form + Zod |
+| **Authentication** | Firebase Auth |
+| **Database** | Firebase Firestore |
+| **Storage** | Firebase Storage |
+| **Admin SDK** | Firebase Admin SDK |
+
+## Quick Start
+
+### Prerequisites
 - Node.js 18+
-- Firebase Project (Create one at [console.firebase.google.com](https://console.firebase.google.com))
+- npm or yarn
+- Firebase project
 
-### 2. Environment Variables
-Copy `.env.local` (or create it) and fill in your values:
+### Installation
 
 ```bash
-# Firebase Client SDK (Get these from Project Settings > General > Web App)
-NEXT_PUBLIC_FIREBASE_API_KEY=...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
-NEXT_PUBLIC_FIREBASE_APP_ID=...
+# Clone repository
+git clone <repository-url>
+cd padel-community-platform
 
-# Firebase Admin SDK (Server Only)
-# Place your service-account.json in the project root
-FIREBASE_ADMIN_SERVICE_ACCOUNT_PATH=service-account.json
-
-# API Protection (Set a strong random string)
-ADMIN_API_KEY=secret-api-key-123
-
-# OAuth (Optional)
-GOOGLE_CLIENT_ID=...
-```
-
-### 3. Service Account
-1. Go to Firebase Console > Project Settings > Service accounts.
-2. Click "Generate new private key".
-3. Save the file as `service-account.json` in the root of this project.
-4. **IMPORTANT**: Never commit this file to git!
-
-### 4. Install Dependencies
-```bash
+# Install dependencies
 npm install
-```
 
-### 5. Run Development Server
-```bash
+# Setup environment variables
+cp .env.example .env.local
+
+# Start development server
 npm run dev
 ```
-Visit `http://localhost:3000/auth/signin`.
 
-## Verification
+Visit `http://localhost:5000`
 
-### Verify Sign-In
-1. Open the app.
-2. Sign in with Email/Password or Google.
-3. Check the console for success logs.
+For detailed setup, see [INSTALLATION.md](./docs/INSTALLATION.md).
 
-### Verify User List API
-Use the provided script to fetch users securely:
+## Documentation
+
+Complete documentation available in the `docs/` directory:
+
+| Document | Purpose |
+|----------|---------|
+| [INSTALLATION.md](./docs/INSTALLATION.md) | Detailed setup and configuration |
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Technical design and structure |
+| [API.md](./docs/API.md) | API endpoint documentation |
+| [CONTRIBUTING.md](./docs/CONTRIBUTING.md) | Contributing guidelines |
+| [SECURITY.md](./docs/SECURITY.md) | Security best practices |
+| [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Production deployment guide |
+| [CHANGELOG.md](./docs/CHANGELOG.md) | Release history |
+
+## Development
 
 ```bash
-# Make script executable (Git Bash / Linux / Mac)
-chmod +x scripts/test-api.sh
-
-# Run script
-./scripts/test-api.sh secret-api-key-123
+npm run dev       # Start development server
+npm run build     # Build for production
+npm start         # Run production build
+npm run lint      # Run ESLint
 ```
 
-Or use curl manually:
-```bash
-curl -H "Authorization: Bearer secret-api-key-123" http://localhost:3000/api/list-users
-```
+## Contributing
 
-## Security Notes
-- The `/api/list-users` endpoint is protected by a simple Bearer token (`ADMIN_API_KEY`). For higher security, consider using service-to-service authentication (e.g., Google Cloud IAM) or restricting access by IP.
-- Sensitive user data (like password hashes or salts) is NOT returned by the API.
-- Full user management should be done via the Firebase Console or a dedicated Admin UI with strict access controls.
+We welcome contributions! See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for guidelines.
+
+## Security
+
+Report security issues to our security team. See [SECURITY.md](./docs/SECURITY.md) for details.
+
+## License
+
+MIT License - see LICENSE file for details.
+
+---
+
+**Built with ❤️ for the padel community**
