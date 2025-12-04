@@ -1,12 +1,15 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null;
-    }
+    // Explicitly allow public read for events
     match /events/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/*');
+    }
+    
+    // Default rule for everything else (authenticated only)
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }

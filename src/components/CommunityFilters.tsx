@@ -30,15 +30,15 @@ export function CommunityFilters({
     const hasActiveFilters = Object.values(filters).some((v) => v !== "");
 
     return (
-        <div className="space-y-4 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+        <div className="space-y-4 p-4 bg-gray-900 rounded-xl border border-gray-800">
             <div className="flex items-center justify-between">
-                <h3 className="font-medium text-gray-900">Filters</h3>
+                <h3 className="font-medium text-white">Filters</h3>
                 {hasActiveFilters && (
                     <Button
                         variant="ghost"
                         size="sm"
                         onClick={onClearFilters}
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 px-2"
                     >
                         <X className="w-4 h-4 mr-1" />
                         Clear All
@@ -52,10 +52,10 @@ export function CommunityFilters({
                     value={filters.skillLevel}
                     onValueChange={(value) => onFilterChange("skillLevel", value)}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
                         <SelectValue placeholder="Skill Level" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
                         <SelectItem value="all">All Levels</SelectItem>
                         <SelectItem value="beginner">Beginner</SelectItem>
                         <SelectItem value="intermediate">Intermediate</SelectItem>
@@ -69,10 +69,10 @@ export function CommunityFilters({
                     value={filters.hand}
                     onValueChange={(value) => onFilterChange("hand", value)}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
                         <SelectValue placeholder="Hand" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
                         <SelectItem value="all">Any Hand</SelectItem>
                         <SelectItem value="right">Right</SelectItem>
                         <SelectItem value="left">Left</SelectItem>
@@ -84,10 +84,10 @@ export function CommunityFilters({
                     value={filters.position}
                     onValueChange={(value) => onFilterChange("position", value)}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
                         <SelectValue placeholder="Position" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
                         <SelectItem value="all">Any Position</SelectItem>
                         <SelectItem value="left">Left Side</SelectItem>
                         <SelectItem value="right">Right Side</SelectItem>
@@ -99,10 +99,10 @@ export function CommunityFilters({
                     value={filters.gender}
                     onValueChange={(value) => onFilterChange("gender", value)}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
                         <SelectValue placeholder="Gender" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
                         <SelectItem value="all">Any Gender</SelectItem>
                         <SelectItem value="male">Male</SelectItem>
                         <SelectItem value="female">Female</SelectItem>
@@ -114,10 +114,10 @@ export function CommunityFilters({
                     value={filters.registrationMonth}
                     onValueChange={(value) => onFilterChange("registrationMonth", value)}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
                         <SelectValue placeholder="Joined In" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
                         <SelectItem value="all">Any Time</SelectItem>
                         <SelectItem value="0">January</SelectItem>
                         <SelectItem value="1">February</SelectItem>

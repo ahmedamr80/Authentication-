@@ -39,18 +39,15 @@ service cloud.firestore {
     
     // --- REGISTRATIONS ---
     match /registrations/{registrationId} {
-      allow read: if isSignedIn() && 
-                   (resource.data.playerId == request.auth.uid || 
-                    resource.data.player2Id == request.auth.uid || 
-                    isAdmin());
+      allow read: if isSignedIn();
       
-      allow create: if isSignedIn() && request.resource.data.playerId == request.auth.uid || isAdmin();
+      // Allow create if self OR if creating for a team (presence of teamId in new data)
+      allow create: if isSignedIn() && (request.resource.data.playerId == request.auth.uid || request.resource.data.teamId != null || isAdmin());
       
-      allow update: if isSignedIn() && 
-                     (resource.data.playerId == request.auth.uid || isAdmin()) &&
-                     (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['partnerStatus'])); 
+      // Allow update if self OR if updating for a team (presence of teamId in existing or new data)
+      allow update: if isSignedIn() && (resource.data.playerId == request.auth.uid || resource.data.teamId != null || request.resource.data.teamId != null || isAdmin());
       
-      allow delete: if isAdmin();
+      allow delete: if isSignedIn() && resource.data.playerId == request.auth.uid || isAdmin();
     }
     
     // --- TEAMS ---
@@ -74,7 +71,7 @@ service cloud.firestore {
     // --- NOTIFICATIONS ---
     match /notifications/{notificationId} {
       allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isAdmin();
+      allow create: if isSignedIn();
     }
     // --- COUNTERS ---
     match /counters/{counterId} {

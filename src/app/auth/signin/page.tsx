@@ -403,16 +403,16 @@ function SignInContent() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+        <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4">
+            <div className="w-full max-w-md space-y-8 bg-gray-900 p-8 rounded-xl shadow-lg border border-gray-800">
                 <div className="text-center">
                     <div className="flex justify-center mb-4">
-                        <Image src="/logo.svg" alt="App Logo" width={64} height={64} priority />
+                        <Image src="/logo.svg" alt="EveryWherePadel Logo" width={80} height={80} priority className="w-20 h-20" />
                     </div>
-                    <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+                    <h2 className="mt-6 text-3xl font-extrabold text-white">
                         {isSignUp ? "Create an account" : "Welcome back"}
                     </h2>
-                    <p className="mt-2 text-sm text-gray-600">
+                    <p className="mt-2 text-sm text-gray-400">
                         {isSignUp ? "Sign up to get started" : "Sign in to your account"}
                     </p>
                 </div>
@@ -420,7 +420,7 @@ function SignInContent() {
                 <div className="space-y-4">
                     <Button
                         variant="outline"
-                        className="w-full flex items-center justify-center gap-2 h-12 text-base"
+                        className="w-full flex items-center justify-center gap-2 h-12 text-base bg-transparent border-gray-700 text-white hover:bg-gray-800 hover:text-white"
                         onClick={handleGoogleSignIn}
                         isLoading={isLoading}
                     >
@@ -448,7 +448,7 @@ function SignInContent() {
 
                     <Button
                         variant="outline"
-                        className="w-full flex items-center justify-center gap-2 h-12 text-base"
+                        className="w-full flex items-center justify-center gap-2 h-12 text-base bg-transparent border-gray-700 text-white hover:bg-gray-800 hover:text-white"
                         onClick={handleAppleSignIn}
                         isLoading={isLoading}
                     >
@@ -461,10 +461,10 @@ function SignInContent() {
 
                 <div className="relative">
                     <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-gray-200" />
+                        <div className="w-full border-t border-gray-800" />
                     </div>
                     <div className="relative flex justify-center text-sm">
-                        <span className="bg-white px-2 text-gray-500">Or continue with</span>
+                        <span className="bg-gray-900 px-2 text-gray-400">Or continue with</span>
                     </div>
                 </div>
 
@@ -473,90 +473,90 @@ function SignInContent() {
 
                     {isSignUp && (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none" htmlFor="fullName">Full Name</label>
+                            <label className="text-sm font-medium leading-none text-gray-300" htmlFor="fullName">Full Name</label>
                             <div className="relative">
-                                <User className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                                <User className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                                 <Input
                                     id="fullName"
                                     type="text"
                                     placeholder="John Doe"
-                                    className="pl-10"
+                                    className="pl-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
                                     {...form.register("fullName")}
                                     disabled={isLoading}
                                 />
                             </div>
                             {form.formState.errors.fullName && (
-                                <p className="text-sm text-red-500">{form.formState.errors.fullName.message}</p>
+                                <p className="text-sm text-red-400">{form.formState.errors.fullName.message}</p>
                             )}
                         </div>
                     )}
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium leading-none" htmlFor="email">Email address</label>
+                        <label className="text-sm font-medium leading-none text-gray-300" htmlFor="email">Email address</label>
                         <div className="relative">
-                            <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                            <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                             <Input
                                 id="email"
                                 type="email"
                                 placeholder="name@example.com"
-                                className="pl-10"
+                                className="pl-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
                                 {...form.register("email")}
                                 disabled={isLoading}
                             />
                         </div>
                         {form.formState.errors.email && (
-                            <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
+                            <p className="text-sm text-red-400">{form.formState.errors.email.message}</p>
                         )}
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium leading-none" htmlFor="password">Password</label>
+                        <label className="text-sm font-medium leading-none text-gray-300" htmlFor="password">Password</label>
                         <div className="relative">
-                            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                            <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                             <Input
                                 id="password"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
-                                className="pl-10 pr-10"
+                                className="pl-10 pr-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
                                 {...form.register("password")}
                                 disabled={isLoading}
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-300"
                             >
                                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                             </button>
                         </div>
                         {form.formState.errors.password && (
-                            <p className="text-sm text-red-500">{form.formState.errors.password.message}</p>
+                            <p className="text-sm text-red-400">{form.formState.errors.password.message}</p>
                         )}
                     </div>
 
                     {isSignUp && (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium leading-none" htmlFor="confirmPassword">Confirm Password</label>
+                            <label className="text-sm font-medium leading-none text-gray-300" htmlFor="confirmPassword">Confirm Password</label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                                <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                                 <Input
                                     id="confirmPassword"
                                     type={showConfirmPassword ? "text" : "password"}
                                     placeholder="••••••••"
-                                    className="pl-10 pr-10"
+                                    className="pl-10 pr-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
                                     {...form.register("confirmPassword")}
                                     disabled={isLoading}
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                                    className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-300"
                                 >
                                     {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                 </button>
                             </div>
                             {form.formState.errors.confirmPassword && (
-                                <p className="text-sm text-red-500">{form.formState.errors.confirmPassword.message}</p>
+                                <p className="text-sm text-red-400">{form.formState.errors.confirmPassword.message}</p>
                             )}
                         </div>
                     )}
@@ -567,35 +567,35 @@ function SignInContent() {
                                 <input
                                     type="checkbox"
                                     id="rememberMe"
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    className="h-4 w-4 rounded border-gray-700 bg-gray-950 text-orange-500 focus:ring-orange-500"
                                     {...form.register("rememberMe")}
                                     disabled={isLoading}
                                 />
                                 <label
                                     htmlFor="rememberMe"
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                    className="text-sm font-medium leading-none text-gray-400 peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
                                     Remember me
                                 </label>
                             </div>
-                            <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                            <a href="#" className="text-sm font-medium text-orange-500 hover:text-orange-400">
                                 Forgot password?
                             </a>
                         </div>
                     )}
 
-                    <Button type="submit" className="w-full h-11 text-base" isLoading={isLoading}>
+                    <Button type="submit" className="w-full h-11 text-base bg-orange-500 hover:bg-orange-600 text-white" isLoading={isLoading}>
                         {isSignUp ? "Create account" : "Sign in"}
                     </Button>
                 </form>
 
                 <div className="text-center text-sm">
-                    <span className="text-gray-600">
+                    <span className="text-gray-400">
                         {isSignUp ? "Already have an account? " : "Don't have an account? "}
                     </span>
                     <button
                         onClick={toggleMode}
-                        className="font-medium text-blue-600 hover:text-blue-500"
+                        className="font-medium text-orange-500 hover:text-orange-400"
                         disabled={isLoading}
                     >
                         {isSignUp ? "Sign in" : "Sign up"}
@@ -606,14 +606,14 @@ function SignInContent() {
             {/* Account Linking Modal */}
             {showLinkAccountModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4">
+                    <div className="w-full max-w-md bg-gray-900 rounded-xl p-6 space-y-4 border border-gray-800 text-white">
                         <h3 className="text-lg font-bold">Account Exists</h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-400">
                             An account with the email <strong>{existingEmail}</strong> already exists.
                             Please sign in with your password to link your Google account.
                         </p>
                         <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setShowLinkAccountModal(false)}>Cancel</Button>
+                            <Button variant="outline" onClick={() => setShowLinkAccountModal(false)} className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">Cancel</Button>
                             <Button onClick={() => {
                                 setShowLinkAccountModal(false);
                                 setIsSignUp(false);
@@ -621,7 +621,7 @@ function SignInContent() {
                                 form.setValue("email", existingEmail);
                                 document.getElementById("password")?.focus();
                                 showToast("Please enter your password to link accounts", "info");
-                            }}>
+                            }} className="bg-orange-500 hover:bg-orange-600 text-white">
                                 Sign in to Link
                             </Button>
                         </div>
@@ -634,7 +634,7 @@ function SignInContent() {
 
 export default function SignInPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">Loading...</div>}>
             <SignInContent />
         </Suspense>
     );

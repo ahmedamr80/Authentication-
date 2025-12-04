@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { useEffect, useState, useMemo } from "react";
+import { collection, query, orderBy, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { EventCard, EventData } from "@/components/EventCard";
+import { EventData } from "@/components/EventCard";
 import { EventFilters, EventFilter } from "@/components/EventFilters";
 import { EventSection } from "@/components/EventSection";
-import { Loader2, ArrowLeft, Plus, Calendar, CalendarX } from "lucide-react";
+import { Loader2, Plus, Calendar, CalendarX, Home, Bell, User, Users, Settings, LogOut } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
+import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const EVENTS_PER_PAGE = 12;
 
@@ -36,17 +39,28 @@ export default function EventsPage() {
     const [visibleCount, setVisibleCount] = useState(EVENTS_PER_PAGE);
     const { showToast } = useToast();
     const router = useRouter();
+    const { user } = useAuth();
+    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const [userRegistrations, setUserRegistrations] = useState<Record<string, "CONFIRMED" | "WAITLIST">>({});
 
-    const fetchEvents = useCallback(async (showRefreshToast = false) => {
+    const handleSignOut = async () => {
         try {
-            if (showRefreshToast) setRefreshing(true);
+            await auth.signOut();
+            router.push("/auth/signin");
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
+    };
 
-            const eventsRef = collection(db, "events");
-            const q = query(eventsRef, orderBy("dateTime", "asc"));
-            const querySnapshot = await getDocs(q);
+    // Real-time events listener
+    useEffect(() => {
+        // setLoading(true); // Removed redundant state update
+        const eventsRef = collection(db, "events");
+        const q = query(eventsRef, orderBy("dateTime", "asc"));
 
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             const eventsList: EventData[] = [];
-            querySnapshot.forEach((doc) => {
+            snapshot.forEach((doc) => {
                 const data = doc.data();
                 if (data.eventName && data.dateTime) {
                     const eventData: EventData = {
@@ -68,28 +82,54 @@ export default function EventsPage() {
                         unitType: data.unitType || "Players",
                         clubId: data.clubId,
                         coordinates: data.coordinates,
+                        registrationsCount: data.registrationsCount || 0,
                     };
                     eventData.status = calculateStatus(eventData);
                     eventsList.push(eventData);
                 }
             });
-
             setEvents(eventsList);
-            if (showRefreshToast) {
-                showToast("Events refreshed successfully!", "success");
-            }
-        } catch (error) {
-            console.error("Error fetching events:", error);
-            showToast("Failed to load events. Please try again.", "error");
-        } finally {
             setLoading(false);
             setRefreshing(false);
-        }
+        }, (error) => {
+            console.error("Error fetching events:", error);
+            showToast("Failed to load events. Please try again.", "error");
+            setLoading(false);
+            setRefreshing(false);
+        });
+
+        return () => unsubscribe();
     }, [showToast]);
 
+    const handleRefresh = () => {
+        setRefreshing(true);
+        setTimeout(() => {
+            setRefreshing(false);
+            showToast("Events are up to date!", "success");
+        }, 1000);
+    };
+
+    // Fetch user registrations
     useEffect(() => {
-        fetchEvents();
-    }, [fetchEvents]);
+        if (!user) {
+            // setUserRegistrations({}); // Removed to avoid set-state-in-effect
+            return;
+        }
+
+        const registrationsRef = collection(db, "registrations");
+        const q = query(registrationsRef, where("playerId", "==", user.uid));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const regs: Record<string, "CONFIRMED" | "WAITLIST"> = {};
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                regs[data.eventId] = data.status;
+            });
+            setUserRegistrations(regs);
+        });
+
+        return () => unsubscribe();
+    }, [user]);
 
     const { activeEvents, upcomingEvents, pastEvents } = useMemo(() => {
         let filtered = events;
@@ -166,60 +206,102 @@ export default function EventsPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <div className="min-h-screen flex items-center justify-center bg-gray-950">
+                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-            <div className="max-w-7xl mx-auto space-y-6">
-                <div className="flex items-center justify-between">
-                    <Button
-                        variant="ghost"
-                        onClick={() => router.push("/dashboard")}
-                        className="text-gray-600 hover:text-gray-900"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Dashboard
-                    </Button>
-
-                    <Link href="/" className="flex items-center">
-                        <Image
-                            src="/logo.svg"
-                            alt="Logo"
-                            width={48}
-                            height={48}
-                            className="h-12 w-auto"
-                        />
-                    </Link>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-blue-100 rounded-full">
-                            <Calendar className="w-8 h-8 text-blue-600" />
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900">Events</h1>
-                            <p className="text-gray-600 mt-1">
-                                Discover and join padel events
-                                {events.length > 0 && (
-                                    <span className="text-gray-400 ml-2">
-                                        ({events.length} total)
-                                    </span>
-                                )}
-                            </p>
-                        </div>
+        <div className="min-h-screen bg-gray-950 text-white pb-24">
+            {/* Sticky Header */}
+            <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800 px-4 py-3">
+                <div className="max-w-7xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push("/dashboard")}>
+                        <Image src="/logo.svg" alt="EveryWherePadel Logo" width={32} height={32} className="w-8 h-8" style={{ width: 'auto' }} />
+                        <h1 className="text-xl font-bold bg-linear-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">
+                            EveryWherePadel
+                        </h1>
                     </div>
 
-                    <Link href="/events/create">
-                        <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Create Event
-                        </Button>
-                    </Link>
+                    {/* User Menu */}
+                    <div className="relative">
+                        {user ? (
+                            <div className="flex items-center gap-4">
+                                <button className="text-gray-400 hover:text-white transition-colors">
+                                    <Bell className="w-6 h-6" />
+                                </button>
+                                <div className="relative">
+                                    <Avatar
+                                        className="h-8 w-8 cursor-pointer border-2 border-transparent hover:border-orange-500 transition-all"
+                                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                                    >
+                                        <AvatarImage src={user.photoURL || undefined} />
+                                        <AvatarFallback className="bg-orange-500 text-white">
+                                            {user.displayName?.charAt(0) || "U"}
+                                        </AvatarFallback>
+                                    </Avatar>
+
+                                    {/* Dropdown Menu */}
+                                    {isUserMenuOpen && (
+                                        <>
+                                            <div
+                                                className="fixed inset-0 z-40"
+                                                onClick={() => setIsUserMenuOpen(false)}
+                                            />
+                                            <div className="absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                                <div className="p-4 border-b border-gray-800">
+                                                    <p className="font-medium text-white truncate">{user.displayName}</p>
+                                                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                                                </div>
+                                                <div className="p-1">
+                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                        <User className="h-4 w-4" /> Profile
+                                                    </button>
+                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                        <Settings className="h-4 w-4" /> Settings
+                                                    </button>
+                                                </div>
+                                                <div className="p-1 border-t border-gray-800">
+                                                    <button
+                                                        onClick={handleSignOut}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                                    >
+                                                        <LogOut className="h-4 w-4" /> Sign Out
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <Button size="sm" onClick={() => router.push("/auth/signin")}>
+                                Sign In
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </header>
+
+            <main className="pt-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+                {/* Header Section */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold text-white">Events</h1>
+                            <p className="text-gray-400 mt-1">
+                                Find and register for Padel events
+                            </p>
+                        </div>
+
+                        <Link href="/events/create">
+                            <Button className="bg-orange-500 hover:bg-orange-600 text-white border-none">
+                                <Plus className="w-4 h-4 mr-2" />
+                                Create Event
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 <EventFilters
@@ -228,18 +310,18 @@ export default function EventsPage() {
                     searchQuery={searchQuery}
                     onSearchChange={setSearchQuery}
                     onClearFilters={handleClearFilters}
-                    onRefresh={() => fetchEvents(true)}
+                    onRefresh={handleRefresh}
                     isRefreshing={refreshing}
                 />
 
                 {!hasEventsToShow ? (
                     <div className="text-center py-16 space-y-4">
                         <div className="flex justify-center">
-                            <div className="p-6 bg-gray-100 rounded-full">
-                                <CalendarX className="w-16 h-16 text-gray-400" />
+                            <div className="p-6 bg-gray-900 rounded-full">
+                                <CalendarX className="w-16 h-16 text-gray-600" />
                             </div>
                         </div>
-                        <h3 className="text-xl font-semibold text-gray-700">No events found</h3>
+                        <h3 className="text-xl font-semibold text-gray-300">No events found</h3>
                         <p className="text-gray-500 max-w-md mx-auto">
                             {searchQuery
                                 ? `No events match "${searchQuery}". Try a different search term.`
@@ -252,35 +334,32 @@ export default function EventsPage() {
                                 <Button
                                     variant="outline"
                                     onClick={handleClearFilters}
+                                    className="border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
                                 >
                                     Clear Filters
                                 </Button>
                             )}
                             <Button
                                 variant="outline"
-                                onClick={() => fetchEvents(true)}
+                                onClick={handleRefresh}
                                 disabled={refreshing}
+                                className="border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
                             >
                                 {refreshing ? (
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 ) : null}
                                 Refresh
                             </Button>
-                            <Link href="/events/create">
-                                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Create Event
-                                </Button>
-                            </Link>
                         </div>
                     </div>
                 ) : (
-                    <div className="space-y-8">
+                    <div className="space-y-12">
                         {filteredEvents.active.length > 0 && (
                             <EventSection
                                 title="Happening Now"
                                 events={filteredEvents.active.slice(0, visibleCount)}
                                 variant="active"
+                                userRegistrations={userRegistrations}
                             />
                         )}
 
@@ -289,6 +368,7 @@ export default function EventsPage() {
                                 title="Upcoming Events"
                                 events={filteredEvents.upcoming.slice(0, visibleCount)}
                                 variant="upcoming"
+                                userRegistrations={userRegistrations}
                             />
                         )}
 
@@ -297,6 +377,7 @@ export default function EventsPage() {
                                 title="Past Events"
                                 events={filteredEvents.past.slice(0, visibleCount)}
                                 variant="past"
+                                userRegistrations={userRegistrations}
                             />
                         )}
 
@@ -305,7 +386,7 @@ export default function EventsPage() {
                                 <Button
                                     variant="outline"
                                     onClick={handleLoadMore}
-                                    className="px-8"
+                                    className="px-8 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
                                 >
                                     Load More ({remainingEvents} remaining)
                                 </Button>
@@ -313,7 +394,25 @@ export default function EventsPage() {
                         )}
                     </div>
                 )}
-            </div>
-        </div>
+            </main>
+
+            {/* Sticky Bottom Nav */}
+            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/90 backdrop-blur-md border-t border-gray-800 px-6 py-3">
+                <div className="max-w-md mx-auto flex items-center justify-between">
+                    <Link href="/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
+                        <Home className="w-6 h-6" />
+                        <span className="text-xs font-medium">Home</span>
+                    </Link>
+                    <Link href="/events" className="flex flex-col items-center gap-1 text-orange-500">
+                        <Calendar className="w-6 h-6" />
+                        <span className="text-xs font-medium">Events</span>
+                    </Link>
+                    <Link href="/community" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
+                        <Users className="w-6 h-6" />
+                        <span className="text-xs font-medium">Community</span>
+                    </Link>
+                </div>
+            </nav>
+        </div >
     );
 }

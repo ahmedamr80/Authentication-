@@ -1,0 +1,15 @@
+
+> firebase-auth-app@0.1.0 lint
+> eslint
+
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.1
+
+Error: 'patterns' must be a non-empty string or an array of non-empty strings
+    at LegacyESLint.lintFiles (C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\node_modules\eslint\lib\eslint\legacy-eslint.js:623:10)
+    at Object.execute (C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\node_modules\eslint\lib\cli.js:428:27)
+    at async main (C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\node_modules\eslint\bin\eslint.js:175:19)
+(node:21516) ESLintRCWarning: You are using an eslintrc configuration file, which is deprecated and support will be removed in v10.0.0. Please migrate to an eslint.config.js file. See https://eslint.org/docs/latest/use/configure/migration-guide for details. An eslintrc configuration file is used because you have the ESLINT_USE_FLAT_CONFIG environment variable set to false. If you want to use an eslint.config.js file, remove the environment variable. If you want to find the location of the eslintrc configuration file, use the --debug flag.
+(Use `node --trace-warnings ...` to show where the warning was created)
