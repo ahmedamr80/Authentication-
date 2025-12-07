@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, Timestamp, doc, runTransaction, limit } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
+import { useTeamInvite } from "@/hooks/useTeamInvite";
 
 interface TeamRegisterDialogProps {
     event: EventData;
@@ -42,6 +43,9 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
     const [searching, setSearching] = useState(false);
     const { showToast } = useToast();
 
+    // Hook integration
+    const { sendInvite, loading: inviteLoading } = useTeamInvite();
+
     // Reset state when dialog opens
     useEffect(() => {
         if (open) {
@@ -67,8 +71,6 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
 
             // 2. Optimized Search (Simple Prefix Search)
             const usersRef = collection(db, "users");
-            // Note: This requires an index on fullName if mixed with other filters, but simple range is usually fine.
-            // We use the search query for prefix matching.
             const q = query(
                 usersRef,
                 where("fullName", ">=", searchQuery),
@@ -83,7 +85,7 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     const data = doc.data();
                     return {
                         uid: doc.id,
-                        displayName: data.fullName || data.displayName || "Unknown", // Handle different field names
+                        displayName: data.fullName || data.displayName || "Unknown",
                         email: data.email,
                         photoURL: data.photoUrl || data.photoURL
                     } as UserProfile;
@@ -101,106 +103,15 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
 
     const handleInvitePartner = async (partner: UserProfile) => {
         if (!user) return;
-        setLoading(true);
+
         try {
-            await runTransaction(db, async (transaction) => {
-                // 1. Lock & Read Event Doc
-                const eventRef = doc(db, "events", event.eventId);
-                const eventDoc = await transaction.get(eventRef);
-                if (!eventDoc.exists()) throw new Error("Event not found");
-
-                const eventData = eventDoc.data();
-                const currentRegistrations = eventData.registrationsCount || 0;
-                const currentWaitlist = eventData.waitlistCount || 0;
-                const slotsAvailable = eventData.slotsAvailable || 0;
-
-                // 2. Determine Status (The Branching Logic)
-                const isFull = currentRegistrations >= slotsAvailable;
-
-                let registrationStatus = "CONFIRMED";
-                let waitlistPos = 0;
-
-                if (isFull) {
-                    // Logic: Event is full, put them on the waitlist
-                    registrationStatus = "WAITLIST";
-                    waitlistPos = currentWaitlist + 1;
-                }
-
-                // 3. Update Event Counters (Crucial Fix)
-                if (isFull) {
-                    transaction.update(eventRef, {
-                        waitlistCount: currentWaitlist + 1
-                    });
-                } else {
-                    transaction.update(eventRef, {
-                        registrationsCount: currentRegistrations // +1 Team Slot Reserved
-                    });
-                }
-
-                // 4. Create Team Doc
-                // Note: Team Status is always PENDING initially (waiting for partner acceptance)
-                const teamRef = doc(collection(db, "teams"));
-                const teamId = teamRef.id;
-
-                transaction.set(teamRef, {
-                    createdAt: Timestamp.now(),
-                    teamId: teamId,
-                    eventId: event.eventId,
-                    player1Id: user.uid,
-                    fullNameP1: user.displayName || "Unknown Player",
-                    player1Confirmed: true,
-                    player2Id: partner.uid,
-                    fullNameP2: partner.displayName || "Unknown Player",
-                    player2Confirmed: false,
-                    status: "PENDING"
-                });
-
-                // 5. Create Registration for Initiator
-                // This holds the actual "Seat" (Confirmed or Waitlist)
-                const regRef = doc(collection(db, "registrations"));
-                transaction.set(regRef, {
-                    registrationId: regRef.id,
-                    eventId: event.eventId,
-                    playerId: user.uid,
-                    player2Id: partner.uid, // auto-captures the playerId which accepted the invitation to be a partner
-                    teamId: teamId,
-                    registeredAt: Timestamp.now(),
-                    status: registrationStatus, // <--- Dynamic Status
-                    waitlistPosition: waitlistPos, // <--- Track position if waitlisted
-                    partnerStatus: "PENDING",
-                    isPrimary: true,
-                    fullNameP1: user.displayName || "Unknown Player",
-                    fullNameP2: partner.displayName || "Unknown Player",
-                    playerPhotoURL: user.photoURL || "",
-                    _debugSource: "TeamRegisterDialog.tsx - handleInvitePartner"
-                });
-
-                // 6. Create Notification for Partner
-                const notifRef = doc(collection(db, "notifications"));
-                transaction.set(notifRef, {
-                    notificationId: notifRef.id,
-                    userId: partner.uid,
-                    type: "partner_invite",
-                    title: isFull ? "Waitlist Invite" : "Partner Invite", // <--- Be transparent
-                    message: isFull
-                        ? `${user.displayName} invited you to join the Waitlist (#${waitlistPos}) for ${event.eventName}`
-                        : `${user.displayName} wants to team up with you for ${event.eventName}`,
-                    fromUserId: user.uid,
-                    eventId: event.eventId,
-                    teamId: teamId,
-                    read: false,
-                    createdAt: Timestamp.now()
-                });
+            await sendInvite(user, event, partner, () => {
+                showToast(`Invite sent to ${partner.displayName}!`, "success");
+                if (setOpen) setOpen(false);
+                if (onSuccess) onSuccess();
             });
-
-            showToast(`Invite sent to ${partner.displayName}!`, "success");
-            if (setOpen) setOpen(false);
-            if (onSuccess) onSuccess();
         } catch (error) {
-            console.error("Invite error:", error);
             showToast(error instanceof Error ? error.message : "Failed to send invite", "error");
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -300,8 +211,8 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                                         <span className="font-medium">{result.displayName || "Unknown User"}</span>
                                         <span className="text-xs text-gray-500">{result.email}</span>
                                     </div>
-                                    <Button size="sm" onClick={() => handleInvitePartner(result)} disabled={loading}>
-                                        Invite
+                                    <Button size="sm" onClick={() => handleInvitePartner(result)} disabled={inviteLoading}>
+                                        {inviteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Invite"}
                                     </Button>
                                 </div>
                             ))}

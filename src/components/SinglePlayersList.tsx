@@ -5,8 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserPlus, Hand, MapPin } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
-import { addDoc, collection, serverTimestamp, query, where, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useTeamInvite } from "@/hooks/useTeamInvite";
 
 export interface SinglePlayer {
     registrationId: string;
@@ -30,55 +29,26 @@ export interface SinglePlayersListProps {
 
 export function SinglePlayersList({ event, currentUser, userRegistration, players, loading }: SinglePlayersListProps) {
     const { showToast } = useToast();
+    const { sendInvite, loading: inviteLoading } = useTeamInvite();
 
     const handleInvite = async (player: SinglePlayer) => {
         if (!currentUser || !event) return;
 
         try {
-            // Check if invite already exists
-            const invitesRef = collection(db, "teams");
-            const q = query(
-                invitesRef,
-                where("eventId", "==", event.eventId),
-                where("player1Id", "==", currentUser.uid),
-                where("player2Id", "==", player.playerId)
-            );
-            const snapshot = await getDocs(q);
+            // Fix: Map the SinglePlayer 'playerId' to 'uid' so the hook queries work correctly
+            const inviteData = {
+                uid: player.playerId,
+                playerId: player.playerId,
+                displayName: player.displayName,
+                photoURL: player.photoURL
+            };
 
-            if (!snapshot.empty) {
-                showToast("Invitation already sent", "info");
-                return;
-            }
-
-            // Create pending team
-            const teamRef = await addDoc(collection(db, "teams"), {
-                eventId: event.eventId,
-                player1Id: currentUser.uid,
-                player2Id: player.playerId,
-                status: "PENDING",
-                createdAt: serverTimestamp(),
-                fullNameP1: currentUser.displayName || "Unknown Player",
-                fullNameP2: player.displayName || "Unknown Player",
-                player1Confirmed: true,
-                player2Confirmed: false
+            await sendInvite(currentUser, event, inviteData, () => {
+                showToast(`Invitation sent to ${player.displayName}`, "success");
             });
-
-            // Create notification for the invited player
-            await addDoc(collection(db, "notifications"), {
-                userId: player.playerId,
-                type: "TEAM_INVITE",
-                message: `${currentUser.displayName || "Someone"} invited you to join their team for ${event.eventName}`,
-                eventId: event.eventId,
-                eventName: event.eventName,
-                teamId: teamRef.id,
-                read: false,
-                createdAt: serverTimestamp()
-            });
-
-            showToast(`Invitation sent to ${player.displayName}`, "success");
         } catch (error) {
             console.error("Error sending invite:", error);
-            showToast("Failed to send invitation", "error");
+            showToast(error instanceof Error ? error.message : "Failed to send invitation", "error");
         }
     };
 
@@ -153,8 +123,9 @@ export function SinglePlayersList({ event, currentUser, userRegistration, player
                                     size="sm"
                                     className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8"
                                     onClick={() => handleInvite(player)}
+                                    disabled={inviteLoading}
                                 >
-                                    <UserPlus className="h-3 w-3 mr-1.5" />
+                                    {inviteLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <UserPlus className="h-3 w-3 mr-1.5" />}
                                     Invite to Team
                                 </Button>
                             </div>

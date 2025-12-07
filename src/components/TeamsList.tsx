@@ -3,12 +3,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, Check, X, LogOut } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { doc, runTransaction, Timestamp, collection, query, where, getDocs } from "firebase/firestore";
-
+import { Clock, Check, LogOut } from "lucide-react";
+import { Timestamp } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { useToast } from "@/context/ToastContext";
+import { useTeamDissolve } from "@/hooks/useTeamDissolve";
 
 interface TeamMember {
     uid: string;
@@ -39,67 +38,28 @@ interface TeamsListProps {
 
 export function TeamsList({ currentUser, teams, loading, onManageInvite }: TeamsListProps) {
     const { showToast } = useToast();
-
+    const { dissolveTeam, loading: dissolveLoading } = useTeamDissolve();
 
     const handleLeaveTeam = async (teamId: string) => {
         if (!currentUser) return;
         if (!confirm("Are you sure you want to leave this team?")) return;
 
-        try {
-            // 1. Get Team Data
-            const teamRef = doc(db, "teams", teamId);
-            const teamSnap = await import("firebase/firestore").then(m => m.getDoc(teamRef));
-            if (!teamSnap.exists()) throw new Error("Team not found");
-            const teamData = teamSnap.data();
-
-            // 2. Find Registrations for both players
-            const regsRef = collection(db, "registrations");
-            const q1 = query(regsRef, where("eventId", "==", teamData.eventId), where("playerId", "==", teamData.player1Id));
-            const q2 = teamData.player2Id ? query(regsRef, where("eventId", "==", teamData.eventId), where("playerId", "==", teamData.player2Id)) : null;
-
-            const [snap1, snap2] = await Promise.all([
-                getDocs(q1),
-                q2 ? getDocs(q2) : Promise.resolve(null)
-            ]);
-
-            await runTransaction(db, async (transaction) => {
-                // Verify team exists
-                const tDoc = await transaction.get(teamRef);
-                if (!tDoc.exists()) throw new Error("Team no longer exists");
-
-                // Delete Team
-                transaction.delete(teamRef);
-
-                // Update Player 1 Registration
-                if (!snap1.empty) {
-                    const reg1Ref = doc(db, "registrations", snap1.docs[0].id);
-                    transaction.update(reg1Ref, {
-                        teamId: null,
-                        partnerStatus: "NONE",
-                        lookingForPartner: true,
-                        status: "CONFIRMED",
-                        _debugSource: "TeamsList.tsx - handleLeaveTeam - Update Player 1 Registration"
-                    });
-                }
-
-                // Update Player 2 Registration
-                if (snap2 && !snap2.empty) {
-                    const reg2Ref = doc(db, "registrations", snap2.docs[0].id);
-                    transaction.update(reg2Ref, {
-                        teamId: null,
-                        partnerStatus: "NONE",
-                        lookingForPartner: true,
-                        status: "CONFIRMED",
-                        _debugSource: "TeamsList.tsx - handleLeaveTeam - Update Player 2 Registration"
-                    });
-                }
-            });
-
-            showToast("Left team successfully", "success");
-        } catch (error) {
-            console.error("Error leaving team:", error);
-            showToast("Failed to leave team", "error");
+        const team = teams.find(t => t.teamId === teamId);
+        if (!team) {
+            showToast("Team not found", "error");
+            return;
         }
+
+        await dissolveTeam(
+            currentUser,
+            teamId,
+            team.eventId,
+            "LEAVE",
+            undefined,
+            () => {
+                showToast("Left team successfully", "success");
+            }
+        );
     };
 
     const confirmedTeams = teams.filter(t => t.player1Confirmed && t.player2Confirmed);
@@ -177,6 +137,7 @@ export function TeamsList({ currentUser, teams, loading, onManageInvite }: Teams
                                             size="icon"
                                             className="h-6 w-6 text-gray-400 hover:text-red-400 hover:bg-red-400/10"
                                             onClick={() => handleLeaveTeam(team.teamId)}
+                                            disabled={dissolveLoading}
                                             title="Leave Team"
                                         >
                                             <LogOut className="h-3 w-3" />
@@ -255,6 +216,7 @@ export function TeamsList({ currentUser, teams, loading, onManageInvite }: Teams
                                                 variant="ghost"
                                                 className="w-full mt-2 h-8 text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10"
                                                 onClick={() => handleLeaveTeam(team.teamId)}
+                                                disabled={dissolveLoading}
                                             >
                                                 Cancel Invitation
                                             </Button>
