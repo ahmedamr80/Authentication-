@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, use } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
@@ -13,8 +13,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, User as UserIcon, Camera, ArrowLeft } from "lucide-react";
+import { Loader2, User as UserIcon, Camera, ArrowLeft, Bell, LogOut, Settings, Home, Calendar, Users } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/context/AuthContext";
 
 // Schema (Reused from Profile Page)
 const profileSchema = z.object({
@@ -39,11 +42,13 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 export default function PlayerDetailsPage({ params }: { params: Promise<{ playerId: string }> }) {
     const router = useRouter();
     const { showToast } = useToast();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
     // Unwrap params using React.use()
     const { playerId } = use(params);
@@ -208,37 +213,116 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
         }
     };
 
+    const handleSignOut = async () => {
+        try {
+            await auth.signOut();
+            router.push("/auth/signin");
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
+    };
+
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <div className="min-h-screen flex items-center justify-center bg-gray-950">
+                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl mx-auto space-y-6">
+        <div className="min-h-screen bg-gray-950 text-white pb-24">
+            {/* Sticky Header */}
+            <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800 px-4 py-3">
+                <div className="max-w-7xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push("/dashboard")}>
+                        <Image src="/logo.svg" alt="EveryWherePadel Logo" width={32} height={32} className="w-8 h-8" />
+                        <h1 className="text-xl font-bold bg-linear-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">
+                            EveryWherePadel
+                        </h1>
+                    </div>
+
+                    {/* User Menu */}
+                    <div className="relative">
+                        {user ? (
+                            <div className="flex items-center gap-4">
+                                <button className="text-gray-400 hover:text-white transition-colors relative" onClick={() => router.push("/notifications")}>
+                                    <Bell className="w-6 h-6" />
+                                </button>
+                                <div className="relative">
+                                    <Avatar
+                                        className="h-8 w-8 cursor-pointer border-2 border-transparent hover:border-orange-500 transition-all"
+                                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                                    >
+                                        <AvatarImage src={user.photoURL || undefined} />
+                                        <AvatarFallback className="bg-orange-500 text-white">
+                                            {user.displayName?.charAt(0) || "U"}
+                                        </AvatarFallback>
+                                    </Avatar>
+
+                                    {/* Dropdown Menu */}
+                                    {isUserMenuOpen && (
+                                        <>
+                                            <div
+                                                className="fixed inset-0 z-40"
+                                                onClick={() => setIsUserMenuOpen(false)}
+                                            />
+                                            <div className="absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                                <div className="p-4 border-b border-gray-800">
+                                                    <p className="font-medium text-white truncate">{user.displayName}</p>
+                                                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                                                </div>
+                                                <div className="p-1">
+                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                        <UserIcon className="h-4 w-4" /> Profile
+                                                    </button>
+                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                        <Settings className="h-4 w-4" /> Settings
+                                                    </button>
+                                                </div>
+                                                <div className="p-1 border-t border-gray-800">
+                                                    <button
+                                                        onClick={handleSignOut}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                                    >
+                                                        <LogOut className="h-4 w-4" /> Sign Out
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <Button size="sm" onClick={() => router.push("/auth/signin")}>
+                                Sign In
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            </header>
+
+            <main className="pt-24 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8">
                 <Button
                     variant="ghost"
                     onClick={() => router.push("/community")}
-                    className="text-gray-600 hover:text-gray-900 pl-0 hover:bg-transparent"
+                    className="text-gray-400 hover:text-white mb-2 pl-0 hover:bg-transparent"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Community
                 </Button>
 
-                <div className="bg-white shadow rounded-lg p-6 sm:p-8">
-                    <div className="border-b border-gray-200 pb-6 mb-6 text-center">
-                        <h1 className="text-2xl font-bold text-gray-900">Edit Player Profile</h1>
-                        <p className="mt-1 text-sm text-gray-500">
+                <div className="bg-gray-900 shadow-md rounded-xl p-6 sm:p-8 border border-gray-800">
+                    <div className="border-b border-gray-800 pb-6 mb-6 text-center">
+                        <h1 className="text-2xl font-bold text-white">Edit Player Profile</h1>
+                        <p className="mt-1 text-sm text-gray-400">
                             Update information for this player.
                         </p>
                     </div>
 
                     <div className="flex flex-col items-center mb-8">
                         <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                            <div className="h-32 w-32 rounded-full overflow-hidden border-4 border-white shadow-lg bg-gray-100 relative">
+                            <div className="h-32 w-32 rounded-full overflow-hidden border-4 border-gray-800 shadow-lg bg-gray-800 relative">
                                 {photoUrl ? (
                                     <Image
                                         src={photoUrl}
@@ -247,7 +331,7 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                                         className="object-cover"
                                     />
                                 ) : (
-                                    <div className="h-full w-full flex items-center justify-center text-gray-400">
+                                    <div className="h-full w-full flex items-center justify-center text-gray-600">
                                         <UserIcon className="h-16 w-16" />
                                     </div>
                                 )}
@@ -256,7 +340,7 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                                         <Loader2 className="h-8 w-8 animate-spin text-white" />
                                     </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                                     <Camera className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                 </div>
                             </div>
@@ -275,50 +359,50 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                         {/* Personal Info */}
                         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Full Name</label>
-                                <Input {...form.register("fullName")} placeholder="Enter full name" />
+                                <label className="text-sm font-medium text-gray-300">Full Name</label>
+                                <Input {...form.register("fullName")} placeholder="Enter full name" className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
                                 {form.formState.errors.fullName && (
-                                    <p className="text-sm text-red-500">{form.formState.errors.fullName.message}</p>
+                                    <p className="text-sm text-red-400">{form.formState.errors.fullName.message}</p>
                                 )}
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Nickname</label>
-                                <Input {...form.register("nickname")} placeholder="Enter nickname" />
+                                <label className="text-sm font-medium text-gray-300">Nickname</label>
+                                <Input {...form.register("nickname")} placeholder="Enter nickname" className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Phone</label>
-                                <Input {...form.register("phone")} placeholder="Enter phone number" />
+                                <label className="text-sm font-medium text-gray-300">Phone</label>
+                                <Input {...form.register("phone")} placeholder="Enter phone number" className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
                                 {form.formState.errors.phone && (
-                                    <p className="text-sm text-red-500">{form.formState.errors.phone.message}</p>
+                                    <p className="text-sm text-red-400">{form.formState.errors.phone.message}</p>
                                 )}
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Location</label>
-                                <Input {...form.register("location")} placeholder="City, Country" />
+                                <label className="text-sm font-medium text-gray-300">Location</label>
+                                <Input {...form.register("location")} placeholder="City, Country" className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
                             </div>
                         </div>
 
                         {/* Player Stats */}
                         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Gender</label>
+                                <label className="text-sm font-medium text-gray-300">Gender</label>
                                 <Select onValueChange={(val) => form.setValue("gender", val as ProfileFormValues["gender"])} defaultValue={form.getValues("gender")}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="bg-gray-950 border-gray-800 text-white focus:ring-orange-500">
                                         <SelectValue placeholder="Select gender" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                         <SelectItem value="male">Male</SelectItem>
                                         <SelectItem value="female">Female</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Skill Level</label>
+                                <label className="text-sm font-medium text-gray-300">Skill Level</label>
                                 <Select onValueChange={(val) => form.setValue("skillLevel", val as ProfileFormValues["skillLevel"])} defaultValue={form.getValues("skillLevel")}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="bg-gray-950 border-gray-800 text-white focus:ring-orange-500">
                                         <SelectValue placeholder="Select skill level" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                         <SelectItem value="beginner">Beginner</SelectItem>
                                         <SelectItem value="intermediate">Intermediate</SelectItem>
                                         <SelectItem value="advanced">Advanced</SelectItem>
@@ -327,24 +411,24 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Hand</label>
+                                <label className="text-sm font-medium text-gray-300">Hand</label>
                                 <Select onValueChange={(val) => form.setValue("hand", val as ProfileFormValues["hand"])} defaultValue={form.getValues("hand")}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="bg-gray-950 border-gray-800 text-white focus:ring-orange-500">
                                         <SelectValue placeholder="Select hand" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                         <SelectItem value="right">Right</SelectItem>
                                         <SelectItem value="left">Left</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Position</label>
+                                <label className="text-sm font-medium text-gray-300">Position</label>
                                 <Select onValueChange={(val) => form.setValue("position", val as ProfileFormValues["position"])} defaultValue={form.getValues("position")}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="bg-gray-950 border-gray-800 text-white focus:ring-orange-500">
                                         <SelectValue placeholder="Select position" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                         <SelectItem value="right">Right</SelectItem>
                                         <SelectItem value="left">Left</SelectItem>
                                         <SelectItem value="both">Both</SelectItem>
@@ -354,9 +438,9 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                         </div>
 
                         {/* Admin/System Fields */}
-                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 bg-gray-50 p-4 rounded-lg">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 bg-gray-950/50 p-4 rounded-lg border border-gray-800">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Role</label>
+                                <label className="text-sm font-medium text-gray-300">Role</label>
                                 <Select
                                     onValueChange={(val) => {
                                         form.setValue("role", val as ProfileFormValues["role"]);
@@ -365,22 +449,22 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                                     }}
                                     defaultValue={form.getValues("role")}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
                                         <SelectValue placeholder="Select role" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                         <SelectItem value="player">Player</SelectItem>
                                         <SelectItem value="admin">Admin</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Registration Status</label>
+                                <label className="text-sm font-medium text-gray-300">Registration Status</label>
                                 <Select onValueChange={(val) => form.setValue("registrationStatus", val as ProfileFormValues["registrationStatus"])} defaultValue={form.getValues("registrationStatus")}>
-                                    <SelectTrigger>
+                                    <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
                                         <SelectValue placeholder="Select status" />
                                     </SelectTrigger>
-                                    <SelectContent>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                         <SelectItem value="active">Active</SelectItem>
                                         <SelectItem value="pending">Pending</SelectItem>
                                     </SelectContent>
@@ -390,16 +474,16 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                                 <input
                                     type="checkbox"
                                     id="isShadow"
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
                                     {...form.register("isShadow")}
                                 />
-                                <label htmlFor="isShadow" className="text-sm font-medium text-gray-700">Is Shadow User</label>
+                                <label htmlFor="isShadow" className="text-sm font-medium text-gray-300">Is Shadow User</label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <input
                                     type="checkbox"
                                     id="isAdmin"
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
                                     {...form.register("isAdmin", {
                                         onChange: (e) => {
                                             if (e.target.checked) form.setValue("role", "admin");
@@ -407,33 +491,52 @@ export default function PlayerDetailsPage({ params }: { params: Promise<{ player
                                         }
                                     })}
                                 />
-                                <label htmlFor="isAdmin" className="text-sm font-medium text-gray-700">Is Admin</label>
+                                <label htmlFor="isAdmin" className="text-sm font-medium text-gray-300">Is Admin</label>
                             </div>
                         </div>
 
                         {/* Date of Birth */}
                         <div className="space-y-2">
-                            <label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700">Date of Birth</label>
+                            <label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-300">Date of Birth</label>
                             <Input
                                 id="dateOfBirth"
                                 type="date"
                                 {...form.register("dateOfBirth")}
+                                className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500 scheme-dark"
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Notes</label>
-                            <Textarea {...form.register("notes")} placeholder="Additional notes..." className="h-24" />
+                            <label className="text-sm font-medium text-gray-300">Notes</label>
+                            <Textarea {...form.register("notes")} placeholder="Additional notes..." className="h-24 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
                         </div>
 
                         <div className="flex justify-end pt-6">
-                            <Button type="submit" size="lg" isLoading={saving}>
+                            <Button type="submit" size="lg" isLoading={saving} className="bg-orange-500 hover:bg-orange-600 text-white">
                                 Save Changes
                             </Button>
                         </div>
                     </form>
                 </div>
-            </div>
+            </main>
+
+            {/* Sticky Bottom Nav */}
+            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/90 backdrop-blur-md border-t border-gray-800 px-6 py-3">
+                <div className="max-w-md mx-auto flex items-center justify-between">
+                    <Link href="/" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
+                        <Home className="w-6 h-6" />
+                        <span className="text-xs font-medium">Home</span>
+                    </Link>
+                    <Link href="/events" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
+                        <Calendar className="w-6 h-6" />
+                        <span className="text-xs font-medium">Events</span>
+                    </Link>
+                    <Link href="/community" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
+                        <Users className="w-6 h-6" />
+                        <span className="text-xs font-medium">Community</span>
+                    </Link>
+                </div>
+            </nav>
         </div>
     );
 }
