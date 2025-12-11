@@ -8,8 +8,6 @@ import { useToast } from "@/context/ToastContext";
 import { db } from "@/lib/firebase";
 import { doc, runTransaction, Timestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { EventData } from "./EventCard";
-import { useTeamDissolve } from "@/hooks/useTeamDissolve";
-import { useTeamAccept } from "@/hooks/useTeamAccept";
 
 interface PartnerResponseDialogProps {
     open: boolean;
@@ -30,41 +28,193 @@ export function PartnerResponseDialog({
     currentUser,
     onSuccess
 }: PartnerResponseDialogProps) {
+    const [loading, setLoading] = useState(false);
     const { showToast } = useToast();
-    const { dissolveTeam, loading: dissolveLoading } = useTeamDissolve();
-
-    const { acceptInvite, loading: acceptLoading } = useTeamAccept();
-
     const handleAccept = async () => {
         if (!currentUser) return;
+        setLoading(true);
+        try {
+            // 1. Find existing registrations (OUTSIDE Transaction)
+            const registrationsRef = collection(db, "registrations");
 
-        await acceptInvite(
-            currentUser as any, // Type cast to satisfy hook requirement
-            notification.teamId,
-            notification.notificationId,
-            () => {
-                showToast("Team confirmed! You are now registered.", "success");
-                onOpenChange(false);
-                if (onSuccess) onSuccess();
-            }
-        );
+            // Requester Registration
+            const reqQuery = query(
+                registrationsRef,
+                where("eventId", "==", event.eventId),
+                where("playerId", "==", requester.uid)
+            );
+            const reqSnapshot = await getDocs(reqQuery);
+            const requesterRegId = !reqSnapshot.empty ? reqSnapshot.docs[0].id : null;
+
+            // Current User Registration
+            const curQuery = query(
+                registrationsRef,
+                where("eventId", "==", event.eventId),
+                where("playerId", "==", currentUser.uid)
+            );
+            const curSnapshot = await getDocs(curQuery);
+            const currentUserRegId = !curSnapshot.empty ? curSnapshot.docs[0].id : null;
+
+            await runTransaction(db, async (transaction) => {
+                if (!event.eventId) throw new Error("Invalid event data: Missing event ID");
+                const eventRef = doc(db, "events", event.eventId);
+                const eventDoc = await transaction.get(eventRef);
+                if (!eventDoc.exists()) throw new Error("Event does not exist");
+
+                const currentEventData = eventDoc.data();
+                const currentCount = currentEventData.registrationsCount || 0;
+                const slotsAvailable = currentEventData.slotsAvailable;
+
+
+                if (currentCount + 1 > slotsAvailable) {
+
+                }
+
+                // 1. Update Team Status
+                const teamRef = doc(db, "teams", notification.teamId);
+                const teamDoc = await transaction.get(teamRef);
+                if (!teamDoc.exists()) throw new Error("Team not found");
+
+                const teamData = teamDoc.data();
+                if (teamData.status === 'CONFIRMED') {
+                    throw new Error("This invite has already been accepted.");
+                }
+
+                transaction.update(teamRef, {
+                    player2Confirmed: true,
+                    status: "CONFIRMED",
+                    fullNameP2: currentUser.displayName || "Unknown Player",
+                    teamId: notification.teamId
+                });
+
+                // 2. Update/Create Registrations
+                // Requester
+                if (requesterRegId) {
+                    const reqRegRef = doc(db, "registrations", requesterRegId);
+                    transaction.update(reqRegRef, {
+                        status: "CONFIRMED",
+                        teamId: notification.teamId,
+                        partnerStatus: "CONFIRMED",
+                        isPrimary: true,
+                        _debugSource: "PartnerResponseDialog.tsx - handleAccept (Update Registrations) - Requester",
+                    });
+                }
+                // Current User (Partner)
+                if (currentUserRegId) {
+                    const curRegRef = doc(db, "registrations", currentUserRegId);
+                    transaction.update(curRegRef, {
+                        status: "CONFIRMED",
+                        teamId: notification.teamId,
+                        partnerStatus: "CONFIRMED",
+                        isPrimary: false,
+                        fullNameP2: requester.displayName || "Unknown Player",
+                        _debugSource: "PartnerResponseDialog.tsx - handleAccept - Partner"
+                    });
+                }
+
+                // 3. Update Event Count
+                transaction.update(eventRef, {
+                    registrationsCount: currentCount + 1
+                });
+
+                // 4. Update Notification (Mark as handled/read)
+                if (notification.notificationId && notification.notificationId !== 'from_url') {
+                    const notifRef = doc(db, "notifications", notification.notificationId);
+                    transaction.update(notifRef, { read: true });
+                }
+
+                // 5. Notify Requester
+                const replyNotifRef = doc(collection(db, "notifications"));
+                transaction.set(replyNotifRef, {
+                    notificationId: replyNotifRef.id,
+                    userId: requester.uid,
+                    type: "partner_accepted",
+                    title: "Partner Accepted",
+                    message: `${currentUser.displayName || "Your partner"} accepted your team invite for ${event.eventName}!`,
+                    fromUserId: currentUser.uid,
+                    eventId: event.eventId,
+                    teamId: notification.teamId,
+                    read: false,
+                    createdAt: Timestamp.now(),
+                    _debugSource: "PartnerResponseDialog.tsx - handleAccept - Partner"
+                });
+            });
+
+            showToast("Team confirmed! You are now registered.", "success");
+            onOpenChange(false);
+            if (onSuccess) onSuccess();
+
+        } catch (error) {
+            console.error("Accept error:", error);
+            const message = error instanceof Error ? error.message : "Failed to accept invite";
+            showToast(message, "error");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleDecline = async () => {
         if (!currentUser) return;
+        setLoading(true);
+        try {
+            // 1. Find requester's registration (OUTSIDE Transaction)
+            const registrationsRef = collection(db, "registrations");
+            const reqQuery = query(
+                registrationsRef,
+                where("eventId", "==", event.eventId),
+                where("playerId", "==", requester.uid)
+            );
+            const reqSnapshot = await getDocs(reqQuery);
+            const requesterRegId = !reqSnapshot.empty ? reqSnapshot.docs[0].id : null;
 
-        await dissolveTeam(
-            currentUser,
-            notification.teamId,
-            event.eventId,
-            "DECLINE",
-            notification.notificationId,
-            () => {
-                showToast("Invite declined.", "info");
-                onOpenChange(false);
-                if (onSuccess) onSuccess();
-            }
-        );
+            await runTransaction(db, async (transaction) => {
+                // 1. Delete/Update Team
+                const teamRef = doc(db, "teams", notification.teamId);
+                transaction.delete(teamRef);
+
+                // 2. Update Requester Registration
+                if (requesterRegId) {
+                    const reqRegRef = doc(db, "registrations", requesterRegId);
+                    transaction.update(reqRegRef, {
+                        fullNameP2: "",
+                        partnerStatus: "DENIED",
+                        player2Id: "",
+                        lookingForPartner: true,
+                        teamId: "",
+                        _debugSource: "PartnerResponseDialog.tsx - handleDecline - Requester"
+                    });
+                }
+
+                // 3. Update Notification
+                if (notification.notificationId && notification.notificationId !== 'from_url') {
+                    const notifRef = doc(db, "notifications", notification.notificationId);
+                    transaction.update(notifRef, { read: true });
+                }
+
+                // 4. Notify Requester
+                const replyNotifRef = doc(collection(db, "notifications"));
+                transaction.set(replyNotifRef, {
+                    notificationId: replyNotifRef.id,
+                    userId: requester.uid,
+                    type: "partner_declined",
+                    title: "Partner Declined",
+                    message: `${currentUser.displayName || "Your partner"} declined your team invite.`,
+                    fromUserId: currentUser.uid,
+                    eventId: event.eventId,
+                    read: false,
+                    createdAt: Timestamp.now()
+                });
+            });
+
+            showToast("Invite declined.", "info");
+            onOpenChange(false);
+            if (onSuccess) onSuccess();
+        } catch (error) {
+            console.error("Decline error:", error);
+            showToast("Failed to decline invite", "error");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -89,20 +239,11 @@ export function PartnerResponseDialog({
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
-                    <Button
-                        variant="outline"
-                        onClick={handleDecline}
-                        disabled={acceptLoading || dissolveLoading} // Disable if EITHER is running
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                        {dissolveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Decline"}
+                    <Button variant="outline" onClick={handleDecline} disabled={loading} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Decline"}
                     </Button>
-                    <Button
-                        onClick={handleAccept}
-                        disabled={acceptLoading || dissolveLoading} // Disable if EITHER is running
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                        {acceptLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept & Join"}
+                    <Button onClick={handleAccept} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept & Join"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
