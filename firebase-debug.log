@@ -1,0 +1,742 @@
+[debug] [2025-12-12T23:31:05.056Z] ----------------------------------------------------------------------
+[debug] [2025-12-12T23:31:05.059Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2025-12-12T23:31:05.059Z] CLI Version:   15.0.0
+[debug] [2025-12-12T23:31:05.059Z] Platform:      win32
+[debug] [2025-12-12T23:31:05.060Z] Node Version:  v20.19.5
+[debug] [2025-12-12T23:31:05.060Z] Time:          Sat Dec 13 2025 03:31:05 GMT+0400 (Gulf Standard Time)
+[debug] [2025-12-12T23:31:05.060Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-12T23:31:06.785Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-12-12T23:31:06.785Z] > authorizing via signed-in user (ahmedamr80@gmail.com)
+[debug] [2025-12-12T23:31:06.785Z] [iam] checking project db-padel-reg for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]
+[debug] [2025-12-12T23:31:06.786Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:06.786Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:06.787Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions [none]
+[debug] [2025-12-12T23:31:06.787Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions x-goog-quota-user=projects/db-padel-reg
+[debug] [2025-12-12T23:31:06.788Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-12-12T23:31:08.383Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions 200
+[debug] [2025-12-12T23:31:08.384Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-12-12T23:31:08.384Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:08.384Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:08.384Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-12-12T23:31:08.384Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-12T23:31:09.930Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-12-12T23:31:09.930Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-12T23:31:09.931Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:09.931Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:09.931Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg [none]
+[debug] [2025-12-12T23:31:10.480Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg 200
+[debug] [2025-12-12T23:31:10.480Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg {"projectId":"db-padel-reg","projectNumber":"88351525770","displayName":"DB Padel Reg","name":"projects/db-padel-reg","resources":{"hostingSite":"db-padel-reg","realtimeDatabaseInstance":"db-padel-reg-default-rtdb"},"state":"ACTIVE","etag":"1_484aee0a-d37f-46e9-a2a8-88085139b23b"}
+[debug] [2025-12-12T23:31:10.480Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:10.480Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:10.481Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg [none]
+[debug] [2025-12-12T23:31:10.829Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg 200
+[debug] [2025-12-12T23:31:10.830Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg {"projectId":"db-padel-reg","projectNumber":"88351525770","displayName":"DB Padel Reg","name":"projects/db-padel-reg","resources":{"hostingSite":"db-padel-reg","realtimeDatabaseInstance":"db-padel-reg-default-rtdb"},"state":"ACTIVE","etag":"1_484aee0a-d37f-46e9-a2a8-88085139b23b"}
+[debug] [2025-12-12T23:31:13.335Z] defaultcredentials: writing to file C:\Users\dell\AppData\Roaming\firebase\ahmedamr80_gmail_com_application_default_credentials.json
+[debug] [2025-12-12T23:31:13.336Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:13.336Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:13.337Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites pageToken=&pageSize=10
+[debug] [2025-12-12T23:31:14.943Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites 200
+[debug] [2025-12-12T23:31:14.944Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites {"sites":[{"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}]}
+[debug] [2025-12-12T23:31:14.944Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:14.944Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:14.944Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config [none]
+[debug] [2025-12-12T23:31:15.700Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config 200
+[debug] [2025-12-12T23:31:15.700Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config {"projectId":"db-padel-reg","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","databaseURL":"https://db-padel-reg-default-rtdb.firebaseio.com","storageBucket":"db-padel-reg.firebasestorage.app","apiKey":"AIzaSyDwsIealQQrrI1t24zHAmQtddpaybVzGjI","authDomain":"db-padel-reg.firebaseapp.com","messagingSenderId":"88351525770","measurementId":"G-3Z3F78ZVCF","projectNumber":"88351525770","version":"2"}
+[info] 
+   Thank you for trying our early preview of Next.js support on Firebase Hosting.
+   During the preview, support is best-effort and breaking changes can be expected. Proceed with caution.
+   The integration is known to work with Next.js version 12 - 15.0. You may encounter errors.
+
+   Documentation: https://firebase.google.com/docs/hosting/frameworks/nextjs
+   File a bug: https://github.com/firebase/firebase-tools/issues/new?template=bug_report.md
+   Submit a feature request: https://github.com/firebase/firebase-tools/issues/new?template=feature_request.md
+
+   We'd love to learn from you. Express your interest in helping us shape the future of Firebase Hosting: https://goo.gle/41enW5X
+
+[debug] [2025-12-12T23:31:21.636Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:21.636Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:21.636Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg [none]
+[debug] [2025-12-12T23:31:23.194Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg 200
+[debug] [2025-12-12T23:31:23.194Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg {"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}
+[info]  ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\dell\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\package-lock.json
+
+
+[info]    ▲ Next.js 16.0.10 (Turbopack)
+
+[info]    - Environments: .env.local
+
+
+[info]    Creating an optimized production build ...
+
+[info]  ✓ Compiled successfully in 5.6s
+
+[info]    Running TypeScript ...
+
+[info]    Collecting page data using 11 workers ...
+
+[info]    Generating static pages using 11 workers (0/16) ...
+
+[info]    Generating static pages using 11 workers (4/16) 
+
+[info]    Generating static pages using 11 workers (8/16) 
+
+[info]    Generating static pages using 11 workers (12/16) 
+
+[info]  ✓ Generating static pages using 11 workers (16/16) in 1366.7ms
+
+[info]    Finalizing page optimization ...
+
+[info] 
+
+[info] Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/data-manager
+├ ƒ /api/list-users
+├ ○ /auth/signin
+├ ○ /clubs
+├ ○ /clubs/create
+├ ○ /community
+├ ƒ /community/[playerId]
+├ ○ /dashboard
+├ ○ /events
+├ ƒ /events/[eventId]
+├ ○ /events/create
+├ ○ /media
+├ ○ /notifications
+└ ○ /player
+
+
+[info] 
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+[info] Building a Cloud Function to run this application. This is needed due to:
+[info]  • non-static component /api/list-users/route
+[info]  • non-static component /community/[playerId]/page
+[info]  • non-static component /events/[eventId]/page
+[info] 
+[debug] [2025-12-12T23:31:41.602Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:41.602Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:31:41.602Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg [none]
+[debug] [2025-12-12T23:31:43.167Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg 200
+[debug] [2025-12-12T23:31:43.167Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg {"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}
+[debug] [2025-12-12T23:31:49.196Z] Error: Command failed: npm i --omit dev --no-audit
+    at genericNodeError (node:internal/errors:984:15)
+    at wrappedFn (node:internal/errors:538:14)
+    at checkExecSyncError (node:child_process:891:11)
+    at execSync (node:child_process:963:15)
+    at prepareFrameworks (C:\Users\dell\AppData\Local\nvm\v20.19.5\node_modules\firebase-tools\lib\frameworks\index.js:373:42)
+    at async deploy (C:\Users\dell\AppData\Local\nvm\v20.19.5\node_modules\firebase-tools\lib\deploy\index.js:79:9)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2025-12-12T23:32:03.061Z] ----------------------------------------------------------------------
+[debug] [2025-12-12T23:32:03.064Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --debug
+[debug] [2025-12-12T23:32:03.064Z] CLI Version:   15.0.0
+[debug] [2025-12-12T23:32:03.064Z] Platform:      win32
+[debug] [2025-12-12T23:32:03.064Z] Node Version:  v20.19.5
+[debug] [2025-12-12T23:32:03.064Z] Time:          Sat Dec 13 2025 03:32:03 GMT+0400 (Gulf Standard Time)
+[debug] [2025-12-12T23:32:03.064Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-12T23:32:04.558Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-12-12T23:32:04.559Z] > authorizing via signed-in user (ahmedamr80@gmail.com)
+[debug] [2025-12-12T23:32:04.559Z] [iam] checking project db-padel-reg for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]
+[debug] [2025-12-12T23:32:04.561Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:04.561Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:04.562Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions [none]
+[debug] [2025-12-12T23:32:04.562Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions x-goog-quota-user=projects/db-padel-reg
+[debug] [2025-12-12T23:32:04.563Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-12-12T23:32:06.030Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions 200
+[debug] [2025-12-12T23:32:06.031Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-12-12T23:32:06.031Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:06.032Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:06.032Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-12-12T23:32:06.032Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-12T23:32:06.668Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-12-12T23:32:06.669Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-12T23:32:06.669Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:06.670Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:06.670Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg [none]
+[debug] [2025-12-12T23:32:07.244Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg 200
+[debug] [2025-12-12T23:32:07.245Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg {"projectId":"db-padel-reg","projectNumber":"88351525770","displayName":"DB Padel Reg","name":"projects/db-padel-reg","resources":{"hostingSite":"db-padel-reg","realtimeDatabaseInstance":"db-padel-reg-default-rtdb"},"state":"ACTIVE","etag":"1_484aee0a-d37f-46e9-a2a8-88085139b23b"}
+[debug] [2025-12-12T23:32:07.245Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:07.245Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:07.246Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg [none]
+[debug] [2025-12-12T23:32:07.631Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg 200
+[debug] [2025-12-12T23:32:07.631Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg {"projectId":"db-padel-reg","projectNumber":"88351525770","displayName":"DB Padel Reg","name":"projects/db-padel-reg","resources":{"hostingSite":"db-padel-reg","realtimeDatabaseInstance":"db-padel-reg-default-rtdb"},"state":"ACTIVE","etag":"1_484aee0a-d37f-46e9-a2a8-88085139b23b"}
+[debug] [2025-12-12T23:32:10.085Z] defaultcredentials: writing to file C:\Users\dell\AppData\Roaming\firebase\ahmedamr80_gmail_com_application_default_credentials.json
+[debug] [2025-12-12T23:32:10.087Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:10.087Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:10.088Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites pageToken=&pageSize=10
+[debug] [2025-12-12T23:32:11.673Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites 200
+[debug] [2025-12-12T23:32:11.673Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites {"sites":[{"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}]}
+[debug] [2025-12-12T23:32:11.674Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:11.674Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:11.674Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config [none]
+[debug] [2025-12-12T23:32:12.280Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config 200
+[debug] [2025-12-12T23:32:12.280Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config {"projectId":"db-padel-reg","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","databaseURL":"https://db-padel-reg-default-rtdb.firebaseio.com","storageBucket":"db-padel-reg.firebasestorage.app","apiKey":"AIzaSyDwsIealQQrrI1t24zHAmQtddpaybVzGjI","authDomain":"db-padel-reg.firebaseapp.com","messagingSenderId":"88351525770","measurementId":"G-3Z3F78ZVCF","projectNumber":"88351525770","version":"2"}
+[info] 
+   Thank you for trying our early preview of Next.js support on Firebase Hosting.
+   During the preview, support is best-effort and breaking changes can be expected. Proceed with caution.
+   The integration is known to work with Next.js version 12 - 15.0. You may encounter errors.
+
+   Documentation: https://firebase.google.com/docs/hosting/frameworks/nextjs
+   File a bug: https://github.com/firebase/firebase-tools/issues/new?template=bug_report.md
+   Submit a feature request: https://github.com/firebase/firebase-tools/issues/new?template=feature_request.md
+
+   We'd love to learn from you. Express your interest in helping us shape the future of Firebase Hosting: https://goo.gle/41enW5X
+
+[debug] [2025-12-12T23:32:17.735Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:17.736Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:17.736Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg [none]
+[debug] [2025-12-12T23:32:19.274Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg 200
+[debug] [2025-12-12T23:32:19.274Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg {"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}
+[info]  ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\dell\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\package-lock.json
+
+
+[info]    ▲ Next.js 16.0.10 (Turbopack)
+
+[info]    - Environments: .env.local
+
+
+[info]    Creating an optimized production build ...
+
+[info] 
+
+[info] [180.23ms] [@tailwindcss/postcss] src\app\globals.css
+[  0.07ms]   ↳ Quick bail check
+[ 27.58ms]   ↳ Setup compiler
+[  0.38ms]     ↳ PostCSS AST -> Tailwind CSS AST
+[ 27.17ms]     ↳ Create compiler
+[  0.22ms]   ↳ Register full rebuild paths
+[  1.75ms]   ↳ Setup scanner
+[ 27.61ms]   ↳ Scan for candidates
+[ 47.25ms]   ↳ Register dependency messages
+[ 47.97ms]   ↳ Build utilities
+[ 23.22ms]   ↳ Optimization
+[  1.43ms]     ↳ AST -> CSS
+
+[info] [ 11.57ms]     ↳ Lightning CSS
+[ 10.18ms]     ↳ CSS -> PostCSS AST
+[  4.13ms]   ↳ Update PostCSS AST
+
+
+[info]  ✓ Compiled successfully in 5.3s
+
+[info]    Running TypeScript ...
+
+[info]    Collecting page data using 11 workers ...
+
+[info]    Generating static pages using 11 workers (0/16) ...
+
+[info]    Generating static pages using 11 workers (4/16) 
+
+[info]    Generating static pages using 11 workers (8/16) 
+
+[info]    Generating static pages using 11 workers (12/16) 
+
+[info]  ✓ Generating static pages using 11 workers (16/16) in 1228.3ms
+
+[info]    Finalizing page optimization ...
+
+[info] 
+
+[info] Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/data-manager
+├ ƒ /api/list-users
+├ ○ /auth/signin
+├ ○ /clubs
+├ ○ /clubs/create
+├ ○ /community
+├ ƒ /community/[playerId]
+├ ○ /dashboard
+├ ○ /events
+├ ƒ /events/[eventId]
+├ ○ /events/create
+├ ○ /media
+├ ○ /notifications
+└ ○ /player
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+[info] Building a Cloud Function to run this application. This is needed due to:
+[info]  • non-static component /api/list-users/route
+[info]  • non-static component /community/[playerId]/page
+[info]  • non-static component /events/[eventId]/page
+[info] 
+[debug] [2025-12-12T23:32:36.309Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:36.310Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:32:36.310Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg [none]
+[debug] [2025-12-12T23:32:38.015Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg 200
+[debug] [2025-12-12T23:32:38.015Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg {"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}
+[debug] [2025-12-12T23:32:40.932Z] Error: Command failed: npm i --omit dev --no-audit
+    at genericNodeError (node:internal/errors:984:15)
+    at wrappedFn (node:internal/errors:538:14)
+    at checkExecSyncError (node:child_process:891:11)
+    at execSync (node:child_process:963:15)
+    at prepareFrameworks (C:\Users\dell\AppData\Local\nvm\v20.19.5\node_modules\firebase-tools\lib\frameworks\index.js:373:42)
+    at async deploy (C:\Users\dell\AppData\Local\nvm\v20.19.5\node_modules\firebase-tools\lib\deploy\index.js:79:9)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2025-12-12T23:33:08.372Z] ----------------------------------------------------------------------
+[debug] [2025-12-12T23:33:08.374Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2025-12-12T23:33:08.375Z] CLI Version:   15.0.0
+[debug] [2025-12-12T23:33:08.375Z] Platform:      win32
+[debug] [2025-12-12T23:33:08.375Z] Node Version:  v20.19.5
+[debug] [2025-12-12T23:33:08.375Z] Time:          Sat Dec 13 2025 03:33:08 GMT+0400 (Gulf Standard Time)
+[debug] [2025-12-12T23:33:08.375Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-12T23:33:10.034Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-12-12T23:33:10.035Z] > authorizing via signed-in user (ahmedamr80@gmail.com)
+[debug] [2025-12-12T23:33:10.035Z] [iam] checking project db-padel-reg for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]
+[debug] [2025-12-12T23:33:10.036Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:10.036Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:10.037Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions [none]
+[debug] [2025-12-12T23:33:10.037Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions x-goog-quota-user=projects/db-padel-reg
+[debug] [2025-12-12T23:33:10.038Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-12-12T23:33:11.519Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions 200
+[debug] [2025-12-12T23:33:11.519Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/db-padel-reg:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasedatabase.instances.update","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-12-12T23:33:11.520Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:11.520Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:11.520Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-12-12T23:33:11.520Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-12T23:33:12.956Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-12-12T23:33:12.957Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/db-padel-reg/serviceAccounts/db-padel-reg@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-12T23:33:12.957Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:12.957Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:12.958Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg [none]
+[debug] [2025-12-12T23:33:13.448Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg 200
+[debug] [2025-12-12T23:33:13.448Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg {"projectId":"db-padel-reg","projectNumber":"88351525770","displayName":"DB Padel Reg","name":"projects/db-padel-reg","resources":{"hostingSite":"db-padel-reg","realtimeDatabaseInstance":"db-padel-reg-default-rtdb"},"state":"ACTIVE","etag":"1_484aee0a-d37f-46e9-a2a8-88085139b23b"}
+[debug] [2025-12-12T23:33:13.449Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:13.449Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:13.449Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg [none]
+[debug] [2025-12-12T23:33:13.824Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg 200
+[debug] [2025-12-12T23:33:13.824Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/db-padel-reg {"projectId":"db-padel-reg","projectNumber":"88351525770","displayName":"DB Padel Reg","name":"projects/db-padel-reg","resources":{"hostingSite":"db-padel-reg","realtimeDatabaseInstance":"db-padel-reg-default-rtdb"},"state":"ACTIVE","etag":"1_484aee0a-d37f-46e9-a2a8-88085139b23b"}
+[debug] [2025-12-12T23:33:16.514Z] defaultcredentials: writing to file C:\Users\dell\AppData\Roaming\firebase\ahmedamr80_gmail_com_application_default_credentials.json
+[debug] [2025-12-12T23:33:16.515Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:16.515Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:16.516Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites pageToken=&pageSize=10
+[debug] [2025-12-12T23:33:18.133Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites 200
+[debug] [2025-12-12T23:33:18.133Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites {"sites":[{"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}]}
+[debug] [2025-12-12T23:33:18.134Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:18.134Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:18.134Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config [none]
+[debug] [2025-12-12T23:33:19.180Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config 200
+[debug] [2025-12-12T23:33:19.180Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/-/webApps/1:88351525770:web:a9f2eb503debc15cdd5673/config {"projectId":"db-padel-reg","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","databaseURL":"https://db-padel-reg-default-rtdb.firebaseio.com","storageBucket":"db-padel-reg.firebasestorage.app","apiKey":"AIzaSyDwsIealQQrrI1t24zHAmQtddpaybVzGjI","authDomain":"db-padel-reg.firebaseapp.com","messagingSenderId":"88351525770","measurementId":"G-3Z3F78ZVCF","projectNumber":"88351525770","version":"2"}
+[info] 
+   Thank you for trying our early preview of Next.js support on Firebase Hosting.
+   During the preview, support is best-effort and breaking changes can be expected. Proceed with caution.
+   The integration is known to work with Next.js version 12 - 15.0. You may encounter errors.
+
+   Documentation: https://firebase.google.com/docs/hosting/frameworks/nextjs
+   File a bug: https://github.com/firebase/firebase-tools/issues/new?template=bug_report.md
+   Submit a feature request: https://github.com/firebase/firebase-tools/issues/new?template=feature_request.md
+
+   We'd love to learn from you. Express your interest in helping us shape the future of Firebase Hosting: https://goo.gle/41enW5X
+
+[debug] [2025-12-12T23:33:24.922Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:24.922Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:24.922Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg [none]
+[debug] [2025-12-12T23:33:26.479Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg 200
+[debug] [2025-12-12T23:33:26.480Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg {"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}
+[info]  ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\dell\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\dell\.gemini\antigravity\scratch\firebase-auth-app\package-lock.json
+
+
+[info]    ▲ Next.js 16.0.10 (Turbopack)
+
+[info]    - Environments: .env.local
+
+
+[info]    Creating an optimized production build ...
+
+[info]  ✓ Compiled successfully in 5.5s
+
+[info]    Running TypeScript ...
+
+[info]    Collecting page data using 11 workers ...
+
+[info]    Generating static pages using 11 workers (0/16) ...
+
+[info]    Generating static pages using 11 workers (4/16) 
+
+[info]    Generating static pages using 11 workers (8/16) 
+
+[info]    Generating static pages using 11 workers (12/16) 
+
+[info]  ✓ Generating static pages using 11 workers (16/16) in 1394.2ms
+
+[info]    Finalizing page optimization ...
+
+[info] 
+
+[info] Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/data-manager
+├ ƒ /api/list-users
+├ ○ /auth/signin
+├ ○ /clubs
+├ ○ /clubs/create
+├ ○ /community
+├ ƒ /community/[playerId]
+├ ○ /dashboard
+├ ○ /events
+├ ƒ /events/[eventId]
+├ ○ /events/create
+├ ○ /media
+├ ○ /notifications
+└ ○ /player
+
+
+[info] 
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+[info] Building a Cloud Function to run this application. This is needed due to:
+[info]  • non-static component /api/list-users/route
+[info]  • non-static component /community/[playerId]/page
+[info]  • non-static component /events/[eventId]/page
+[info] 
+[debug] [2025-12-12T23:33:44.908Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:44.908Z] Checked if tokens are valid: true, expires at: 1765585305693
+[debug] [2025-12-12T23:33:44.908Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg [none]
+[debug] [2025-12-12T23:33:46.481Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg 200
+[debug] [2025-12-12T23:33:46.481Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/db-padel-reg/sites/db-padel-reg {"name":"projects/db-padel-reg/sites/db-padel-reg","defaultUrl":"https://db-padel-reg.web.app","appId":"1:88351525770:web:a9f2eb503debc15cdd5673","type":"DEFAULT_SITE"}
+[debug] [2025-12-12T23:33:51.486Z] [web frameworks] effective firebase.json:  {
+  "hosting": [
+    {
+      "source": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "frameworksBackend": {
+        "region": "us-central1"
+      },
+      "site": "db-padel-reg",
+      "rewrites": [
+        {
+          "source": "/**",
+          "function": {
+            "functionId": "ssrdbpadelreg",
+            "region": "us-central1",
+            "pinTag": true
+          }
+        }
+      ],
+      "redirects": [],
+      "headers": [
+        {
+          "source": "/(.*)",
+          "headers": [
+            {
+              "key": "Cross-Origin-Opener-Policy",
+              "value": "same-origin-allow-popups"
+            }
+          ]
+        },
+        {
+          "source": "/_global-error",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/_global-error/layout,_N_T_/_global-error/page,_N_T_/_global-error"
+            }
+          ]
+        },
+        {
+          "source": "/_not-found",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/_not-found/layout,_N_T_/_not-found/page,_N_T_/_not-found"
+            }
+          ]
+        },
+        {
+          "source": "/admin/data-manager",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/admin/layout,_N_T_/admin/data-manager/layout,_N_T_/admin/data-manager/page,_N_T_/admin/data-manager"
+            }
+          ]
+        },
+        {
+          "source": "/auth/signin",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/auth/layout,_N_T_/auth/signin/layout,_N_T_/auth/signin/page,_N_T_/auth/signin"
+            }
+          ]
+        },
+        {
+          "source": "/clubs/create",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/clubs/layout,_N_T_/clubs/create/layout,_N_T_/clubs/create/page,_N_T_/clubs/create"
+            }
+          ]
+        },
+        {
+          "source": "/clubs",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/clubs/layout,_N_T_/clubs/page,_N_T_/clubs"
+            }
+          ]
+        },
+        {
+          "source": "/dashboard",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/dashboard/layout,_N_T_/dashboard/page,_N_T_/dashboard"
+            }
+          ]
+        },
+        {
+          "source": "/community",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/community/layout,_N_T_/community/page,_N_T_/community"
+            }
+          ]
+        },
+        {
+          "source": "/events/create",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/events/layout,_N_T_/events/create/layout,_N_T_/events/create/page,_N_T_/events/create"
+            }
+          ]
+        },
+        {
+          "source": "/favicon.ico",
+          "headers": [
+            {
+              "key": "cache-control",
+              "value": "public, max-age=0, must-revalidate"
+            },
+            {
+              "key": "content-type",
+              "value": "image/x-icon"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/favicon.ico/layout,_N_T_/favicon.ico/route,_N_T_/favicon.ico"
+            }
+          ]
+        },
+        {
+          "source": "/events",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/events/layout,_N_T_/events/page,_N_T_/events"
+            }
+          ]
+        },
+        {
+          "source": "/media",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/media/layout,_N_T_/media/page,_N_T_/media"
+            }
+          ]
+        },
+        {
+          "source": "/player",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/player/layout,_N_T_/player/page,_N_T_/player"
+            }
+          ]
+        },
+        {
+          "source": "/notifications",
+          "headers": [
+            {
+              "key": "x-nextjs-stale-time",
+              "value": "300"
+            },
+            {
+              "key": "x-nextjs-prerender",
+              "value": "1"
+            },
+            {
+              "key": "x-next-cache-tags",
+              "value": "_N_T_/layout,_N_T_/notifications/layout,_N_T_/notifications/page,_N_T_/notifications"
+            }
+          ]
+        },
+        {
+          "source": "/**/*.[jt]s",
+          "headers": [
+            {
+              "key": "Set-Cookie",
+              "value": "__FIREBASE_DEFAULTS__=eyJjb25maWciOnsicHJvamVjdElkIjoiZGItcGFkZWwtcmVnIiwiYXBwSWQiOiIxOjg4MzUxNTI1NzcwOndlYjphOWYyZWI1MDNkZWJjMTVjZGQ1NjczIiwiZGF0YWJhc2VVUkwiOiJodHRwczovL2RiLXBhZGVsLXJlZy1kZWZhdWx0LXJ0ZGIuZmlyZWJhc2Vpby5jb20iLCJzdG9yYWdlQnVja2V0IjoiZGItcGFkZWwtcmVnLmZpcmViYXNlc3RvcmFnZS5hcHAiLCJhcGlLZXkiOiJBSXphU3lEd3NJZWFsUVFyckkxdDI0ekhBbVF0ZGRwYXliVnpHakkiLCJhdXRoRG9tYWluIjoiZGItcGFkZWwtcmVnLmZpcmViYXNlYXBwLmNvbSIsIm1lc3NhZ2luZ1NlbmRlcklkIjoiODgzNTE1MjU3NzAiLCJtZWFzdXJlbWVudElkIjoiRy0zWjNGNzhaVkNGIiwicHJvamVjdE51bWJlciI6Ijg4MzUxNTI1NzcwIiwidmVyc2lvbiI6IjIifSwiX2F1dGhUb2tlblN5bmNVUkwiOiIvX19zZXNzaW9uIn0; SameSite=Strict; Expires=2027-11-07T10:13:51.486Z; Path=/;"
+            }
+          ]
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "public": ".firebase\\db-padel-reg\\hosting",
+      "webFramework": "next_ssr"
+    }
+  ],
+  "functions": [
+    {
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ],
+      "source": "functions"
+    },
+    {
+      "source": ".firebase\\db-padel-reg\\functions",
+      "codebase": "firebase-frameworks-db-padel-reg"
+    }
+  ]
+}
+[info] 
+[info] === Deploying to 'db-padel-reg'...
+[info] 
+[info] i  deploying database, storage, firestore, functions, hosting 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run build
