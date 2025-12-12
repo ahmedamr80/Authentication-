@@ -14,11 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, User as UserIcon, Camera, Bell, LogOut, Settings, Home, Calendar, Users, ArrowLeft } from "lucide-react";
+import { Loader2, User as UserIcon, Camera } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-// import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
+import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 // ------------------------------------------------------------------
 // 📧 EMAIL VERIFICATION SWITCH 📧
@@ -45,7 +45,6 @@ const profileSchema = z.object({
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
-
 export default function PlayerProfilePage() {
     const router = useRouter();
     const { showToast } = useToast();
@@ -56,7 +55,8 @@ export default function PlayerProfilePage() {
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [isVerified, setIsVerified] = useState(false); // Added state
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const { isAdmin } = useAuth(); // <--- Get the global admin flag
+
 
     const form = useForm<ProfileFormValues>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -251,14 +251,7 @@ export default function PlayerProfilePage() {
         }
     };
 
-    const handleSignOut = async () => {
-        try {
-            await auth.signOut();
-            router.push("/auth/signin");
-        } catch (error) {
-            console.error("Error signing out:", error);
-        }
-    };
+
 
     if (loading) {
         return (
@@ -298,86 +291,9 @@ export default function PlayerProfilePage() {
 
     return (
         <div className="min-h-screen bg-gray-950 text-white pb-24">
-            {/* Sticky Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800 px-4 py-3">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push("/dashboard")}>
-                        <Image src="/logo.svg" alt="EveryWherePadel Logo" width={32} height={32} className="w-8 h-8" style={{ width: 'auto' }} />
-                        <h1 className="text-xl font-bold bg-linear-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">
-                            EveryWherePadel
-                        </h1>
-                    </div>
-
-                    {/* User Menu */}
-                    <div className="relative">
-                        {user ? (
-                            <div className="flex items-center gap-4">
-                                <button className="text-gray-400 hover:text-white transition-colors relative" onClick={() => router.push("/notifications")}>
-                                    <Bell className="w-6 h-6" />
-                                </button>
-                                <div className="relative">
-                                    <Avatar
-                                        className="h-8 w-8 cursor-pointer border-2 border-transparent hover:border-orange-500 transition-all"
-                                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                                    >
-                                        <AvatarImage src={user.photoURL || undefined} />
-                                        <AvatarFallback className="bg-orange-500 text-white">
-                                            {user.displayName?.charAt(0) || "U"}
-                                        </AvatarFallback>
-                                    </Avatar>
-
-                                    {/* Dropdown Menu */}
-                                    {isUserMenuOpen && (
-                                        <>
-                                            <div
-                                                className="fixed inset-0 z-40"
-                                                onClick={() => setIsUserMenuOpen(false)}
-                                            />
-                                            <div className="absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                                                <div className="p-4 border-b border-gray-800">
-                                                    <p className="font-medium text-white truncate">{user.displayName}</p>
-                                                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                                                </div>
-                                                <div className="p-1">
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
-                                                        <UserIcon className="h-4 w-4" /> Profile
-                                                    </button>
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
-                                                        <Settings className="h-4 w-4" /> Settings
-                                                    </button>
-                                                </div>
-                                                <div className="p-1 border-t border-gray-800">
-                                                    <button
-                                                        onClick={handleSignOut}
-                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                                    >
-                                                        <LogOut className="h-4 w-4" /> Sign Out
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <Button size="sm" onClick={() => router.push("/auth/signin")}>
-                                Sign In
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </header>
+            <Header user={user} showBack={true} onBack={() => router.push("/dashboard")} />
 
             <main className="pt-24 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8">
-                <Button
-                    variant="ghost"
-                    onClick={() => router.push("/dashboard")}
-                    className="text-gray-400 hover:text-white mb-2 pl-0 hover:bg-transparent"
-                >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Dashboard
-                </Button>
-
                 <div className="bg-gray-900 shadow-md rounded-xl p-6 sm:p-8 border border-gray-800">
                     <div className="border-b border-gray-800 pb-6 mb-6 text-center">
                         <h1 className="text-2xl font-bold text-white">Player Profile</h1>
@@ -527,73 +443,75 @@ export default function PlayerProfilePage() {
                             </div>
                         </div>
 
-                        {/* Admin/System Fields */}
-                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 bg-gray-950/50 p-4 rounded-lg border border-gray-800">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">Role</label>
-                                <Select
-                                    onValueChange={(val) => {
-                                        form.setValue("role", val as ProfileFormValues["role"]);
-                                        // Sync isAdmin based on role
-                                        if (val === "admin") {
-                                            form.setValue("isAdmin", true);
-                                        } else {
-                                            form.setValue("isAdmin", false);
-                                        }
-                                    }}
-                                    value={form.watch("role")}
-                                >
-                                    <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
-                                        <SelectValue placeholder="Select role" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                                        <SelectItem value="player">Player</SelectItem>
-                                        <SelectItem value="admin">Admin</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">Registration Status</label>
-                                <Select onValueChange={(val) => form.setValue("registrationStatus", val as ProfileFormValues["registrationStatus"])} defaultValue={form.getValues("registrationStatus")}>
-                                    <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
-                                        <SelectValue placeholder="Select status" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                                        <SelectItem value="active">Active</SelectItem>
-                                        <SelectItem value="pending">Pending</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    id="isShadow"
-                                    className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
-                                    {...form.register("isShadow")}
-                                />
-                                <label htmlFor="isShadow" className="text-sm font-medium text-gray-300">Is Shadow User</label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <input
-                                    type="checkbox"
-                                    id="isAdmin"
-                                    className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
-                                    {...form.register("isAdmin", {
-                                        onChange: (e) => {
-                                            const isChecked = e.target.checked;
-                                            // Sync role based on isAdmin
-                                            if (isChecked) {
-                                                form.setValue("role", "admin");
+                        {/* Admin/System Fields - SECURED */}
+                        {isAdmin && (
+                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 bg-gray-950/50 p-4 rounded-lg border border-gray-800">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-300">Role</label>
+                                    <Select
+                                        onValueChange={(val) => {
+                                            form.setValue("role", val as ProfileFormValues["role"]);
+                                            // Sync isAdmin based on role
+                                            if (val === "admin") {
+                                                form.setValue("isAdmin", true);
                                             } else {
-                                                form.setValue("role", "player");
+                                                form.setValue("isAdmin", false);
                                             }
-                                        }
-                                    })}
-                                    checked={!!form.watch("isAdmin")}
-                                />
-                                <label htmlFor="isAdmin" className="text-sm font-medium text-gray-300">Is Admin</label>
+                                        }}
+                                        value={form.watch("role")}
+                                    >
+                                        <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
+                                            <SelectValue placeholder="Select role" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                                            <SelectItem value="player">Player</SelectItem>
+                                            <SelectItem value="admin">Admin</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-300">Registration Status</label>
+                                    <Select onValueChange={(val) => form.setValue("registrationStatus", val as ProfileFormValues["registrationStatus"])} defaultValue={form.getValues("registrationStatus")}>
+                                        <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
+                                            <SelectValue placeholder="Select status" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="pending">Pending</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="checkbox"
+                                        id="isShadow"
+                                        className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
+                                        {...form.register("isShadow")}
+                                    />
+                                    <label htmlFor="isShadow" className="text-sm font-medium text-gray-300">Is Shadow User</label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="checkbox"
+                                        id="isAdmin"
+                                        className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
+                                        {...form.register("isAdmin", {
+                                            onChange: (e) => {
+                                                const isChecked = e.target.checked;
+                                                // Sync role based on isAdmin
+                                                if (isChecked) {
+                                                    form.setValue("role", "admin");
+                                                } else {
+                                                    form.setValue("role", "player");
+                                                }
+                                            }
+                                        })}
+                                        checked={!!form.watch("isAdmin")}
+                                    />
+                                    <label htmlFor="isAdmin" className="text-sm font-medium text-gray-300">Is Admin</label>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Date of Birth */}
                         <div className="space-y-2">
@@ -620,23 +538,7 @@ export default function PlayerProfilePage() {
                 </div>
             </main>
 
-            {/* Sticky Bottom Nav */}
-            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/90 backdrop-blur-md border-t border-gray-800 px-6 py-3">
-                <div className="max-w-md mx-auto flex items-center justify-between">
-                    <Link href="/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <Home className="w-6 h-6" />
-                        <span className="text-xs font-medium">Home</span>
-                    </Link>
-                    <Link href="/events" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <Calendar className="w-6 h-6" />
-                        <span className="text-xs font-medium">Events</span>
-                    </Link>
-                    <Link href="/community" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <Users className="w-6 h-6" />
-                        <span className="text-xs font-medium">Community</span>
-                    </Link>
-                </div>
-            </nav>
+            <BottomNav />
         </div>
     );
 }

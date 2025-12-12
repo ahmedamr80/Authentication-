@@ -2,42 +2,50 @@
 
 import { useState, useEffect, useMemo, use, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { doc, onSnapshot, collection, query, where, getDocs, documentId, deleteDoc } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
+import { doc, onSnapshot, collection, query, where, getDocs, documentId } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, LogOut, Settings, User, Home, Bell } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell } from "lucide-react";
 import { TeamsList, Team } from "@/components/TeamsList";
 import { SinglePlayersList, SinglePlayer } from "@/components/SinglePlayersList";
 import { RegisterDialog } from "@/components/RegisterDialog";
 import { TeamRegisterDialog } from "@/components/TeamRegisterDialog";
 import { PartnerResponseDialog } from "@/components/PartnerResponseDialog";
+import { useEventWithdraw } from "@/hooks/useEventWithdraw";
 import { useToast } from "@/context/ToastContext";
 import { format } from "date-fns";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
-import Link from "next/link";
+import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
+
+// Define a legacy interface for teams that might have direct name properties
+// This solves the 'any' casting issue while keeping Type safety
+interface TeamWithLegacyData extends Team {
+    player1Name?: string;
+    fullNameP1?: string;
+    player1PhotoURL?: string;
+    player2Name?: string;
+    fullNameP2?: string;
+    player2PhotoURL?: string;
+}
 
 // Helper to calculate spots left
 const calculateSpotsLeft = (event: EventData, registrations: Registration[], teams: Team[]) => {
     const totalSpots = event.maxPlayers || 0;
 
-    // NEW LOGIC: Team Mode
+    // Updated Logic: Count occupied spots strictly based on CONFIRMED status
     if (event.unitType === "Teams") {
-        // Count only fully CONFIRMED teams
-        const confirmedCountTeams = teams.filter(t => t.status === "CONFIRMED").length;
-        console.log("DEBUG: calculateSpotsLeft (Teams)", { totalSpots, confirmedCountTeams });
-        return Math.max(0, totalSpots - confirmedCountTeams);
+        const occupiedTeams = teams.filter(t => t.status === 'CONFIRMED');
+        return Math.max(0, totalSpots - occupiedTeams.length);
     }
 
-    // EXISTING LOGIC: Player Mode
-    // Count confirmed registrations
-    const confirmedCount = registrations.filter(r => r.status === "CONFIRMED").length;
-    console.log("DEBUG: calculateSpotsLeft (Players)", { totalSpots, confirmedCount });
-    return Math.max(0, totalSpots - confirmedCount);
+    // Player Mode
+    const occupiedPlayers = registrations.filter(r => r.status === 'CONFIRMED');
+    return Math.max(0, totalSpots - occupiedPlayers.length);
 };
 
 export default function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -45,7 +53,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     const router = useRouter();
     const { user } = useAuth();
     const { showToast } = useToast();
-
+    const { withdraw } = useEventWithdraw();
     // State
     const [event, setEvent] = useState<EventData | null>(null);
     const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -60,7 +68,6 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     // UI State
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
     const [isTeamRegisterOpen, setIsTeamRegisterOpen] = useState(false);
-    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [inviteDialogData, setInviteDialogData] = useState<{
         teamId: string;
         requester: { uid: string; displayName?: string };
@@ -114,7 +121,6 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         // OPTIMIZATION: Stop here if we know for sure this isn't a team event
         // Note: We check 'event' existence first to avoid errors
         if (event && !event.isTeamRegistration && event.unitType !== "Teams") {
-            // setTeams([]); // Removed to avoid set-state-in-effect. Logic handles empty teams via conditional rendering or subsequent updates.
             return;
         }
 
@@ -164,7 +170,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                         snapshot.docs.forEach(doc => {
                             newProfiles[doc.id] = doc.data() as FirestoreUser;
                         });
-                    } catch (error) {
+                    } catch (error: unknown) {
                         console.error("Error fetching chunk:", chunk, error);
                     }
                 }
@@ -240,8 +246,6 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         return teams.some(t => t.player2Id === user.uid && t.status === "PENDING");
     }, [user, teams]);
 
-
-
     const spotsLeft = useMemo(() => {
         return event ? calculateSpotsLeft(event, registrations, teams) : 0;
     }, [event, registrations, teams]);
@@ -251,19 +255,22 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         return teams.map(team => {
             const p1 = userProfiles[team.player1Id];
             const p2 = userProfiles[team.player2Id];
+            const teamLegacy = team as TeamWithLegacyData;
 
             return {
                 ...team,
                 player1: p1 ? {
                     uid: team.player1Id,
-                    displayName: p1.displayName || p1.fullName || p1.fullname || "Unknown Player",
-                    photoURL: p1.photoURL || p1.photoUrl || undefined,
+                    displayName: teamLegacy.player1Name || teamLegacy.fullNameP1 || p1.displayName || p1.fullName || p1.fullname || "Unknown Player",
+                    // Prioritize team-stored photo (if any) -> profile photo
+                    photoURL: teamLegacy.player1PhotoURL || p1.photoURL || p1.photoUrl || undefined,
                     skillLevel: p1.skillLevel || p1.level || undefined
                 } : undefined,
                 player2: p2 ? {
                     uid: team.player2Id,
-                    displayName: p2.displayName || p2.fullName || p2.fullname || "Unknown Player",
-                    photoURL: p2.photoURL || p2.photoUrl || undefined,
+                    displayName: teamLegacy.player2Name || teamLegacy.fullNameP2 || p2.displayName || p2.fullName || p2.fullname || "Unknown Player",
+                    // Prioritize team-stored photo (if any) -> profile photo
+                    photoURL: teamLegacy.player2PhotoURL || p2.photoURL || p2.photoUrl || undefined,
                     skillLevel: p2.skillLevel || p2.level || undefined
                 } : undefined
             };
@@ -302,8 +309,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.playerDisplayName || "Unknown Player",
-                    photoURL: profile?.photoURL || profile?.photoUrl || r.playerPhotoURL || undefined,
+                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown Player",
+                    // Prioritize registration photo -> profile photo
+                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl || undefined,
                     lookingForPartner: r.lookingForPartner || false,
                     playerHand: profile?.hand || r.playerHand,
                     playerPosition: profile?.position || r.playerPosition,
@@ -327,8 +335,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.playerDisplayName || "Unknown",
-                    photoURL: profile?.photoURL || profile?.photoUrl || r.playerPhotoURL,
+                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
+                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl,
                     lookingForPartner: false, // In singles mode, you are just "in", not looking
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
@@ -336,7 +344,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     partnerStatus: r.partnerStatus,
                 } as SinglePlayer;
             });
-    }, [registrations, userProfiles, event]); // Added 'event' dependency for the check
+    }, [registrations, userProfiles, event]);
 
     // F. Waitlist Players List (Single Player Mode)
     const waitlistPlayers = useMemo(() => {
@@ -351,8 +359,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.playerDisplayName || "Unknown",
-                    photoURL: profile?.photoURL || profile?.photoUrl || r.playerPhotoURL,
+                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
+                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
@@ -367,15 +375,6 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         showToast("Link copied to clipboard!", "success");
     };
 
-    const handleSignOut = async () => {
-        try {
-            await auth.signOut();
-            router.push("/auth/signin");
-        } catch (error) {
-            console.error("Error signing out:", error);
-        }
-    };
-
     const handleManageInvite = (team: Team) => {
         // Prepare the data for the dialog
         setInviteDialogData({
@@ -388,208 +387,25 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     };
 
     const handleWithdraw = async () => {
-        if (!userRegistration) return;
+        if (!user || !userRegistration) return;
         if (!confirm("Are you sure you want to withdraw from this event?")) return;
 
         try {
-            // Check if user is part of a team (for team dissolution)
-            const userTeam = teams.find(t => t.player1Id === user?.uid || t.player2Id === user?.uid);
-            const partnerId = userTeam ? (userTeam.player1Id === user?.uid ? userTeam.player2Id : userTeam.player1Id) : null;
+            // Determine Team ID if applicable
+            const userTeam = teams.find(t => t.player1Id === user.uid || t.player2Id === user.uid);
+            const teamId = userTeam ? userTeam.teamId : null;
 
-            // Query partner's registration BEFORE transaction (if part of a team)
-            let partnerRegistrationId: string | null = null;
-            if (userTeam && partnerId && event) {
-                const partnerRegQuery = query(
-                    collection(db, "registrations"),
-                    where("eventId", "==", event.eventId),
-                    where("playerId", "==", partnerId)
-                );
-                const partnerRegSnapshot = await getDocs(partnerRegQuery);
-                if (!partnerRegSnapshot.empty) {
-                    partnerRegistrationId = partnerRegSnapshot.docs[0].id;
-                }
-            }
-
-            // Query waitlist players BEFORE transaction (if withdrawing a confirmed registration)
-            let waitlistPlayersToPromote: { id: string; playerId: string; waitlistPosition?: number;[key: string]: any }[] = [];
-
-            if (userRegistration.status === "CONFIRMED" && event) {
-                const waitlistQuery = query(
-                    collection(db, "registrations"),
-                    where("eventId", "==", event.eventId),
-                    where("status", "==", "WAITLIST")
-                );
-                const waitlistSnapshot = await getDocs(waitlistQuery);
-
-                if (!waitlistSnapshot.empty) {
-                    // Sort by waitlistPosition to get FIFO order
-                    const allWaitlistPlayers = waitlistSnapshot.docs
-                        .map(doc => ({ id: doc.id, ...doc.data() } as { id: string; playerId: string; waitlistPosition?: number;[key: string]: any }))
-                        .sort((a, b) => (a.waitlistPosition || 0) - (b.waitlistPosition || 0));
-
-                    // Calculate how many slots will be available
-                    const currentConfirmed = registrations.filter(r => r.status === "CONFIRMED").length;
-                    const slotsAfterWithdrawal = (event.maxPlayers || 0) - (currentConfirmed - 1);
-                    const slotsToFill = Math.max(0, slotsAfterWithdrawal);
-
-                    // Promote as many waitlist players as there are available slots
-                    waitlistPlayersToPromote = allWaitlistPlayers.slice(0, Math.min(slotsToFill, allWaitlistPlayers.length));
-                }
-            }
-
-            // Import runTransaction and Timestamp
-            const { runTransaction, Timestamp } = await import("firebase/firestore");
-
-            await runTransaction(db, async (transaction) => {
-                if (!event) throw new Error("Event not found");
-
-                const eventRef = doc(db, "events", event.eventId);
-                const regRef = doc(db, "registrations", userRegistration.registrationId);
-
-                const eventDoc = await transaction.get(eventRef);
-                if (!eventDoc.exists()) throw new Error("Event not found");
-
-                const currentEventData = eventDoc.data();
-
-                // TEAM DISSOLUTION LOGIC: If user is part of a team
-                if (userTeam && partnerId) {
-                    // 1. Delete the team document
-                    const teamRef = doc(db, "teams", userTeam.teamId);
-                    transaction.delete(teamRef);
-
-                    // 2. Delete Withdrawer's Registration (as requested)
-                    transaction.delete(regRef);
-
-                    // 3. Update Partner (The Fix)
-                    if (partnerRegistrationId) {
-                        const partnerRegRef = doc(db, "registrations", partnerRegistrationId);
-                        transaction.update(partnerRegRef, {
-                            teamId: null,
-                            lookingForPartner: true,
-                            partnerStatus: "NONE",
-                            status: "CONFIRMED" // Keep as confirmed but looking for partner
-                        });
-
-                        // Create notification for partner
-                        const notificationRef = doc(collection(db, "notifications"));
-                        transaction.set(notificationRef, {
-                            userId: partnerId,
-                            type: "TEAM_DISSOLVED",
-                            message: `Your partner has withdrawn from ${event.eventName}. You've been moved to the "Looking for Partner" list.`,
-                            eventId: event.eventId,
-                            eventName: event.eventName,
-                            read: false,
-                            createdAt: Timestamp.now()
-                        });
-                    }
-
-                    // 4. Update Event: Decrement registrationsCount
-                    // One team dissolved = 1 slot freed (assuming 1 team = 1 count)
-                    // If the partner stays confirmed, they take up 1 spot as a player?
-                    // But for Team events, registrationsCount usually counts TEAMS.
-                    // If we have 1 team, count is 1.
-                    // If team dissolves, count becomes 0.
-                    // Partner is now "Looking for Partner", do they count as a registration?
-                    // Usually "Looking for Partner" players are NOT counted in registrationsCount until they form a team.
-                    // So yes, decrement by 1 is correct.
-
-                    let newRegistrationsCount = Math.max(0, (currentEventData.registrationsCount || 0) - 1);
-                    let newWaitlistCount = currentEventData.waitlistCount || 0;
-
-                    // Promote waitlist players if any exist
-                    if (waitlistPlayersToPromote.length > 0) {
-                        waitlistPlayersToPromote.forEach((waitlistPlayer) => {
-                            const waitlistRef = doc(db, "registrations", waitlistPlayer.id);
-
-                            // Promote to CONFIRMED
-                            transaction.update(waitlistRef, {
-                                status: "CONFIRMED",
-                                waitlistPosition: 0,
-                                promotedAt: Timestamp.now()
-                            });
-
-                            // Create notification for promoted player
-                            const notifRef = doc(collection(db, "notifications"));
-                            transaction.set(notifRef, {
-                                userId: waitlistPlayer.playerId,
-                                type: "WAITLIST_PROMOTED",
-                                message: `You've been promoted from the waitlist for ${event.eventName}!`,
-                                eventId: event.eventId,
-                                eventName: event.eventName,
-                                read: false,
-                                createdAt: Timestamp.now()
-                            });
-                        });
-
-                        // Adjust counts: -1 for withdrawal, +N for promotions
-                        newRegistrationsCount += waitlistPlayersToPromote.length;
-                        newWaitlistCount = Math.max(0, newWaitlistCount - waitlistPlayersToPromote.length);
-                    }
-
-                    transaction.update(eventRef, {
-                        registrationsCount: newRegistrationsCount,
-                        waitlistCount: newWaitlistCount
-                    });
-
-                } else {
-                    // Standard Individual Withdrawal
-                    transaction.update(regRef, {
-                        status: "CANCELLED",
-                        cancelledAt: Timestamp.now()
-                    });
-
-                    let newRegistrationsCount = Math.max(0, (currentEventData.registrationsCount || 0) - 1);
-                    let newWaitlistCount = currentEventData.waitlistCount || 0;
-
-                    if (userRegistration.status === "CONFIRMED") {
-                        // Promote waitlist players if any exist
-                        if (waitlistPlayersToPromote.length > 0) {
-                            waitlistPlayersToPromote.forEach((waitlistPlayer) => {
-                                const waitlistRef = doc(db, "registrations", waitlistPlayer.id);
-                                transaction.update(waitlistRef, {
-                                    status: "CONFIRMED",
-                                    waitlistPosition: 0,
-                                    promotedAt: Timestamp.now()
-                                });
-
-                                const notifRef = doc(collection(db, "notifications"));
-                                transaction.set(notifRef, {
-                                    userId: waitlistPlayer.playerId,
-                                    type: "WAITLIST_PROMOTED",
-                                    message: `You've been promoted from the waitlist for ${event.eventName}!`,
-                                    eventId: event.eventId,
-                                    eventName: event.eventName,
-                                    read: false,
-                                    createdAt: Timestamp.now()
-                                });
-                            });
-                            newRegistrationsCount += waitlistPlayersToPromote.length;
-                            newWaitlistCount = Math.max(0, newWaitlistCount - waitlistPlayersToPromote.length);
-                        }
-                    } else if (userRegistration.status === "WAITLIST") {
-                        newWaitlistCount = Math.max(0, newWaitlistCount - 1);
-                        // If withdrawing from waitlist, registrationsCount doesn't change (it was already excluded)
-                        // But we calculated newRegistrationsCount as -1 above, so we need to reset it or handle it differently.
-                        // Actually, for WAITLIST withdrawal, we shouldn't decrement registrationsCount.
-                        newRegistrationsCount = currentEventData.registrationsCount || 0;
-                    }
-
-                    transaction.update(eventRef, {
-                        registrationsCount: newRegistrationsCount,
-                        waitlistCount: newWaitlistCount
-                    });
-                }
+            await withdraw(user, event!, userRegistration as Registration, teamId, () => {
+                showToast("Successfully withdrawn from event", "success");
+                // Optional: refresh logic if needed, though real-time listeners usually handle it
+                window.location.reload();
             });
 
-            showToast("Successfully withdrawn from event", "success");
-            window.location.reload();
-
-        } catch (error) {
-            console.error("Error withdrawing:", error);
+        } catch (error: unknown) {
+            console.error(error);
             showToast("Failed to withdraw", "error");
         }
     };
-
     if (loading) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
@@ -629,97 +445,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
             </div>
 
             {/* Sticky Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
-                <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-gray-400 hover:text-white hover:bg-gray-800/50"
-                            onClick={() => router.back()}
-                        >
-                            <ArrowLeft className="h-5 w-5" />
-                        </Button>
-
-                        {/* Logo */}
-                        <div
-                            className="flex items-center gap-2 cursor-pointer"
-                            onClick={() => router.push("/dashboard")}
-                        >
-                            <Image
-                                src="/logo.svg"
-                                alt="EWP"
-                                width={32}
-                                height={32}
-                                className="w-8 h-8"
-                                style={{ width: 'auto' }}
-                            />
-                            <span className="font-bold text-xl tracking-tighter text-white">EveryWherePadel</span>
-                        </div>
-                    </div>
-
-                    {/* User Menu */}
-                    <div className="relative">
-                        {user ? (
-                            <div className="flex items-center gap-4">
-                                <button className="text-gray-400 hover:text-white transition-colors">
-                                    <span className="sr-only">Notifications</span>
-                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                    </svg>
-                                </button>
-                                <div className="relative">
-                                    <Avatar
-                                        className="h-8 w-8 cursor-pointer border-2 border-transparent hover:border-orange-500 transition-all"
-                                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                                    >
-                                        <AvatarImage src={userProfiles[user.uid]?.photoURL || userProfiles[user.uid]?.photoUrl || user.photoURL || undefined} />
-                                        <AvatarFallback className="bg-orange-500 text-white">
-                                            {(userProfiles[user.uid]?.displayName || userProfiles[user.uid]?.fullName || user.displayName || "U").charAt(0)}
-                                        </AvatarFallback>
-                                    </Avatar>
-
-                                    {/* Dropdown Menu */}
-                                    {isUserMenuOpen && (
-                                        <>
-                                            <div
-                                                className="fixed inset-0 z-40"
-                                                onClick={() => setIsUserMenuOpen(false)}
-                                            />
-                                            <div className="absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                                                <div className="p-4 border-b border-gray-800">
-                                                    <p className="font-medium text-white truncate">{user.displayName}</p>
-                                                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                                                </div>
-                                                <div className="p-1">
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
-                                                        <User className="h-4 w-4" /> Profile
-                                                    </button>
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
-                                                        <Settings className="h-4 w-4" /> Settings
-                                                    </button>
-                                                </div>
-                                                <div className="p-1 border-t border-gray-800">
-                                                    <button
-                                                        onClick={handleSignOut}
-                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                                    >
-                                                        <LogOut className="h-4 w-4" /> Sign Out
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <Button size="sm" onClick={() => router.push("/auth/signin")}>
-                                Sign In
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </header>
+            <Header user={user} showBack={true} onBack={() => router.back()} />
 
             {/* Main Content */}
             <div className="container mx-auto px-4 pt-24 relative z-10">
@@ -949,7 +675,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     currentUser={user}
                                     teams={teamsWithPlayers}
                                     loading={false}
-                                    onManageInvite={handleManageInvite} // <--- Pass it here
+                                    onManageInvite={handleManageInvite}
                                 />
                             </TabsContent>
 
@@ -1012,22 +738,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
             </div> {/* End of Container */}
 
             {/* Sticky Bottom Nav */}
-            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/90 backdrop-blur-md border-t border-gray-800 px-6 py-3">
-                <div className="max-w-md mx-auto flex items-center justify-between">
-                    <Link href="/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <Home className="w-6 h-6" />
-                        <span className="text-xs font-medium">Home</span>
-                    </Link>
-                    <Link href="/events" className="flex flex-col items-center gap-1 text-orange-500">
-                        <Calendar className="w-6 h-6" />
-                        <span className="text-xs font-medium">Events</span>
-                    </Link>
-                    <Link href="/community" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <Users className="w-6 h-6" />
-                        <span className="text-xs font-medium">Community</span>
-                    </Link>
-                </div>
-            </nav>
+            <BottomNav />
 
             {/* Dialogs */}
             {event && (

@@ -31,18 +31,18 @@ export function SinglePlayersList({ event, currentUser, userRegistration, player
     const { showToast } = useToast();
     const { sendInvite, loading: inviteLoading } = useTeamInvite();
 
-    cconst handleInvite = async (player: SinglePlayer) => {
+    const handleInvite = async (player: SinglePlayer) => {
         if (!currentUser || !event) return;
 
         try {
             // Map the SinglePlayer data to the format the hook expects
             const inviteData = {
-                uid: player.playerId, 
+                uid: player.playerId,
                 playerId: player.playerId,
                 displayName: player.displayName,
                 photoURL: player.photoURL
             };
-            await sendInvite(currentUser, event, player, () => {
+            await sendInvite(currentUser, event, inviteData, () => {
                 showToast(`Invitation sent to ${player.displayName}`, "success");
             });
         } catch (error) {

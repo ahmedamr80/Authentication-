@@ -66,7 +66,7 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
     const progressPercentage = Math.min(100, (filledSlots / totalSlots) * 100);
     const remainingSlots = Math.max(0, totalSlots - filledSlots);
 
-    const isRegistered = userRegistrationStatus === "CONFIRMED" || userRegistrationStatus === "WAITLIST" || userRegistrationStatus === "PENDING" || userRegistrationStatus === "CANCELLED";
+
     const isPast = dynamicStatus === "Past" || dynamicStatus === "Cancelled";
 
     return (
@@ -184,19 +184,37 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
                             View Details
                         </Button>
                     </Link>
-                ) : isRegistered ? (
-                    <Link href={`/events/${event.eventId}`} className="w-full group/btn">
-                        <Button className="w-full bg-green-600/20 text-green-500 border border-green-600/50 hover:bg-green-600 hover:text-white transition-all">
-                            <span className="group-hover/btn:hidden">Already Registered</span>
-                            <span className="hidden group-hover/btn:inline">View Details</span>
-                        </Button>
-                    </Link>
                 ) : (
-                    <Link href={`/events/${event.eventId}`} className="w-full">
-                        <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold transition-colors">
-                            Register Now
-                        </Button>
-                    </Link>
+                    <>
+                        {userRegistrationStatus === "WAITLIST" ? (
+                            <Link href={`/events/${event.eventId}`} className="w-full group/btn">
+                                <Button className="w-full bg-yellow-600/20 text-yellow-500 border border-yellow-600/50 hover:bg-yellow-600 hover:text-white transition-all">
+                                    <span className="group-hover/btn:hidden">On Waitlist</span>
+                                    <span className="hidden group-hover/btn:inline">View Details</span>
+                                </Button>
+                            </Link>
+                        ) : userRegistrationStatus === "PENDING" ? (
+                            <Link href={`/events/${event.eventId}`} className="w-full group/btn">
+                                <Button className="w-full bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-600 hover:text-white transition-all">
+                                    <span className="group-hover/btn:hidden">Registration Pending</span>
+                                    <span className="hidden group-hover/btn:inline">View Details</span>
+                                </Button>
+                            </Link>
+                        ) : userRegistrationStatus === "CONFIRMED" ? (
+                            <Link href={`/events/${event.eventId}`} className="w-full group/btn">
+                                <Button className="w-full bg-green-600/20 text-green-500 border border-green-600/50 hover:bg-green-600 hover:text-white transition-all">
+                                    <span className="group-hover/btn:hidden">Already Registered</span>
+                                    <span className="hidden group-hover/btn:inline">View Details</span>
+                                </Button>
+                            </Link>
+                        ) : (
+                            <Link href={`/events/${event.eventId}`} className="w-full">
+                                <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold transition-colors">
+                                    Register Now
+                                </Button>
+                            </Link>
+                        )}
+                    </>
                 )}
             </CardFooter>
         </Card>
