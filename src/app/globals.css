@@ -1,14 +1,52 @@
 @import "tailwindcss";
 
-:root {
-  --background: #030712;
-  --foreground: #ffffff;
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    /* Slate 950 */
+    --foreground: 210 40% 98%;
+    /* Slate 50 */
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    /* Fixes the white dropdown background */
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 24.6 95% 53.1%;
+    /* Orange 500 */
+    --primary-foreground: 26 83.3% 14.1%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 24.6 95% 53.1%;
+
+    --radius: 0.75rem;
+  }
 }
 
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+    border-style: solid;
+    /* Ensure defaults */
+  }
 
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
 }

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Search, UserPlus, User as UserIcon } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, Timestamp, doc, runTransaction, limit } from "firebase/firestore";
+import { collection, query, where, getDocs, Timestamp, doc, runTransaction, limit, setDoc, updateDoc, DocumentData } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
 import { useTeamInvite } from "@/hooks/useTeamInvite";
@@ -101,15 +101,90 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
         }
     };
 
+
+    // Helper: Sync Auth Data to Firestore
+    const ensureProfileSynced = async () => {
+        if (!user) return null;
+
+        try {
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("uid", "==", user.uid));
+            const querySnapshot = await getDocs(q);
+
+            let profileRef;
+            let userProfile: DocumentData = {};
+
+            if (!querySnapshot.empty) {
+                const docSnap = querySnapshot.docs[0];
+                userProfile = docSnap.data();
+                profileRef = docSnap.ref;
+            } else {
+                profileRef = doc(db, "users", user.uid);
+                userProfile = {
+                    uid: user.uid,
+                    email: user.email,
+                    createdAt: Timestamp.now()
+                };
+            }
+
+            const updates: Record<string, string | number | boolean | Timestamp | null | undefined> = {};
+            let needsUpdate = false;
+
+            if (!userProfile.displayName && !userProfile.fullName && user.displayName) {
+                updates.displayName = user.displayName;
+                updates.fullName = user.displayName;
+                userProfile.displayName = user.displayName;
+                needsUpdate = true;
+            }
+
+            if (!userProfile.photoURL && !userProfile.photoUrl && user.photoURL) {
+                updates.photoURL = user.photoURL;
+                userProfile.photoURL = user.photoURL;
+                needsUpdate = true;
+            }
+
+            if (needsUpdate || querySnapshot.empty) {
+                if (querySnapshot.empty) {
+                    await setDoc(profileRef, { ...userProfile, ...updates });
+                } else {
+                    await updateDoc(profileRef, updates);
+                }
+            }
+            return userProfile;
+        } catch (e) {
+            console.error("Profile Sync Error:", e);
+            // Fallback to auth user if sync fails, but ideally shouldn't happen
+            return {
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+                uid: user.uid
+            };
+        }
+    };
+
     const handleInvitePartner = async (partner: UserProfile) => {
         if (!user) return;
 
+        // 1. Sync Sender Profile before sending invite
+        // Capture the synced profile to ensure we send the latest name/photo
+        const syncedProfile = await ensureProfileSynced();
+
         try {
-            await sendInvite(user, event, partner, () => {
-                showToast(`Invite sent to ${partner.displayName}!`, "success");
-                if (setOpen) setOpen(false);
-                if (onSuccess) onSuccess();
-            });
+            await sendInvite(
+                user,
+                event,
+                partner,
+                () => {
+                    showToast(`Invite sent to ${partner.displayName}!`, "success");
+                    if (setOpen) setOpen(false);
+                    if (onSuccess) onSuccess();
+                },
+                // Pass the synced profile as override
+                syncedProfile ? {
+                    displayName: syncedProfile.displayName || syncedProfile.fullName,
+                    photoURL: syncedProfile.photoURL || syncedProfile.photoUrl
+                } : undefined
+            );
         } catch (error) {
             showToast(error instanceof Error ? error.message : "Failed to send invite", "error");
         }
@@ -119,6 +194,9 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
         if (!user) return;
         setLoading(true);
         try {
+            // 1. Sync Profile First
+            const profile = await ensureProfileSynced();
+
             await runTransaction(db, async (transaction) => {
                 // 1. Check Event Slots
                 const eventRef = doc(db, "events", event.eventId);
@@ -136,8 +214,9 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     status: "CONFIRMED", // Confirmed as a single player
                     partnerStatus: "NONE",
                     lookingForPartner: true,
-                    fullNameP1: user.displayName || "Unknown Player",
-                    playerPhotoURL: user.photoURL || "",
+                    // USE SYNCED DATA
+                    fullNameP1: profile?.displayName || profile?.fullName || user.displayName || "Unknown Player",
+                    playerPhotoURL: profile?.photoURL || profile?.photoUrl || user.photoURL || "",
                     _debugSource: "TeamRegisterDialog.tsx - handleRegisterSingle"
                 });
             });
@@ -230,3 +309,5 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
         </Dialog>
     );
 }
+
+// End of file

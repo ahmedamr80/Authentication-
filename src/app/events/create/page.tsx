@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { collection, doc, runTransaction, Timestamp, query, orderBy, getDocs } from "firebase/firestore";
 import { auth, db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Loader2, Save, ArrowLeft, Camera, MapPin, Calendar, Home, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { Loader2, Save, Camera, MapPin, Calendar } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -15,9 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
-import Link from "next/link";
+import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 interface CreateEventFormData {
     eventName: string;
@@ -38,10 +38,9 @@ interface CreateEventFormData {
 export default function CreateEventPage() {
     const [saving, setSaving] = useState(false);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
-    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const { showToast } = useToast();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isAdmin, loading: authLoading } = useAuth();
     // 1. Calculate Date: Today + 7 Days
     const defaultDate = new Date();
     defaultDate.setDate(defaultDate.getDate() + 7);
@@ -71,7 +70,16 @@ export default function CreateEventPage() {
 
     const [clubs, setClubs] = useState<{ id: string; name: string; location?: { coordinates?: { lat: number; lng: number } } }[]>([]);
     const [loadingClubs, setLoadingClubs] = useState(true);
-
+    // Redirect non-admins
+    useEffect(() => {
+        // Only run this logic once auth is finished loading
+        if (!authLoading) {
+            if (!isAdmin) {
+                showToast("Access Denied: You do not have permission to create events.", "error");
+                router.push("/events"); // Send them back to safety
+            }
+        }
+    }, [isAdmin, authLoading, router, showToast]);
     useEffect(() => {
         const fetchClubs = async () => {
             try {
@@ -213,14 +221,7 @@ export default function CreateEventPage() {
         }
     };
 
-    const handleSignOut = async () => {
-        try {
-            await auth.signOut();
-            router.push("/auth/signin");
-        } catch (error) {
-            console.error("Error signing out:", error);
-        }
-    };
+
 
     const getDefaultDateTime = () => {
         const now = new Date();
@@ -235,98 +236,20 @@ export default function CreateEventPage() {
             setFormData(prev => ({ ...prev, dateTime: getDefaultDateTime() }));
         }
     }, [formData.dateTime]);
-
+    // Block rendering until we know their role
+    if (authLoading || !isAdmin) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+            </div>
+        );
+    }
     return (
         <div className="min-h-screen bg-black text-white pb-24 relative">
             {/* Background Gradient */}
             <div className="fixed inset-0 z-0 bg-linear-to-b from-gray-900 via-black to-black" />
 
-            {/* Sticky Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
-                <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-gray-400 hover:text-white hover:bg-gray-800/50"
-                            onClick={() => router.back()}
-                        >
-                            <ArrowLeft className="h-5 w-5" />
-                        </Button>
-
-                        {/* Logo */}
-                        <div
-                            className="flex items-center gap-2 cursor-pointer"
-                            onClick={() => router.push("/dashboard")}
-                        >
-                            <Image
-                                src="/logo.svg"
-                                alt="EWP"
-                                width={32}
-                                height={32}
-                                className="w-8 h-8"
-                                style={{ width: 'auto' }}
-                            />
-                            <span className="font-bold text-xl tracking-tighter text-white">EveryWherePadel</span>
-                        </div>
-                    </div>
-
-                    {/* User Menu */}
-                    <div className="relative">
-                        {user ? (
-                            <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <Avatar
-                                        className="h-8 w-8 cursor-pointer border-2 border-transparent hover:border-orange-500 transition-all"
-                                        onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                                    >
-                                        <AvatarImage src={user.photoURL || undefined} />
-                                        <AvatarFallback className="bg-orange-500 text-white">
-                                            {user.displayName?.charAt(0) || "U"}
-                                        </AvatarFallback>
-                                    </Avatar>
-
-                                    {/* Dropdown Menu */}
-                                    {isUserMenuOpen && (
-                                        <>
-                                            <div
-                                                className="fixed inset-0 z-40"
-                                                onClick={() => setIsUserMenuOpen(false)}
-                                            />
-                                            <div className="absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                                                <div className="p-4 border-b border-gray-800">
-                                                    <p className="font-medium text-white truncate">{user.displayName}</p>
-                                                    <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                                                </div>
-                                                <div className="p-1">
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
-                                                        <UserIcon className="h-4 w-4" /> Profile
-                                                    </button>
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
-                                                        <Settings className="h-4 w-4" /> Settings
-                                                    </button>
-                                                </div>
-                                                <div className="p-1 border-t border-gray-800">
-                                                    <button
-                                                        onClick={handleSignOut}
-                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                                    >
-                                                        <LogOut className="h-4 w-4" /> Sign Out
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <Button size="sm" onClick={() => router.push("/auth/signin")}>
-                                Sign In
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            </header>
+            <Header user={user} showBack={true} onBack={() => router.back()} />
 
             {/* Main Content */}
             <div className="container mx-auto px-4 pt-24 relative z-10 max-w-4xl">
@@ -618,23 +541,7 @@ export default function CreateEventPage() {
                 </div>
             </div>
 
-            {/* Sticky Bottom Nav */}
-            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-gray-950/90 backdrop-blur-md border-t border-gray-800 px-6 py-3">
-                <div className="max-w-md mx-auto flex items-center justify-between">
-                    <Link href="/dashboard" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <Home className="w-6 h-6" />
-                        <span className="text-xs font-medium">Home</span>
-                    </Link>
-                    <Link href="/events" className="flex flex-col items-center gap-1 text-orange-500">
-                        <Calendar className="w-6 h-6" />
-                        <span className="text-xs font-medium">Events</span>
-                    </Link>
-                    <Link href="/community" className="flex flex-col items-center gap-1 text-gray-400 hover:text-orange-500 transition-colors">
-                        <UserIcon className="w-6 h-6" />
-                        <span className="text-xs font-medium">Community</span>
-                    </Link>
-                </div>
-            </nav>
+            <BottomNav />
         </div>
     );
 }

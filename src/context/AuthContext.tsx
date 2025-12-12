@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 interface AuthContextType {
     user: User | null;
@@ -22,31 +23,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            setUser(user);
-            if (user) {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            setUser(currentUser);
+
+            if (currentUser) {
                 try {
-                    const tokenResult = await user.getIdTokenResult();
+                    // 1. FAST CHECK: Custom Claims
+                    const tokenResult = await currentUser.getIdTokenResult();
                     let adminStatus = !!tokenResult.claims.admin;
 
-                    // Fallback: Check Firestore if custom claim is not present
+                    // 2. FALLBACK CHECK: Firestore Document
+                    // Useful if you manually set "role: admin" in the database console
                     if (!adminStatus) {
-                        const { doc, getDoc, getFirestore } = await import("firebase/firestore");
-                        const db = getFirestore();
-                        const userDocRef = doc(db, "users", user.uid);
+                        const userDocRef = doc(db, "users", currentUser.uid);
                         const userDocSnap = await getDoc(userDocRef);
-                        if (userDocSnap.exists() && userDocSnap.data().role === "admin") {
+
+                        // Check if document exists and role is explicitly 'admin'
+                        if (userDocSnap.exists() && userDocSnap.data()?.role === "admin") {
                             adminStatus = true;
                         }
                     }
+
                     setIsAdmin(adminStatus);
                 } catch (e) {
                     console.error("Error checking admin status", e);
                     setIsAdmin(false);
                 }
             } else {
+                // No user logged in
                 setIsAdmin(false);
             }
+
             setLoading(false);
         });
 

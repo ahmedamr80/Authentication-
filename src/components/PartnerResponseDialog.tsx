@@ -1,15 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
-import { db } from "@/lib/firebase";
-import { doc, runTransaction, Timestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { EventData } from "./EventCard";
-import { useTeamDissolve } from "@/hooks/useTeamDissolve";
 import { useTeamAccept } from "@/hooks/useTeamAccept";
+import { useTeamDissolve } from "@/hooks/useTeamDissolve";
+import { User } from "firebase/auth";
 
 interface PartnerResponseDialogProps {
     open: boolean;
@@ -30,16 +28,16 @@ export function PartnerResponseDialog({
     currentUser,
     onSuccess
 }: PartnerResponseDialogProps) {
-    const { showToast } = useToast();
-    const { dissolveTeam, loading: dissolveLoading } = useTeamDissolve();
-
     const { acceptInvite, loading: acceptLoading } = useTeamAccept();
+    const { dissolveTeam, loading: declineLoading } = useTeamDissolve();
+    const { showToast } = useToast();
+    const loading = acceptLoading || declineLoading;
 
     const handleAccept = async () => {
         if (!currentUser) return;
 
         await acceptInvite(
-            currentUser as any, // Type cast to satisfy hook requirement
+            currentUser as User, // Explicit cast to User type instead of 'any'
             notification.teamId,
             notification.notificationId,
             () => {
@@ -53,8 +51,15 @@ export function PartnerResponseDialog({
     const handleDecline = async () => {
         if (!currentUser) return;
 
+        // Dissolve logic requires currentUser to include displayName/photo for notifications
+        const dissolveUser = {
+            uid: currentUser.uid,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL
+        };
+
         await dissolveTeam(
-            currentUser,
+            dissolveUser,
             notification.teamId,
             event.eventId,
             "DECLINE",
@@ -89,20 +94,11 @@ export function PartnerResponseDialog({
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
-                    <Button
-                        variant="outline"
-                        onClick={handleDecline}
-                        disabled={acceptLoading || dissolveLoading} // Disable if EITHER is running
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                        {dissolveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Decline"}
+                    <Button variant="outline" onClick={handleDecline} disabled={loading} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Decline"}
                     </Button>
-                    <Button
-                        onClick={handleAccept}
-                        disabled={acceptLoading || dissolveLoading} // Disable if EITHER is running
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                        {acceptLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept & Join"}
+                    <Button onClick={handleAccept} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept & Join"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

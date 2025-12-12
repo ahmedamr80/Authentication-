@@ -7,7 +7,7 @@ interface EventSectionProps {
     events: EventData[];
     emptyMessage?: string;
     variant?: "active" | "upcoming" | "past";
-    userRegistrations?: Record<string, "CONFIRMED" | "WAITLIST">;
+    userRegistrations?: Record<string, "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED">;
 }
 
 export function EventSection({ title, events, userRegistrations }: EventSectionProps) {

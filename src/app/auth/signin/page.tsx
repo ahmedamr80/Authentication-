@@ -13,7 +13,8 @@ import {
     UserCredential,
     setPersistence,
     browserLocalPersistence,
-    onAuthStateChanged
+    onAuthStateChanged,
+    sendPasswordResetEmail
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp, runTransaction, collection, query, where, getDocs, writeBatch, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -23,6 +24,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/context/ToastContext";
 import Image from "next/image";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter
+} from "@/components/ui/dialog";
 
 // ------------------------------------------------------------------
 // 📧 EMAIL VERIFICATION SWITCH 📧
@@ -117,6 +126,11 @@ function SignInContent() {
     // Account Linking State
     const [showLinkAccountModal, setShowLinkAccountModal] = useState(false);
     const [existingEmail, setExistingEmail] = useState("");
+
+    // Forgot Password State
+    const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+    const [resetEmail, setResetEmail] = useState("");
+    const [isResetLoading, setIsResetLoading] = useState(false);
 
     const form = useForm<AuthFormValues>({
         resolver: zodResolver(authSchema),
@@ -402,6 +416,36 @@ function SignInContent() {
         });
     };
 
+    const handleForgotPassword = async () => {
+        if (!resetEmail || !/\S+@\S+\.\S+/.test(resetEmail)) {
+            showToast("Please enter a valid email address.", "error");
+            return;
+        }
+
+        setIsResetLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, resetEmail);
+            showToast("Password reset email sent! Check your inbox.", "success");
+            setForgotPasswordOpen(false);
+            setResetEmail("");
+        } catch (error: unknown) {
+            console.error("Reset Password Error:", error);
+            const err = error as { code?: string; message?: string };
+            if (err.code === "auth/user-not-found") {
+                // For security, we might want to show success even if user not found, 
+                // but for UX in this app context, helpful errors are okay.
+                // However, standard practice is confusing logic. 
+                // Let's stick to helpful for now as per user persona requested "pro developer" usually balances UX/Security.
+                // Actually, "user-not-found" often happens. 
+                showToast("No account found with this email.", "error");
+            } else {
+                showToast("Failed to send reset email. Try again.", "error");
+            }
+        } finally {
+            setIsResetLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4">
             <div className="w-full max-w-md space-y-8 bg-gray-900 p-8 rounded-xl shadow-lg border border-gray-800">
@@ -578,9 +622,16 @@ function SignInContent() {
                                     Remember me
                                 </label>
                             </div>
-                            <a href="#" className="text-sm font-medium text-orange-500 hover:text-orange-400">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setResetEmail(form.getValues("email") || ""); // Pre-fill if typed
+                                    setForgotPasswordOpen(true);
+                                }}
+                                className="text-sm font-medium text-orange-500 hover:text-orange-400"
+                            >
                                 Forgot password?
-                            </a>
+                            </button>
                         </div>
                     )}
 
@@ -628,6 +679,47 @@ function SignInContent() {
                     </div>
                 </div>
             )}
+
+            {/* Forgot Password Dialog */}
+            <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Reset Password</DialogTitle>
+                        <DialogDescription className="text-gray-400">
+                            Enter your email address to receive a password reset link.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <label htmlFor="reset-email" className="text-sm font-medium text-gray-300">Email</label>
+                            <Input
+                                id="reset-email"
+                                type="email"
+                                placeholder="name@example.com"
+                                value={resetEmail}
+                                onChange={(e) => setResetEmail(e.target.value)}
+                                className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setForgotPasswordOpen(false)}
+                            className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleForgotPassword}
+                            disabled={isResetLoading}
+                            className="bg-orange-500 hover:bg-orange-600 text-white"
+                        >
+                            {isResetLoading ? "Sending..." : "Send Reset Link"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

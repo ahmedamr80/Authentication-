@@ -42,7 +42,7 @@ export const useTeamDissolve = () => {
                 regsRef,
                 where("eventId", "==", eventId),
                 where("status", "==", "WAITLIST"),
-                where("isPrimary", "==", true), // Only look for Captains
+                where("isPrimary", "==", true),
                 orderBy("waitlistPosition", "asc"),
                 limit(1)
             );
@@ -81,56 +81,81 @@ export const useTeamDissolve = () => {
                 // If P1 is current user (leaving), Survivor is P2.
                 // If P2 is current user (leaving), Survivor is P1.
                 let survivorId = isCurrentP1 ? regData.player2Id : regData.playerId;
-                let survivorName = isCurrentP1 ? regData.fullNameP2 : regData.fullNameP1;
-                // Preserve the photo of the person STAYING
-                let survivorPhoto = isCurrentP1 ? (regData.player2PhotoURL || "") : regData.playerPhotoURL;
 
                 // Edge Case: If P1 leaves and there is NO P2, slot is abandoned (No survivor).
                 if (actionType === "LEAVE" && !regData.player2Id && isCurrentP1) {
                     survivorId = null;
                 }
 
-                // 4. SLOT MANAGEMENT
+                // 4. FETCH SURVIVOR PROFILE (SOURCE OF TRUTH)
+                let survivorName = "Unknown Player";
+                let survivorPhoto = null;
+
+                if (survivorId) {
+                    // Look up the survivor in the 'users' collection to get the real name
+                    const userRef = doc(db, "users", survivorId);
+                    const userDoc = await transaction.get(userRef);
+
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        // Priority: fullName -> displayName -> Registration Fallback -> "Unknown"
+                        survivorName = userData.fullName || userData.displayName ||
+                            (isCurrentP1 ? regData.fullNameP2 : regData.fullNameP1) ||
+                            "Unknown Player";
+                        survivorPhoto = userData.photoURL ||
+                            (isCurrentP1 ? regData.player2PhotoURL : regData.playerPhotoURL) ||
+                            null;
+                    } else {
+                        // Fallback if user profile is missing (shouldn't happen, but safe)
+                        survivorName = isCurrentP1 ? (regData.fullNameP2 || "Unknown Player") : (regData.fullNameP1 || "Unknown Player");
+                        survivorPhoto = isCurrentP1 ? regData.player2PhotoURL : regData.playerPhotoURL;
+                    }
+                }
+
+                // 5. SLOT MANAGEMENT
                 const wasConfirmed = regData.status === "CONFIRMED";
                 let slotOpened = false;
 
-                if (!survivorId && wasConfirmed) {
-                    slotOpened = true; // Abandoned confirmed slot
+                // If the team was confirmed, the slot ALWAYS opens up, 
+                // because a "Survivor" (Single Player) does not count as a "Team".
+                if (wasConfirmed) {
+                    slotOpened = true;
                 }
 
-                // 5. UPDATE OLD REGISTRATION (Dissolve/Handover)
+                // 6. UPDATE OLD REGISTRATION (Dissolve/Handover)
                 if (survivorId) {
                     // Update the doc to belong ONLY to the survivor
                     transaction.update(regDocRef, {
                         teamId: null, // Break link to team
                         lookingForPartner: true, // Survivor needs a new partner
-                        partnerStatus: actionType === "DECLINE" ? "DENIED" : "NONE",
+                        partnerStatus: "NONE", // Reset partner status
 
                         // SET THE SURVIVOR AS THE PRIMARY PLAYER
-                        // If P2 Left: survivorId is P1. P1 stays P1.
-                        // If P1 Left: survivorId is P2. P2 moves to P1 slot.
                         playerId: survivorId,
-                        playerDisplayName: survivorName,
-                        fullNameP1: survivorName,
+                        fullNameP1: survivorName, // <--- Now using the fetched name
                         playerPhotoURL: survivorPhoto,
                         isPrimary: true,
+
+                        // REMOVE LEGACY FIELDS
+                        playerDisplayName: survivorName, // Sync just in case
 
                         // WIPE THE SECONDARY SLOT
                         player2Id: null,
                         fullNameP2: null,
                         player2Confirmed: false,
                         player2PhotoURL: null,
+                        invite: null,
 
-                        // Status stays same (CONFIRMED or WAITLIST)
+                        // Status stays same (CONFIRMED) but now as Single Player
                         status: regData.status,
                         _debugSource: "useTeamDissolve Hook"
                     });
                 } else {
-                    // Delete dead registration
+                    // Delete dead registration if no one is left
                     transaction.delete(regDocRef);
                 }
 
-                // 6. WAITLIST PROMOTION (If a CONFIRMED slot opened)
+                // 7. EVENT COUNT MANAGEMENT & WAITLIST PROMOTION
                 if (slotOpened) {
                     if (candidateDoc) {
                         // A. Promote the Candidate Captain
@@ -139,17 +164,15 @@ export const useTeamDissolve = () => {
 
                         transaction.update(candidateRef, {
                             status: "CONFIRMED",
-                            waitlistPosition: null // Remove from queue
+                            waitlistPosition: null
                         });
 
-                        // B. Decrement Waitlist Count (moved one from Waitlist -> Active)
+                        // B. Decrement Waitlist Count
                         transaction.update(eventRef, {
                             waitlistCount: Math.max(0, (eventData.waitlistCount || 0) - 1)
                         });
 
-                        // C. NOTIFY THE PROMOTED TEAM (Fix: Notify BOTH players)
-
-                        // 1. Notify Captain
+                        // C. NOTIFY THE PROMOTED TEAM (Notify Captain)
                         const p1Notif = doc(collection(db, "notifications"));
                         transaction.set(p1Notif, {
                             notificationId: p1Notif.id,
@@ -162,7 +185,7 @@ export const useTeamDissolve = () => {
                             createdAt: Timestamp.now()
                         });
 
-                        // 2. Notify Partner (If exists)
+                        // Notify Partner (If exists)
                         if (candidateData.player2Id) {
                             const p2Notif = doc(collection(db, "notifications"));
                             transaction.set(p2Notif, {
@@ -178,28 +201,29 @@ export const useTeamDissolve = () => {
                         }
 
                     } else {
-                        // No one on waitlist? Just decrement confirmed counts.
+                        // No one on waitlist? Just decrement confirmed counts (Team Slot Freed)
                         transaction.update(eventRef, {
                             registrationsCount: Math.max(0, (eventData.registrationsCount || 0) - 1)
                         });
                     }
                 } else if (!survivorId && !wasConfirmed) {
-                    // An unconfirmed/waitlist team dissolved. Just decrement waitlist.
-                    transaction.update(eventRef, {
-                        waitlistCount: Math.max(0, (eventData.waitlistCount || 0) - 1)
-                    });
+                    // An unconfirmed team dissolved.
+                    if (regData.status === 'WAITLIST') {
+                        transaction.update(eventRef, {
+                            waitlistCount: Math.max(0, (eventData.waitlistCount || 0) - 1)
+                        });
+                    }
                 }
 
-                // 7. Cleanup
+                // 8. Cleanup
                 transaction.delete(teamRef);
                 if (notificationId) {
                     transaction.update(doc(db, "notifications", notificationId), { read: true });
                 }
 
-                // 8. Notify Survivor (The one who was left behind)
+                // 9. Notify Survivor
                 if (survivorId) {
                     const replyNotifRef = doc(collection(db, "notifications"));
-
                     const title = actionType === "DECLINE" ? "Invitation Declined" : "Partner Withdrew";
                     const msg = actionType === "DECLINE"
                         ? `${currentUser.displayName || "Partner"} declined your invite.`
@@ -220,9 +244,10 @@ export const useTeamDissolve = () => {
 
             if (onSuccess) onSuccess();
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Dissolve error:", err);
-            setError(err.message);
+            const errorMessage = err instanceof Error ? err.message : "Failed to dissolve team.";
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }

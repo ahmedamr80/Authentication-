@@ -35,19 +35,18 @@ export function SinglePlayersList({ event, currentUser, userRegistration, player
         if (!currentUser || !event) return;
 
         try {
-            // Fix: Map the SinglePlayer 'playerId' to 'uid' so the hook queries work correctly
+            // Map the SinglePlayer data to the format the hook expects
             const inviteData = {
                 uid: player.playerId,
                 playerId: player.playerId,
                 displayName: player.displayName,
                 photoURL: player.photoURL
             };
-
             await sendInvite(currentUser, event, inviteData, () => {
                 showToast(`Invitation sent to ${player.displayName}`, "success");
             });
         } catch (error) {
-            console.error("Error sending invite:", error);
+            // Error is logged in hook, show toast here
             showToast(error instanceof Error ? error.message : "Failed to send invitation", "error");
         }
     };
