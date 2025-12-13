@@ -1,8 +1,12 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { Calendar, Clock, MapPin, Users } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { Timestamp } from "firebase/firestore";
+import { Timestamp, getDoc, doc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import Link from "next/link";
 
 export interface EventData {
@@ -30,9 +34,9 @@ export interface EventData {
     registrationsCount?: number;
 }
 
-export const calculateEventStatus = (event: EventData): "Active" | "Upcoming" | "Past" | "Cancelled" => {
-    if (event.cancellationMessage) return "Cancelled";
 
+export const calculateEventStatus = (event: EventData): "Active" | "Upcoming" | "Past" | "Cancelled" => {
+    if (event.cancellationMessage || event.status === "Cancelled") return "Cancelled";
     const now = new Date();
     const eventDate = event.dateTime.toDate();
     const endDate = new Date(eventDate.getTime() + event.duration * 60000);
@@ -66,6 +70,28 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
     const progressPercentage = Math.min(100, (filledSlots / totalSlots) * 100);
     const remainingSlots = Math.max(0, totalSlots - filledSlots);
 
+    const [clubCoordinates, setClubCoordinates] = useState<{ lat: number, lng: number } | null>(null);
+
+    useEffect(() => {
+        if (event.clubId) {
+            const fetchClubData = async () => {
+                try {
+                    const clubDoc = await getDoc(doc(db, "clubs", event.clubId!));
+                    if (clubDoc.exists()) {
+                        const data = clubDoc.data();
+                        // Make sure the nested structure exists
+                        if (data.location?.coordinates) {
+                            console.log("Fetched Club Coordinates:", data.location.coordinates);
+                            setClubCoordinates(data.location.coordinates);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error fetching club coordinates:", error);
+                }
+            };
+            fetchClubData();
+        }
+    }, [event.clubId]);
 
     const isPast = dynamicStatus === "Past" || dynamicStatus === "Cancelled";
 
@@ -155,7 +181,10 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
                     <div className="flex items-center text-gray-400 col-span-2">
                         <MapPin className="w-4 h-4 mr-2 shrink-0 text-gray-500" />
                         <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationName)}`}
+                            href={clubCoordinates
+                                ? `https://www.google.com/maps/search/?api=1&query=${clubCoordinates.lat},${clubCoordinates.lng}`
+                                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.locationName)}`
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="truncate hover:text-orange-500 hover:underline transition-colors"

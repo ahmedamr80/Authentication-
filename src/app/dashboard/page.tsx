@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Calendar, Users, Image as ImageIcon, User, Building2, Bell } from "lucide-react";
+import { Calendar, Users, Image as ImageIcon, User, Building2, Bell, CalendarClock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -40,6 +40,14 @@ export default function DashboardPage() {
             color: "text-blue-400",
             bgColor: "bg-blue-500/10",
             description: "Browse and join padel events"
+        },
+        {
+            title: "My Schedule",
+            icon: CalendarClock,
+            path: "/player/my-schedule",
+            color: "text-teal-400",
+            bgColor: "bg-teal-500/10",
+            description: "View your upcoming games and history"
         },
         {
             title: "Notifications",

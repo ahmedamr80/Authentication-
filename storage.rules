@@ -1,15 +1,39 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Explicitly allow public read for events
+
+    // --- HELPER FUNCTIONS ---
+    
+    // 1. Check for Admin (using the Custom Claim we relied on earlier)
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // 2. Validate Image Type (Must be an image)
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // 3. Validate Size (Max 5MB)
+    function isSmallEnough() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // --- PUBLIC ASSETS (Events & Clubs) ---
+    
+    // Events: Public Read, Admin Write
     match /events/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/*');
+      allow write: if isAdmin() && isImage() && isSmallEnough();
+    }
+
+    // Clubs: Public Read, Admin Write
+    // (Based on your error logs, your app stores images here)
+    match /club-pictures/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin() && isImage() && isSmallEnough();
     }
     
-    // Default rule for everything else (authenticated only)
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null;
-    }
+    // ... Next Chunks ...
   }
 }

@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { User } from "firebase/auth";
+import { fetchPlayerName } from "@/lib/utils"; // <--- NEW: Import the helper
 
 // Define generic types for flexibility
 export interface InviteEventData {
@@ -21,11 +22,11 @@ export interface InviteEventData {
 }
 
 export interface InvitePartnerData {
-    uid?: string;
-    playerId?: string;
-    displayName: string;
-    photoURL?: string;
-    email?: string;
+    uid: string;           // Required: The unique ID of the user (from Firebase Auth)
+    playerId?: string;     // Optional: An alternative ID, perhaps from a specific player profile
+    displayName: string;   // Required: The display name of the partner
+    photoURL?: string;     // Optional: The URL to the partner's profile photo
+    email?: string;        // Optional: The email address of the partner
 }
 
 export const useTeamInvite = () => {
@@ -48,8 +49,15 @@ export const useTeamInvite = () => {
         setLoading(true);
         setError(null);
 
-        // Determine sender details (prefer override, then auth user, then fallback)
-        const senderName = senderProfileOverride?.displayName || currentUser.displayName || "Unknown Player";
+        // <--- NEW: Fetch the real sender name using the helper
+        // We await this so we have the correct name before starting the logic.
+        // We pass 'senderProfileOverride?.displayName' as the first fallback, 
+        // and 'currentUser.displayName' as the second fallback.
+        const senderName = await fetchPlayerName(
+            currentUser.uid,
+            senderProfileOverride?.displayName || currentUser.displayName
+        );
+        // <--- END NEW
 
         try {
             // ---------------------------------------------------------
@@ -212,7 +220,7 @@ export const useTeamInvite = () => {
                 if (inviteMode === "FILL_P2") {
                     p1Id = currentUser.uid;
                     p2Id = partner.uid;
-                    p1Name = senderName; // I am P1, I am sending invite
+                    p1Name = senderName; // <--- Uses fetched name
                     p2Name = partner.displayName;
                     p1Confirmed = true;  // I am confirmed (Inviter)
                     p2Confirmed = false; // Partner needs to accept (Target)
@@ -222,24 +230,24 @@ export const useTeamInvite = () => {
                     p1Id = partner.uid;
                     p2Id = currentUser.uid;
                     p1Name = partner.displayName;
-                    p2Name = senderName;
-                    p1Confirmed = false; // <--- FIX: P1 must accept the request (Target)
+                    p2Name = senderName; // <--- Uses fetched name
+                    p1Confirmed = false; // P1 must accept the request (Target)
                     p2Confirmed = true;  // You initiated it (Initiator)
                     inviteType = "MERGE_P1";
                     targetUserId = p1Id; // Notification goes to P1
                 } else if (inviteMode === "MERGE_P2") {
                     p1Id = currentUser.uid;
                     p2Id = partner.uid;
-                    p1Name = senderName;
+                    p1Name = senderName; // <--- Uses fetched name
                     p2Name = partner.displayName;
                     p1Confirmed = true;  // You initiated it (Initiator)
-                    p2Confirmed = false; // <--- FIX: P2 must accept (Target)
+                    p2Confirmed = false; // P2 must accept (Target)
                     inviteType = "MERGE_P2";
                     targetUserId = p2Id; // Notification goes to P2 
                 } else {
                     p1Id = currentUser.uid;
                     p2Id = partner.uid;
-                    p1Name = senderName;
+                    p1Name = senderName; // <--- Uses fetched name
                     p2Name = partner.displayName;
                     p1Confirmed = true;
                     p2Confirmed = false; // Target
@@ -271,11 +279,14 @@ export const useTeamInvite = () => {
                         eventId: event.eventId,
                         playerId: currentUser.uid,
                         player2Id: partner.uid,
+                        fullNameP1: p1Name, // The fetched sender name
+                        fullNameP2: p2Name, // The partner name
                         teamId: teamId,
                         status: "PENDING",
                         partnerStatus: "PENDING",
                         isPrimary: true,
                         invite: inviteType,
+                        lookingForPartner: false,
                         _debugSource: "useTeamInvite Hook",
                         registeredAt: Timestamp.now()
                     });
@@ -288,6 +299,7 @@ export const useTeamInvite = () => {
                         partnerStatus: "PENDING",
                         lookingForPartner: false, // Stop looking, I found someone pending
                         teamId: teamId,
+                        _debugSource: "useTeamInvite Hook",
                         invite: inviteType,
                     });
                 } else if (inviteMode === "MERGE_P1") {
@@ -296,17 +308,19 @@ export const useTeamInvite = () => {
                     transaction.update(regRef, {
                         isPrimary: false,
                         player2Id: currentUser.uid,
-                        fullNameP2: senderName, // Corrected to use senderName
+                        fullNameP2: senderName, // <--- Uses fetched name
                         partnerStatus: "PENDING",
                         teamId: teamId,
-                        lookingForPartner: false
+                        _debugSource: "useTeamInvite Hook",
+                        lookingForPartner: true,
+                        invite: inviteType,
                     });
                 } else if (inviteMode === "MERGE_P2") {
                     if (!targetRegId) throw new Error("Missing target registration");
                     const regRef = doc(db, "registrations", targetRegId);
                     transaction.update(regRef, {
                         playerId: currentUser.uid,
-                        fullNameP1: senderName, // Corrected to use senderName
+                        fullNameP1: senderName, // <--- Uses fetched name
                         isPrimary: true,
                         partnerStatus: "PENDING",
                         teamId: teamId,
@@ -320,10 +334,10 @@ export const useTeamInvite = () => {
                 const notifRef = doc(collection(db, "notifications"));
                 transaction.set(notifRef, {
                     notificationId: notifRef.id,
-                    userId: targetUserId, // <--- Send to the correct target
+                    userId: targetUserId, // Send to the correct target
                     type: "partner_invite",
                     title: "Team Request",
-                    message: `${senderName} wants to team up with you for ${event.eventName}`,
+                    message: `${senderName} wants to team up with you for ${event.eventName}`, // <--- Uses fetched name
                     fromUserId: currentUser.uid,
                     eventId: event.eventId,
                     teamId: teamId,

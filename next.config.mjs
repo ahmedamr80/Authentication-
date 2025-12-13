@@ -53,6 +53,21 @@ const nextConfig = {
         "localhost:5000",
         "127.0.0.1:5000",
     ],
+    // 1. ADDED: Redirects to fix the blank /login and /signin pages
+    async redirects() {
+        return [
+            {
+                source: "/login",
+                destination: "/auth/signin",
+                permanent: true,
+            },
+            {
+                source: "/signin",
+                destination: "/auth/signin",
+                permanent: true,
+            },
+        ];
+    },
     async headers() {
         return [
             {

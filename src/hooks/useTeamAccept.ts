@@ -10,7 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { User } from "firebase/auth";
-
+import { fetchPlayerName } from "@/lib/utils"; // <--- NEW: Import the helper
 export const useTeamAccept = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -23,7 +23,11 @@ export const useTeamAccept = () => {
     ) => {
         setLoading(true);
         setError(null);
-
+        // <--- NEW: Pre-fetch the real name before starting the transaction
+        // We do this outside to avoid async calls inside the transaction block if possible,
+        // and to ensure we have the most up-to-date name from Firestore.
+        const accepterName = await fetchPlayerName(currentUser.uid, currentUser.displayName);
+        // <--- END NEW
         try {
             await runTransaction(db, async (transaction) => {
                 // 1. Get Team Data
@@ -87,15 +91,15 @@ export const useTeamAccept = () => {
                 // 5. Update Team Status
                 // Changed from 'any' to a Record for type safety
                 const teamUpdates: Record<string, unknown> = {
-                    status: "CONFIRMED"
+                    status: finalStatus
                 };
 
                 if (isP1) {
                     teamUpdates.player1Confirmed = true;
-                    teamUpdates.fullNameP1 = currentUser.displayName;
+                    teamUpdates.fullNameP1 = accepterName; // <--- NEW: Use fetched name
                 } else {
                     teamUpdates.player2Confirmed = true;
-                    teamUpdates.fullNameP2 = currentUser.displayName;
+                    teamUpdates.fullNameP2 = accepterName; // <--- NEW: Use fetched name
                 }
 
                 transaction.update(teamRef, teamUpdates);
@@ -106,14 +110,16 @@ export const useTeamAccept = () => {
                     status: finalStatus, // WAITLIST or CONFIRMED
                     partnerStatus: "CONFIRMED",
                     waitlistPosition: finalStatus === "WAITLIST" ? (eventData.waitlistCount || 0) + 1 : 0,
-                    _debugSource: "useTeamAccept Hook"
+                    lookingForPartner: false,
+                    _debugSource: "useTeamAccept Hook",
+                    confirmedAt: Timestamp.now()
                 };
 
                 if (isP1) {
-                    regUpdate.fullNameP1 = currentUser.displayName;
+                    regUpdate.fullNameP1 = accepterName; // <--- NEW: Use fetched name
                     regUpdate.playerPhotoURL = currentUser.photoURL || null;
                 } else {
-                    regUpdate.fullNameP2 = currentUser.displayName;
+                    regUpdate.fullNameP2 = accepterName; // <--- NEW: Use fetched name
                     regUpdate.player2PhotoURL = currentUser.photoURL || null;
                 }
 
@@ -138,7 +144,7 @@ export const useTeamAccept = () => {
                         userId: otherUserId,
                         type: "partner_accepted",
                         title: "Team Confirmed!",
-                        message: `${currentUser.displayName || "Your partner"} accepted your invite. You are ready to play!`,
+                        message: `${accepterName} accepted your invite. You are ready to play!`, // <--- NEW: Use fetched name
                         fromUserId: currentUser.uid,
                         eventId: teamData.eventId,
                         teamId: teamId,

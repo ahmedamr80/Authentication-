@@ -29,9 +29,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (currentUser) {
                 try {
                     // 1. FAST CHECK: Custom Claims
-                    const tokenResult = await currentUser.getIdTokenResult();
+                    const tokenResult = await currentUser.getIdTokenResult(true);
                     let adminStatus = !!tokenResult.claims.admin;
-
+                    const claimStatus = !!tokenResult.claims.admin;
+                    // DEBUG LOG 1
+                    console.log(`[DEBUG] User: ${currentUser.email}`);
+                    console.log(`[DEBUG] Custom Claim 'admin':`, claimStatus);
                     // 2. FALLBACK CHECK: Firestore Document
                     // Useful if you manually set "role: admin" in the database console
                     if (!adminStatus) {
@@ -41,6 +44,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                         // Check if document exists and role is explicitly 'admin'
                         if (userDocSnap.exists() && userDocSnap.data()?.role === "admin") {
                             adminStatus = true;
+                            console.log("[DEBUG] Admin granted via Firestore");
                         }
                     }
 

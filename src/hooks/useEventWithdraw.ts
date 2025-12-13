@@ -48,7 +48,7 @@ export const useEventWithdraw = () => {
             // STRATEGY: If user is in a team, use the Team Dissolve logic.
             // Otherwise, use the Single Player withdrawal logic.
 
-            if (teamId) {
+            if (teamId && event.unitType === "Teams") {
                 // Delegate to existing hook
                 await dissolveTeam(
                     user,
@@ -89,6 +89,14 @@ export const useEventWithdraw = () => {
                 await runTransaction(db, async (transaction) => {
                     const eventRef = doc(db, "events", event.eventId);
                     const regRef = doc(db, "registrations", registration.registrationId);
+
+                    // OPTIMISTIC READ: Verify waitlist candidate matches inside transaction
+                    let waitlistSnap = null;
+                    if (firstWaitlistPlayer) {
+                        const waitlistRef = doc(db, "registrations", firstWaitlistPlayer.id);
+                        waitlistSnap = await transaction.get(waitlistRef);
+                    }
+
                     const eventDoc = await transaction.get(eventRef);
 
                     if (!eventDoc.exists()) throw new Error("Event not found");
@@ -105,11 +113,12 @@ export const useEventWithdraw = () => {
                     const currentWaitlistCount = currentEventData.waitlistCount || 0;
 
                     if (registration.status === "CONFIRMED") {
-                        if (firstWaitlistPlayer) {
+                        // CHECK: Do we have a valid waitlist snapshot?
+                        if (waitlistSnap && waitlistSnap.exists()) {
                             // CASE: Confirmed player leaves, Waitlist player promoted.
                             // Net result: Registrations count stays same. Waitlist count decreases.
 
-                            const firstWaitlistRef = doc(db, "registrations", firstWaitlistPlayer.id);
+                            const firstWaitlistRef = waitlistSnap.ref;
 
                             // Promote
                             transaction.update(firstWaitlistRef, {
@@ -126,9 +135,11 @@ export const useEventWithdraw = () => {
 
                             // Notify Promoted Player
                             const notifRef = doc(collection(db, "notifications"));
+                            const promotedPlayerId = firstWaitlistPlayer?.playerId || (waitlistSnap.data() as Registration).playerId;
+
                             transaction.set(notifRef, {
                                 notificationId: notifRef.id,
-                                userId: firstWaitlistPlayer.playerId,
+                                userId: promotedPlayerId,
                                 type: "WAITLIST_PROMOTED",
                                 title: "You're In!",
                                 message: `You've been promoted from the waitlist for ${event.eventName}!`,

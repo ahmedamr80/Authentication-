@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, use, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { doc, onSnapshot, collection, query, where, getDocs, documentId } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, getDocs, documentId, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
@@ -16,7 +16,9 @@ import { RegisterDialog } from "@/components/RegisterDialog";
 import { TeamRegisterDialog } from "@/components/TeamRegisterDialog";
 import { PartnerResponseDialog } from "@/components/PartnerResponseDialog";
 import { useEventWithdraw } from "@/hooks/useEventWithdraw";
+
 import { useToast } from "@/context/ToastContext";
+import { AddToCalendarButton } from "@/components/AddToCalendarButton";
 import { format } from "date-fns";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
@@ -211,6 +213,21 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         }
     }, [inviteTeamId, user, teams, userProfiles]);
 
+    // 6. Fetch Club Coordinates
+    const [clubCoordinates, setClubCoordinates] = useState<{ lat: number, lng: number } | null>(null);
+
+    useEffect(() => {
+        if (event?.clubId) {
+            const fetchClubData = async () => {
+                const clubDoc = await getDoc(doc(db, "clubs", event.clubId!));
+                if (clubDoc.exists()) {
+                    setClubCoordinates(clubDoc.data().location.coordinates);
+                }
+            };
+            fetchClubData();
+        }
+    }, [event?.clubId]);
+
     // Derived State
     const userRegistration = useMemo(() => {
         if (!user) return undefined;
@@ -261,14 +278,14 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 ...team,
                 player1: p1 ? {
                     uid: team.player1Id,
-                    displayName: teamLegacy.player1Name || teamLegacy.fullNameP1 || p1.displayName || p1.fullName || p1.fullname || "Unknown Player",
+                    displayName: p1.fullName || p1.fullname || p1.displayName || teamLegacy.player1Name || teamLegacy.fullNameP1 || "Unknown Player",
                     // Prioritize team-stored photo (if any) -> profile photo
                     photoURL: teamLegacy.player1PhotoURL || p1.photoURL || p1.photoUrl || undefined,
                     skillLevel: p1.skillLevel || p1.level || undefined
                 } : undefined,
                 player2: p2 ? {
                     uid: team.player2Id,
-                    displayName: teamLegacy.player2Name || teamLegacy.fullNameP2 || p2.displayName || p2.fullName || p2.fullname || "Unknown Player",
+                    displayName: p2.fullName || p2.fullname || p2.displayName || teamLegacy.player2Name || teamLegacy.fullNameP2 || "Unknown Player",
                     // Prioritize team-stored photo (if any) -> profile photo
                     photoURL: teamLegacy.player2PhotoURL || p2.photoURL || p2.photoUrl || undefined,
                     skillLevel: p2.skillLevel || p2.level || undefined
@@ -453,7 +470,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 <div className="bg-gray-900/40 backdrop-blur-2xl rounded-2xl border border-gray-800/50 p-6 mb-8 relative overflow-hidden shadow-2xl">
                     {/* Pending Invite Notification */}
                     {hasPendingInvite && (
-                        <div className="absolute top-4 left-4 z-20 animate-pulse">
+                        <div className="absolute top-4 right-4 z-20 animate-pulse">
                             <div className="bg-orange-500 text-white p-2 rounded-full shadow-lg shadow-orange-500/20" title="You have a pending team invite!">
                                 <Bell className="h-6 w-6" />
                             </div>
@@ -480,14 +497,19 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                 {event.unitType}
                             </Badge>
                         </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-gray-400 hover:text-white hover:bg-gray-800"
-                            onClick={handleShare}
-                        >
-                            <Share2 className="h-4 w-4" />
-                        </Button>
+
+                        <div className="flex items-center gap-2">
+                            {!isPastEvent && <AddToCalendarButton event={event} />}
+
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-gray-400 hover:text-white hover:bg-gray-800"
+                                onClick={handleShare}
+                            >
+                                <Share2 className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Event Details Content */}
@@ -555,7 +577,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             <div className="mt-4 flex items-center gap-2 text-gray-400 bg-gray-950/50 px-3 py-2 rounded-lg border border-gray-800">
                                 <MapPin className="h-4 w-4 text-orange-500" />
                                 <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || "")}`}
+                                    href={clubCoordinates
+                                        ? `https://www.google.com/maps/search/?api=1&query=${clubCoordinates.lat},${clubCoordinates.lng}`
+                                        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || "")}`
+                                    }
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="hover:text-orange-400 hover:underline transition-colors text-sm"
@@ -596,7 +621,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
                     {/* Register Buttons */}
                     {!isPastEvent && (
-                        <div className="mt-8 pt-6 border-t border-gray-800 flex flex-col items-center justify-center gap-6 text-center">
+                        <div className="mt-8 mb-8 pt-6 border-t border-gray-800 flex flex-col items-center justify-center gap-6 text-center">
                             <div className="text-sm text-gray-400">
                                 <span className="block">Registration closes soon</span>
                                 <span className="font-bold text-white">
@@ -634,7 +659,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                         {/* Only show Register Team for Teams mode */}
                                         {event.unitType === "Teams" && (
                                             <Button
-                                                className="md:w-auto bg-gray-800 hover:bg-gray-700 text-white font-bold border border-gray-700"
+                                                className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
                                                 onClick={() => {
                                                     if (!user) {
                                                         router.push(`/auth/signin?returnTo=/events/${eventId}`);
@@ -642,9 +667,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                                     }
                                                     setIsTeamRegisterOpen(true);
                                                 }}
-                                                disabled={spotsLeft <= 1}
                                             >
-                                                Register Team
+                                                {spotsLeft === 0 ? "Register Team to Waitlist" : "Register Team"}
                                             </Button>
                                         )}
                                     </>

@@ -17,7 +17,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 const EVENTS_PER_PAGE = 12;
 
 const calculateStatus = (event: EventData): "Active" | "Upcoming" | "Past" | "Cancelled" => {
-    if (event.cancellationMessage) return "Cancelled";
+    if (event.cancellationMessage || event.status === "Cancelled") return "Cancelled";
 
     const now = new Date();
     const eventDate = event.dateTime.toDate();
@@ -57,7 +57,7 @@ export default function EventsPage() {
                         duration: data.duration || 60,
                         eventId: doc.id,
                         eventName: data.eventName,
-                        isPublic: data.isPublic,
+                        isPublic: data.isPublic, //i need to render only public events
                         isTeamRegistration: data.isTeamRegistration,
                         locationName: data.locationName || "Unknown Location",
                         logoUrl: data.logoUrl,
