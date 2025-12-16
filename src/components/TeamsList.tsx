@@ -62,6 +62,29 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
         );
     };
 
+    // NEW: Handle Captain Canceling Invitation (Scenario 3)
+    const handleCancelInvite = async (teamId: string) => {
+        if (!currentUser) return;
+        if (!confirm("Cancel this invitation? You will remain registered as a Free Agent.")) return;
+
+        const team = teams.find(t => t.teamId === teamId);
+        if (!team) {
+            showToast("Team not found", "error");
+            return;
+        }
+
+        await dissolveTeam(
+            currentUser,
+            teamId,
+            team.eventId,
+            "CANCEL", // <--- NEW ACTION: Captain keeps seat, removes partner
+            undefined,
+            () => {
+                showToast("Invitation canceled", "success");
+            }
+        );
+    };
+
     const confirmedTeams = teams.filter(t => t.status === "CONFIRMED" || (t.player1Confirmed && t.player2Confirmed && t.status !== "WAITLIST"));
     const pendingTeams = teams.filter(t => t.status === "PENDING" || ((!t.player1Confirmed || !t.player2Confirmed) && t.status !== "WAITLIST"));
     const waitlistTeams = teams.filter(t => t.status === "WAITLIST");
@@ -84,32 +107,43 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                 ) : (
                     <div className="space-y-3">
                         {confirmedTeams.map((team) => (
-                            <div key={team.teamId} className="bg-gray-900/80 backdrop-blur-sm border border-green-500/30 rounded-xl p-4 hover:border-green-500/50 transition-colors relative group">
-                                <div className="flex items-center justify-between">
+                            <div key={team.teamId} className="bg-gray-900/80 backdrop-blur-sm border border-green-500/30 rounded-xl p-3 sm:p-4 hover:border-green-500/50 transition-colors relative group">
+                                <div className="flex items-center justify-between gap-2">
                                     {/* Left: Overlapping Avatars + Names */}
-                                    <div className="flex items-center gap-3 flex-1">
-                                        {/* Overlapping Avatars */}
-                                        <div className="flex items-center -space-x-3">
-                                            <Avatar className="h-12 w-12 border-2 border-gray-900 z-10">
+                                    <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                                        {/* Overlapping Avatars - smaller on mobile */}
+                                        <div className="flex items-center -space-x-2 sm:-space-x-3 flex-shrink-0">
+                                            <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900 z-10">
                                                 <AvatarImage src={team.player1?.photoURL} />
-                                                <AvatarFallback className="bg-gray-800 text-gray-400">
+                                                <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
                                                     {team.player1?.displayName?.charAt(0) || "?"}
                                                 </AvatarFallback>
                                             </Avatar>
-                                            <Avatar className="h-12 w-12 border-2 border-gray-900">
+                                            <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900">
                                                 <AvatarImage src={team.player2?.photoURL} />
-                                                <AvatarFallback className="bg-gray-800 text-gray-400">
+                                                <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
                                                     {team.player2?.displayName?.charAt(0) || "?"}
                                                 </AvatarFallback>
                                             </Avatar>
                                         </div>
 
-                                        {/* Names and Skill Levels */}
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-medium text-white truncate">
-                                                {team.player1?.displayName || "Unknown"} & {team.player2?.displayName || "Unknown"}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1">
+                                        {/* Names and Skill Levels - truncate on mobile */}
+                                        <div className="min-w-0 flex-1">
+                                            {/* Stacked on mobile, inline on larger screens */}
+                                            <div className="hidden sm:block">
+                                                <p className="text-sm font-medium text-white truncate">
+                                                    {team.player1?.displayName || "Unknown"} & {team.player2?.displayName || "Unknown"}
+                                                </p>
+                                            </div>
+                                            <div className="sm:hidden">
+                                                <p className="text-xs font-medium text-white truncate">
+                                                    {team.player1?.displayName || "Unknown"}
+                                                </p>
+                                                <p className="text-xs text-gray-400 truncate">
+                                                    & {team.player2?.displayName || "Unknown"}
+                                                </p>
+                                            </div>
+                                            <div className="hidden sm:flex items-center gap-2 mt-1">
                                                 {team.player1?.skillLevel && (
                                                     <span className="text-xs text-gray-400">{team.player1.skillLevel}</span>
                                                 )}
@@ -123,10 +157,10 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                         </div>
                                     </div>
 
-                                    {/* Right: Confirmed Badge */}
-                                    <Badge className="bg-green-600 hover:bg-green-600 text-white border-0 flex items-center gap-1.5">
+                                    {/* Right: Confirmed Badge - icon only on mobile */}
+                                    <Badge className="bg-green-600 hover:bg-green-600 text-white border-0 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 flex-shrink-0">
                                         <Check className="w-3 h-3" />
-                                        Confirmed
+                                        <span className="hidden sm:inline">Confirmed</span>
                                     </Badge>
                                 </div>
 
@@ -275,7 +309,7 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                             <Button
                                                 variant="ghost"
                                                 className="w-full mt-2 h-8 text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                                                onClick={() => handleLeaveTeam(team.teamId)}
+                                                onClick={() => handleCancelInvite(team.teamId)}
                                                 disabled={dissolveLoading}
                                             >
                                                 Cancel Invitation

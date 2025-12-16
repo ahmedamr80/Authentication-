@@ -9,10 +9,11 @@ service cloud.firestore {
     
     function isAdmin() {
       // Check if user has 'admin' custom claim OR 'admin' role in 'users' collection
+      // SAFELY access the role field using .get() to prevent errors if field is missing
       return isSignedIn() && 
         ((request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true) || 
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'));
     }
 
     function isOwner(uid) {
@@ -25,7 +26,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       
       // 2. Creation: You can create your own, or an admin can create for you
-      allow create: if isOwner(uid) || isAdmin();
+      // RESTRICTION: Regular users cannot set 'role', 'isAdmin', or 'isShadow' on creation
+      // We check if the NEW data contains any of these forbidden keys
+      allow create: if isAdmin() || (
+        isOwner(uid) && 
+        !request.resource.data.keys().hasAny(['role', 'isAdmin', 'isShadow'])
+      );
       
       // 3. Updating: 
       // - Must be Owner OR Admin
@@ -60,13 +66,10 @@ service cloud.firestore {
       // Allow create if self OR if creating for a team (presence of teamId in new data)
       allow create: if isSignedIn() && (request.resource.data.playerId == request.auth.uid || request.resource.data.teamId != null || isAdmin());
       
-      // Allow update if self (P1 OR P2) OR if updating for a team OR if promoting a waitlist player (System action by proxy)
+      // Allow update if self (P1 OR P2) OR if updating for a team
       allow update: if isSignedIn() && (
         resource.data.playerId == request.auth.uid || 
         resource.data.player2Id == request.auth.uid || 
-        resource.data.teamId != null || 
-        request.resource.data.teamId != null || 
-        (resource.data.status == 'WAITLIST' && request.resource.data.status == 'CONFIRMED') ||
         isAdmin()
       );
       
@@ -80,7 +83,15 @@ service cloud.firestore {
     // --- TEAMS ---
     match /teams/{teamId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() || isAdmin();
+      // Tighten write access: Only the creator (player1) can create a team where they are the leader
+      allow create: if isSignedIn() && request.resource.data.player1Id == request.auth.uid;
+      
+      // Allow update/delete if you are a member of the team
+      allow update, delete: if isSignedIn() && (
+        resource.data.player1Id == request.auth.uid || 
+        resource.data.player2Id == request.auth.uid ||
+        isAdmin()
+      );
     }
     
     // --- CLUBS ---
@@ -102,7 +113,7 @@ service cloud.firestore {
     }
     // --- COUNTERS ---
     match /counters/{counterId} {
-      allow read, update: if isSignedIn();
+      allow read, update, create: if isSignedIn();
     }
   }
 }

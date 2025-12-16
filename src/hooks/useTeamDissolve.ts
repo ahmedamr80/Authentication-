@@ -43,6 +43,9 @@ interface SurvivorProfile {
     photoUrl?: string;
 }
 
+// EXPANDED: Action Types to match the Scenario Table
+export type DissolveAction = "DECLINE" | "LEAVE" | "CANCEL";
+
 export const useTeamDissolve = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export const useTeamDissolve = () => {
         currentUser: DissolveUser,
         teamId: string,
         eventId: string,
-        actionType: "DECLINE" | "LEAVE",
+        actionType: DissolveAction,
         notificationId?: string,
         onSuccess?: () => void
     ) => {
@@ -59,10 +62,9 @@ export const useTeamDissolve = () => {
         setError(null);
 
         try {
-            console.log("🚀 Starting Team Dissolution Process");
+            console.log(`🚀 Processing Dissolve: ${actionType}`);
             console.log("   - Team ID:", teamId);
             console.log("   - Event ID:", eventId);
-            console.log("   - Action Type:", actionType);
             console.log("   - Current User:", currentUser.displayName || currentUser.fullName || currentUser.uid);
 
             // -------------------------------------------------------
@@ -84,7 +86,7 @@ export const useTeamDissolve = () => {
             const currentRegData = currentRegDoc.data();
             console.log("   ✅ Found registration:", currentRegDoc.id);
 
-            // 2. Identify Survivor EARLY (Before Transaction)
+            // 2. Identify Role
             const isP1 = currentRegData.playerId === currentUser.uid;
             const isP2 = currentRegData.player2Id === currentUser.uid;
 
@@ -92,14 +94,46 @@ export const useTeamDissolve = () => {
                 throw new Error("User is not part of this team");
             }
 
-            // The survivor is the one NOT taking the action
-            //**Translation:** "If the current user is P1, then the survivor is P2. Otherwise, the survivor is P1."
-            const survivorId = isP1 ? currentRegData.player2Id : currentRegData.playerId;
+            // -------------------------------------------------------
+            // 🧠 CORE LOGIC: DETERMINING THE SURVIVOR
+            // Based on the Scenario Table:
+            // - DECLINE: Survivor is the Captain (P1)
+            // - CANCEL: Survivor is the Actor/Captain (P1)
+            // - LEAVE + PENDING + isP1: No Survivor (full delete)
+            // - LEAVE (standard): Survivor is the other person
+            // -------------------------------------------------------
+            let survivorId: string | null = null;
 
-            console.log("\n🔍 Role Analysis (Pre-flight):");
-            console.log("   - Current user is P1?", isP1);
-            console.log("   - Current user is P2?", isP2);
-            console.log("   - Survivor ID:", survivorId || "None (solo player)");
+            // Scenario 1: Partner Declines Invite (Action: DECLINE, Actor: P2)
+            if (actionType === "DECLINE") {
+                // Survivor is the Captain (P1)
+                survivorId = currentRegData.playerId;
+                console.log("   🎯 DECLINE scenario: Captain (P1) survives");
+            }
+            // Scenario 3: Captain Cancels Invite (Action: CANCEL, Actor: P1)
+            else if (actionType === "CANCEL") {
+                // Survivor is the Actor/Captain (P1)
+                // Note: P1 is "kicking" P2, but keeping the seat.
+                survivorId = currentUser.uid;
+                console.log("   🎯 CANCEL scenario: Actor (Captain) survives, invitation cancelled");
+            }
+            // Scenario 2: Captain Withdraws from Pending (Action: LEAVE, Actor: P1, Status: PENDING)
+            else if (actionType === "LEAVE" && currentRegData.status === "PENDING" && isP1) {
+                // Whole record deleted. No survivor.
+                survivorId = null;
+                console.log("   🎯 WITHDRAW scenario: No survivor - full deletion");
+            }
+            // Scenario 4, 5, 6: Standard LEAVE (Confirmed/Waitlist/Partner Leaves)
+            else if (actionType === "LEAVE") {
+                // Survivor is the *other* person
+                survivorId = isP1 ? currentRegData.player2Id : currentRegData.playerId;
+                console.log("   🎯 LEAVE scenario: Other player survives");
+            }
+
+            console.log("\n🔍 Survivor Strategy:");
+            console.log("   - Scenario Action:", actionType);
+            console.log("   - Actor Is P1?", isP1);
+            console.log("   - Survivor ID:", survivorId || "NONE (Full Delete)");
 
             // 3. Pre-fetch Survivor Profile (Avoids reading users collection in transaction)
             let survivorProfileData: SurvivorProfile | null = null;
@@ -161,7 +195,6 @@ export const useTeamDissolve = () => {
 
                 // OPTIMISTIC READS: Candidate Team & Registration
                 // We must read these BEFORE any writes if we plan to use them.
-                // Even if we don't end up using them (no slot opened), we must read them now.
                 let candTeamSnap = null;
                 let candRegSnap = null;
 
@@ -223,19 +256,19 @@ export const useTeamDissolve = () => {
                     } else {
                         // Fallback to Team/Registration data
                         console.log("   ⚠️ Using fallback survivor data from registration");
-                        survivorName = isP1
-                            ? (teamData.player2?.displayName || currentRegData.fullNameP2 || "Unknown Player")
-                            : (teamData.player1?.displayName || currentRegData.fullNameP1 || "Unknown Player");
-
-                        survivorPhoto = isP1
-                            ? (teamData.player2?.photoURL || currentRegData.player2PhotoURL || null)
-                            : (teamData.player1?.photoURL || currentRegData.playerPhotoURL || null);
+                        // If survivor is P1 (Captain staying), use P1 data
+                        if (survivorId === currentRegData.playerId) {
+                            survivorName = currentRegData.fullNameP1 || "Unknown Player";
+                            survivorPhoto = currentRegData.playerPhotoURL || null;
+                        } else {
+                            survivorName = currentRegData.fullNameP2 || teamData.player2?.displayName || "Unknown Player";
+                            survivorPhoto = currentRegData.player2PhotoURL || teamData.player2?.photoURL || null;
+                        }
                     }
 
                     console.log("   👤 Survivor Details:");
                     console.log("      - Name:", survivorName);
                     console.log("      - Photo:", survivorPhoto ? "Yes" : "No");
-                    console.log("      - Was originally:", isP1 ? "P2" : "P1");
                 }
 
                 // -------------------------------------------------------
@@ -257,7 +290,7 @@ export const useTeamDissolve = () => {
                         teamId: null, // Detach from dissolved team
                         lookingForPartner: true, // Back to free agent market
                         partnerStatus: "NONE",
-                        status: regData.status, // Keep existing status (CONFIRMED/WAITLIST)
+                        status: regData.status, // Keep existing status (CONFIRMED/WAITLIST/PENDING)
 
                         // Clear P2 Slot completely
                         player2Id: null,
@@ -267,15 +300,16 @@ export const useTeamDissolve = () => {
                         invite: null,
 
                         // Metadata
-                        _debugSource: "useTeamDissolve - Survivor Normalized",
+                        _debugSource: `useTeamDissolve - ${actionType} - Survivor Normalized`,
                         _lastUpdated: serverTimestamp()
                     });
                 } else {
+                    // Scenario 2: Captain Withdraws (No Survivor)
                     console.log("   🗑️ No survivor - deleting registration completely");
                     transaction.delete(regRef);
                 }
 
-                // 2. Determine Slot Impact (Checking the status of the team that got disolved)
+                // 2. Determine Slot Impact
                 const teamStatus = teamData.status;
                 let slotOpened = false;
                 let waitlistSpotFreed = false;
@@ -284,24 +318,34 @@ export const useTeamDissolve = () => {
                 console.log("   - Team Status:", teamStatus);
                 console.log("   - Action Type:", actionType);
 
-                if (teamStatus === STATUS.CONFIRMED) {
-                    slotOpened = true;
-                    console.log("   ✅ Confirmed team dissolved - slot opens!");
-                } else if (teamStatus === STATUS.WAITLIST) {
-                    waitlistSpotFreed = true;
+                // IMPORTANT: If Action was CANCEL (Scenario 3), the registration remains.
+                // Therefore, NO slot opens, even if the team was Pending.
+                // The Captain holds the slot.
+                if (actionType === "CANCEL") {
                     slotOpened = false;
-                    console.log("   ✅ Waitlist team dissolved - waitlist spot freed!");
-                } else if (teamStatus === STATUS.PENDING) {
-                    if (actionType === "DECLINE") {
-                        // PENDING team declined = no slot impact
+                    waitlistSpotFreed = false;
+                    console.log("   ℹ️ CANCEL action - Captain keeps registration, no slot impact");
+                } else {
+                    // Normal logic for LEAVE/DECLINE
+                    if (teamStatus === STATUS.CONFIRMED) {
+                        slotOpened = true;
+                        console.log("   ✅ Confirmed team dissolved - slot opens!");
+                    } else if (teamStatus === STATUS.WAITLIST) {
+                        waitlistSpotFreed = true;
                         slotOpened = false;
-                        waitlistSpotFreed = false;
-                        console.log("   ℹ️ Pending team declined - no slot/waitlist impact");
-                    } else {
-                        // LEAVE from PENDING (rare but possible)
-                        slotOpened = false;
-                        waitlistSpotFreed = false;
-                        console.log("   ℹ️ Pending team left - no slot/waitlist impact");
+                        console.log("   ✅ Waitlist team dissolved - waitlist spot freed!");
+                    } else if (teamStatus === STATUS.PENDING) {
+                        if (actionType === "DECLINE") {
+                            // PENDING team declined = no slot impact
+                            slotOpened = false;
+                            waitlistSpotFreed = false;
+                            console.log("   ℹ️ Pending team declined - no slot/waitlist impact");
+                        } else {
+                            // LEAVE from PENDING (rare but possible)
+                            slotOpened = false;
+                            waitlistSpotFreed = false;
+                            console.log("   ℹ️ Pending team left - no slot/waitlist impact");
+                        }
                     }
                 }
 
@@ -317,8 +361,6 @@ export const useTeamDissolve = () => {
                         console.log("   🔄 Attempting to promote waitlist candidate...");
 
                         const candData = candTeamSnap.data();
-
-                        // NOTE: snapshot.ref is available on the snapshot
                         const candTeamRef = candTeamSnap.ref;
                         const candRegRef = candRegSnap.ref;
 
@@ -335,7 +377,7 @@ export const useTeamDissolve = () => {
 
                         transaction.update(candRegRef, {
                             status: STATUS.CONFIRMED,
-                            waitlistPosition: null, // Clear position as they are now confirmed
+                            waitlistPosition: null,
                             promotedAt: serverTimestamp()
                         });
 
@@ -410,8 +452,46 @@ export const useTeamDissolve = () => {
                     console.log("   ✅ Notification marked as read:", notificationId);
                 }
 
-                // Notify Survivor (if any)
-                if (survivorId) {
+                // -------------------------------------------------------
+                // SCENARIO-BASED NOTIFICATIONS
+                // -------------------------------------------------------
+
+                // Scenario 3 (CANCEL): Notify P2 (The victim of cancellation)
+                if (actionType === "CANCEL" && teamData.player2Id) {
+                    console.log("   📧 Notifying cancelled partner...");
+                    const notifRef = doc(collection(db, "notifications"));
+                    transaction.set(notifRef, {
+                        notificationId: notifRef.id,
+                        userId: teamData.player2Id,
+                        type: NOTIFICATION_TYPE.SYSTEM,
+                        title: "Invitation Canceled",
+                        message: `${currentUser.displayName || currentUser.fullName || "The Captain"} canceled the invitation for ${eventData.eventName}.`,
+                        eventId: eventId,
+                        read: false,
+                        createdAt: serverTimestamp()
+                    });
+                    console.log("   ✅ Cancelled partner notified:", teamData.player2Id);
+                }
+
+                // Scenario 2 (WITHDRAW - LEAVE with no survivor): Notify P2 (if exists)
+                if (actionType === "LEAVE" && !survivorId && teamData.player2Id) {
+                    console.log("   📧 Notifying partner about withdrawal...");
+                    const notifRef = doc(collection(db, "notifications"));
+                    transaction.set(notifRef, {
+                        notificationId: notifRef.id,
+                        userId: teamData.player2Id,
+                        type: NOTIFICATION_TYPE.SYSTEM,
+                        title: "Team Cancelled",
+                        message: `${currentUser.displayName || currentUser.fullName || "Your partner"} withdrew the team application for ${eventData.eventName}.`,
+                        eventId: eventId,
+                        read: false,
+                        createdAt: serverTimestamp()
+                    });
+                    console.log("   ✅ Partner notified about withdrawal:", teamData.player2Id);
+                }
+
+                // Scenario 1 (DECLINE) and Scenario 4,5,6 (LEAVE with survivor): Notify Survivor
+                if ((actionType === "DECLINE" || actionType === "LEAVE") && survivorId) {
                     console.log("   📧 Notifying survivor...");
                     const replyNotifRef = doc(collection(db, "notifications"));
 
@@ -420,8 +500,8 @@ export const useTeamDissolve = () => {
                         : "Partner Left";
 
                     const msg = actionType === "DECLINE"
-                        ? `${currentUser.displayName || "Your partner"} declined the team invitation. You're now a free agent looking for a partner.`
-                        : `${currentUser.displayName || "Your partner"} left the team. You're now a free agent looking for a partner.`;
+                        ? `${currentUser.displayName || currentUser.fullName || "Your partner"} declined the team invitation. You're now a free agent looking for a partner.`
+                        : `${currentUser.displayName || currentUser.fullName || "Your partner"} left the team. You're now a free agent looking for a partner.`;
 
                     transaction.set(replyNotifRef, {
                         notificationId: replyNotifRef.id,

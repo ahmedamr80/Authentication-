@@ -236,8 +236,20 @@ export default function PlayerProfilePage() {
         if (!user) return;
         setSaving(true);
         try {
+            // Filter out restricted fields if not admin
+            // This prevents triggering Firestore security rules that forbid non-admins from touching these fields
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const updatePayload: any = { ...data };
+
+            if (!isAdmin) {
+                delete updatePayload.role;
+                delete updatePayload.isAdmin;
+                delete updatePayload.isShadow;
+                delete updatePayload.registrationStatus;
+            }
+
             await updateDoc(doc(db, "users", user.uid), {
-                ...data,
+                ...updatePayload,
                 photoUrl: photoUrl, // Ensure photoUrl is saved
                 dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null, // Convert string to Date (Timestamp)
                 updatedAt: new Date(),
