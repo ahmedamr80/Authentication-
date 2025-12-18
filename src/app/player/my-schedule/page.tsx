@@ -74,7 +74,9 @@ export default function MySchedulePage() {
                             role: "player",
                             registrationId: doc.id,
                         });
-                        eventIds.add(data.eventId);
+                        if (data.status !== "CANCELLED") {
+                            eventIds.add(data.eventId);
+                        }
                     }
                 });
 
@@ -182,7 +184,8 @@ export default function MySchedulePage() {
 
     return (
         <div className="min-h-screen bg-gray-950 flex flex-col pb-20 font-sans text-white">
-            <Header user={user} />
+
+            <Header user={user} showBack={true} />
 
             <main className="flex-1 w-full max-w-4xl mx-auto p-4 space-y-6 pt-24">
                 <div className="flex items-center justify-between">

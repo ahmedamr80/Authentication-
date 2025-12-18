@@ -245,7 +245,7 @@ export default function CreateEventPage() {
         );
     }
     return (
-        <div className="min-h-screen bg-black text-white pb-24 relative">
+        <div className="min-h-screen bg-black text-white pb-safe relative">
             {/* Background Gradient */}
             <div className="fixed inset-0 z-0 bg-linear-to-b from-gray-900 via-black to-black" />
 
@@ -299,6 +299,8 @@ export default function CreateEventPage() {
                                         onChange={(e) => handleInputChange("duration", parseInt(e.target.value) || 60)}
                                         min={15}
                                         step={15}
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         className="bg-gray-950/50 border-gray-800 text-white"
                                     />
                                 </div>
@@ -377,6 +379,7 @@ export default function CreateEventPage() {
                                         onChange={(e) => handleInputChange("pricePerPlayer", parseFloat(e.target.value) || 0)}
                                         min={0}
                                         step={5}
+                                        inputMode="decimal"
                                         className="bg-gray-950/50 border-gray-800 text-white"
                                     />
                                 </div>
@@ -452,6 +455,8 @@ export default function CreateEventPage() {
                                         value={formData.slotsAvailable}
                                         onChange={(e) => handleInputChange("slotsAvailable", parseInt(e.target.value) || 0)}
                                         min={1}
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         className="bg-gray-950/50 border-gray-800 text-white"
                                     />
                                 </div>

@@ -112,7 +112,7 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                     {/* Left: Overlapping Avatars + Names */}
                                     <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                                         {/* Overlapping Avatars - smaller on mobile */}
-                                        <div className="flex items-center -space-x-2 sm:-space-x-3 flex-shrink-0">
+                                        <div className="flex items-center -space-x-2 sm:-space-x-3 shrink-0">
                                             <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900 z-10">
                                                 <AvatarImage src={team.player1?.photoURL} />
                                                 <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
@@ -158,7 +158,7 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                     </div>
 
                                     {/* Right: Confirmed Badge - icon only on mobile */}
-                                    <Badge className="bg-green-600 hover:bg-green-600 text-white border-0 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 flex-shrink-0">
+                                    <Badge className="bg-green-600 hover:bg-green-600 text-white border-0 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 shrink-0">
                                         <Check className="w-3 h-3" />
                                         <span className="hidden sm:inline">Confirmed</span>
                                     </Badge>

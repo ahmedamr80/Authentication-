@@ -16,6 +16,7 @@ import { fetchPlayerName } from "@/lib/utils"; // <--- NEW: Import the helper
 export interface InviteEventData {
     eventId: string;
     eventName: string;
+    dateTime: Timestamp;
     registrationsCount?: number;
     waitlistCount?: number;
     slotsAvailable?: number;
@@ -340,6 +341,8 @@ export const useTeamInvite = () => {
                     message: `${senderName} wants to team up with you for ${event.eventName}`, // <--- Uses fetched name
                     fromUserId: currentUser.uid,
                     eventId: event.eventId,
+                    eventName: event.eventName,
+                    eventDate: event.dateTime,
                     teamId: teamId,
                     read: false,
                     createdAt: Timestamp.now(),

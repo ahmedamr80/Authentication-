@@ -22,6 +22,8 @@ interface Notification {
     read: boolean;
     createdAt: Timestamp;
     eventId?: string;
+    eventName?: string;
+    eventDate?: Timestamp;
     fromUserId?: string;
     teamId?: string;
     action?: string;
@@ -214,6 +216,17 @@ export default function NotificationsPage() {
                                         <p className={`text-sm mt-1 ${!notification.read ? "text-gray-300" : "text-gray-500"}`}>
                                             {notification.message}
                                         </p>
+                                        {notification.eventName && notification.eventDate && (
+                                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-400 bg-gray-950/50 p-2 rounded border border-gray-800/50">
+                                                <span className="font-medium text-orange-400">{notification.eventName}</span>
+                                                <span>•</span>
+                                                <span>
+                                                    {notification.eventDate.toDate().toLocaleDateString(undefined, {
+                                                        weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                                                    })}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     {!notification.read && (
                                         <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 shrink-0" />
