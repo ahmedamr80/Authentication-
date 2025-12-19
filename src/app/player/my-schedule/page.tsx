@@ -67,14 +67,15 @@ export default function MySchedulePage() {
                 regsSnap.forEach((doc) => {
                     const data = doc.data();
                     if (!eventIds.has(data.eventId)) {
-                        items.push({
-                            id: data.eventId,
-                            event: {} as EventData,
-                            status: data.status,
-                            role: "player",
-                            registrationId: doc.id,
-                        });
+                        // FIX: Exclude cancelled events
                         if (data.status !== "CANCELLED") {
+                            items.push({
+                                id: data.eventId,
+                                event: {} as EventData,
+                                status: data.status,
+                                role: "player",
+                                registrationId: doc.id,
+                            });
                             eventIds.add(data.eventId);
                         }
                     }
@@ -104,16 +105,19 @@ export default function MySchedulePage() {
                         myStatus = "PENDING";
                     }
 
-                    items.push({
-                        id: data.eventId,
-                        event: {} as EventData,
-                        status: myStatus,
-                        role: isPlayer1 ? "team_captain" : "team_member",
-                        partnerName: partnerName || (isPlayer1 ? data.fullNameP2 : data.fullNameP1) || "TBD",
-                        partnerStatus: partnerStatus,
-                        registrationId: doc.id,
-                    });
-                    eventIds.add(data.eventId);
+                    // FIX: Exclude cancelled events
+                    if (myStatus !== "CANCELLED") {
+                        items.push({
+                            id: data.eventId,
+                            event: {} as EventData,
+                            status: myStatus,
+                            role: isPlayer1 ? "team_captain" : "team_member",
+                            partnerName: partnerName || (isPlayer1 ? data.fullNameP2 : data.fullNameP1) || "TBD",
+                            partnerStatus: partnerStatus,
+                            registrationId: doc.id,
+                        });
+                        eventIds.add(data.eventId);
+                    }
                 };
 
                 teamsSnap1.forEach((d) => processTeamDoc(d, true));

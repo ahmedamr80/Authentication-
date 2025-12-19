@@ -245,7 +245,7 @@ export default function CreateEventPage() {
         );
     }
     return (
-        <div className="min-h-screen bg-black text-white pb-safe relative">
+        <div className="min-h-screen bg-black text-white pb-24 relative">
             {/* Background Gradient */}
             <div className="fixed inset-0 z-0 bg-linear-to-b from-gray-900 via-black to-black" />
 
