@@ -194,7 +194,6 @@ export const useTeamDissolve = () => {
                 const regRef = doc(db, "registrations", currentRegDoc.id);
 
                 // OPTIMISTIC READS: Candidate Team & Registration
-                // We must read these BEFORE any writes if we plan to use them.
                 let candTeamSnap = null;
                 let candRegSnap = null;
 
@@ -219,44 +218,25 @@ export const useTeamDissolve = () => {
                     if (notificationId) {
                         transaction.update(doc(db, "notifications", notificationId), { read: true });
                     }
-                    return; // Graceful exit
+                    return;
                 }
 
-                if (!eventDocSnap.exists()) {
-                    throw new Error("Event not found.");
-                }
-
-                if (!regDocSnap.exists()) {
-                    throw new Error("Registration not found.");
-                }
+                if (!eventDocSnap.exists()) throw new Error("Event not found.");
+                if (!regDocSnap.exists()) throw new Error("Registration not found.");
 
                 const teamData = teamDocSnap.data();
                 const eventData = eventDocSnap.data();
                 const regData = regDocSnap.data();
 
-                console.log("\n👥 Team Data:");
-                console.log("   - P1:", teamData.player1Id);
-                console.log("   - P2:", teamData.player2Id || "None");
-                console.log("   - Status:", teamData.status);
-
-                // D. Prepare Survivor Data (Using Pre-fetched Profile or Fallback)
+                // D. Prepare Survivor Data
                 let survivorName = "Unknown Player";
                 let survivorPhoto: string | null = null;
 
                 if (survivorId) {
                     if (survivorProfileData) {
-                        // Use pre-fetched profile data
-                        survivorName = survivorProfileData.fullName
-                            || survivorProfileData.displayName
-                            || "Unknown Player";
-                        survivorPhoto = survivorProfileData.photoURL
-                            || survivorProfileData.photoUrl
-                            || null;
-                        console.log("   ✅ Using pre-fetched survivor profile");
+                        survivorName = survivorProfileData.fullName || survivorProfileData.displayName || "Unknown Player";
+                        survivorPhoto = survivorProfileData.photoURL || survivorProfileData.photoUrl || null;
                     } else {
-                        // Fallback to Team/Registration data
-                        console.log("   ⚠️ Using fallback survivor data from registration");
-                        // If survivor is P1 (Captain staying), use P1 data
                         if (survivorId === currentRegData.playerId) {
                             survivorName = currentRegData.fullNameP1 || "Unknown Player";
                             survivorPhoto = currentRegData.playerPhotoURL || null;
@@ -265,134 +245,55 @@ export const useTeamDissolve = () => {
                             survivorPhoto = currentRegData.player2PhotoURL || teamData.player2?.photoURL || null;
                         }
                     }
-
-                    console.log("   👤 Survivor Details:");
-                    console.log("      - Name:", survivorName);
-                    console.log("      - Photo:", survivorPhoto ? "Yes" : "No");
                 }
 
-                // -------------------------------------------------------
-                // TRANSACTION WRITES
-                // -------------------------------------------------------
-                console.log("\n🔧 Processing dissolution logic...");
-
-                // 1. Handle Registration (Normalize Survivor or Delete)
+                // E. writes
                 if (survivorId) {
-                    console.log("   📝 Normalizing survivor registration (survivor → solo player in P1 slot)");
                     transaction.update(regRef, {
-                        // Normalize Survivor to P1 Slot (always put survivor in P1 position)
                         playerId: survivorId,
                         fullNameP1: survivorName,
                         playerPhotoURL: survivorPhoto,
                         isPrimary: true,
-
-                        // Reset Team Status
-                        teamId: null, // Detach from dissolved team
-                        lookingForPartner: true, // Back to free agent market
+                        teamId: null,
+                        lookingForPartner: true,
                         partnerStatus: "NONE",
-                        status: regData.status, // Keep existing status (CONFIRMED/WAITLIST/PENDING)
-
-                        // Clear P2 Slot completely
+                        status: regData.status,
                         player2Id: null,
                         fullNameP2: null,
                         player2Confirmed: false,
                         player2PhotoURL: null,
                         invite: null,
-
-                        // Metadata
                         _debugSource: `useTeamDissolve - ${actionType} - Survivor Normalized`,
                         _lastUpdated: serverTimestamp()
                     });
                 } else {
-                    // Scenario 2: Captain Withdraws (No Survivor)
-                    console.log("   🗑️ No survivor - deleting registration completely");
                     transaction.delete(regRef);
                 }
 
-                // 2. Determine Slot Impact
+                // Impact analysis
                 const teamStatus = teamData.status;
                 let slotOpened = false;
                 let waitlistSpotFreed = false;
 
-                console.log("\n📊 Slot Management Analysis:");
-                console.log("   - Team Status:", teamStatus);
-                console.log("   - Action Type:", actionType);
-
-                // IMPORTANT: If Action was CANCEL (Scenario 3), the registration remains.
-                // Therefore, NO slot opens, even if the team was Pending.
-                // The Captain holds the slot.
                 if (actionType === "CANCEL") {
                     slotOpened = false;
                     waitlistSpotFreed = false;
-                    console.log("   ℹ️ CANCEL action - Captain keeps registration, no slot impact");
                 } else {
-                    // Normal logic for LEAVE/DECLINE
                     if (teamStatus === STATUS.CONFIRMED) {
                         slotOpened = true;
-                        console.log("   ✅ Confirmed team dissolved - slot opens!");
                     } else if (teamStatus === STATUS.WAITLIST) {
                         waitlistSpotFreed = true;
-                        slotOpened = false;
-                        console.log("   ✅ Waitlist team dissolved - waitlist spot freed!");
-                    } else if (teamStatus === STATUS.PENDING) {
-                        if (actionType === "DECLINE") {
-                            // PENDING team declined = no slot impact
-                            slotOpened = false;
-                            waitlistSpotFreed = false;
-                            console.log("   ℹ️ Pending team declined - no slot/waitlist impact");
-                        } else {
-                            // LEAVE from PENDING (rare but possible)
-                            slotOpened = false;
-                            waitlistSpotFreed = false;
-                            console.log("   ℹ️ Pending team left - no slot/waitlist impact");
-                        }
                     }
                 }
 
-                console.log("   - Slot Opened?", slotOpened);
-                console.log("   - Waitlist Freed?", waitlistSpotFreed);
-
-                // 3. Handle Event Counts & Waitlist Promotion
                 if (slotOpened) {
-                    console.log("\n🎯 Processing slot opening...");
-
-                    // CHECK: Do we have valid candidate snapshots from our optimistic reads?
                     if (candTeamSnap && candTeamSnap.exists() && candRegSnap && candRegSnap.exists()) {
-                        console.log("   🔄 Attempting to promote waitlist candidate...");
-
                         const candData = candTeamSnap.data();
-                        const candTeamRef = candTeamSnap.ref;
-                        const candRegRef = candRegSnap.ref;
+                        transaction.update(candTeamSnap.ref, { status: STATUS.CONFIRMED, promotedAt: serverTimestamp() });
+                        transaction.update(candRegSnap.ref, { status: STATUS.CONFIRMED, waitlistPosition: null, promotedAt: serverTimestamp() });
+                        transaction.update(eventRef, { waitlistCount: Math.max(0, (eventData.waitlistCount || 0) - 1) });
 
-                        console.log("   ✅ Promoting team to CONFIRMED");
-                        console.log("      - Team ID:", candTeamSnap.id);
-                        console.log("      - P1:", candData.player1Id);
-                        console.log("      - P2:", candData.player2Id || "None");
-
-                        // EXECUTE PROMOTION
-                        transaction.update(candTeamRef, {
-                            status: STATUS.CONFIRMED,
-                            promotedAt: serverTimestamp()
-                        });
-
-                        transaction.update(candRegRef, {
-                            status: STATUS.CONFIRMED,
-                            waitlistPosition: null,
-                            promotedAt: serverTimestamp()
-                        });
-
-                        // Update Event Counts (Waitlist down, Registrations stay same - swap)
-                        const currentWaitlist = eventData.waitlistCount || 0;
-                        transaction.update(eventRef, {
-                            waitlistCount: Math.max(0, currentWaitlist - 1)
-                        });
-
-                        console.log("   📊 Event Waiting list counts updated:");
-                        console.log("      - Waitlist:", currentWaitlist, "→", Math.max(0, currentWaitlist - 1));
-                        console.log("      - Registrations: unchanged (1 out, 1 in = swap)");
-
-                        // Notify Promoted P1 (Captain)
-                        console.log("   📧 Sending promotion notifications...");
+                        // Notifications
                         const p1NotifRef = doc(collection(db, "notifications"));
                         transaction.set(p1NotifRef, {
                             notificationId: p1NotifRef.id,
@@ -404,9 +305,6 @@ export const useTeamDissolve = () => {
                             read: false,
                             createdAt: serverTimestamp()
                         });
-                        console.log("      - ✅ Notified P1:", candData.player1Id);
-
-                        // Notify Promoted P2 (Partner) if exists
                         if (candData.player2Id) {
                             const p2NotifRef = doc(collection(db, "notifications"));
                             transaction.set(p2NotifRef, {
@@ -419,46 +317,21 @@ export const useTeamDissolve = () => {
                                 read: false,
                                 createdAt: serverTimestamp()
                             });
-                            console.log("      - ✅ Notified P2:", candData.player2Id);
                         }
                     } else {
-                        // No valid candidate found or candidate data missing
-                        console.log("   ℹ️ No waitlist candidates or candidate data invalid, opening slot to public");
-                        const currentRegs = eventData.registrationsCount || 0;
-                        transaction.update(eventRef, {
-                            registrationsCount: Math.max(0, currentRegs - 1)
-                        });
-                        console.log("   📊 Registrations:", currentRegs, "→", Math.max(0, currentRegs - 1));
+                        transaction.update(eventRef, { registrationsCount: Math.max(0, (eventData.registrationsCount || 0) - 1) });
                     }
                 } else if (waitlistSpotFreed) {
-                    console.log("\n📉 Freeing waitlist spot...");
-                    const currentWaitlist = eventData.waitlistCount || 0;
-                    transaction.update(eventRef, {
-                        waitlistCount: Math.max(0, currentWaitlist - 1)
-                    });
-                    console.log("   📊 Waitlist:", currentWaitlist, "→", Math.max(0, currentWaitlist - 1));
+                    transaction.update(eventRef, { waitlistCount: Math.max(0, (eventData.waitlistCount || 0) - 1) });
                 }
 
-                // 4. Cleanup & Notifications
-                console.log("\n🧹 Cleanup operations...");
-
-                // Delete the team document
                 transaction.delete(teamRef);
-                console.log("   ✅ Team deleted:", teamId);
-
-                // Mark originating notification as read
                 if (notificationId) {
                     transaction.update(doc(db, "notifications", notificationId), { read: true });
-                    console.log("   ✅ Notification marked as read:", notificationId);
                 }
 
-                // -------------------------------------------------------
-                // SCENARIO-BASED NOTIFICATIONS
-                // -------------------------------------------------------
-
-                // Scenario 3 (CANCEL): Notify P2 (The victim of cancellation)
+                // Dynamic Notifications
                 if (actionType === "CANCEL" && teamData.player2Id) {
-                    console.log("   📧 Notifying cancelled partner...");
                     const notifRef = doc(collection(db, "notifications"));
                     transaction.set(notifRef, {
                         notificationId: notifRef.id,
@@ -470,12 +343,9 @@ export const useTeamDissolve = () => {
                         read: false,
                         createdAt: serverTimestamp()
                     });
-                    console.log("   ✅ Cancelled partner notified:", teamData.player2Id);
                 }
 
-                // Scenario 2 (WITHDRAW - LEAVE with no survivor): Notify P2 (if exists)
                 if (actionType === "LEAVE" && !survivorId && teamData.player2Id) {
-                    console.log("   📧 Notifying partner about withdrawal...");
                     const notifRef = doc(collection(db, "notifications"));
                     transaction.set(notifRef, {
                         notificationId: notifRef.id,
@@ -487,48 +357,32 @@ export const useTeamDissolve = () => {
                         read: false,
                         createdAt: serverTimestamp()
                     });
-                    console.log("   ✅ Partner notified about withdrawal:", teamData.player2Id);
                 }
 
-                // Scenario 1 (DECLINE) and Scenario 4,5,6 (LEAVE with survivor): Notify Survivor
                 if ((actionType === "DECLINE" || actionType === "LEAVE") && survivorId) {
-                    console.log("   📧 Notifying survivor...");
                     const replyNotifRef = doc(collection(db, "notifications"));
-
-                    const title = actionType === "DECLINE"
-                        ? "Invitation Declined"
-                        : "Partner Left";
-
-                    const msg = actionType === "DECLINE"
-                        ? `${currentUser.displayName || currentUser.fullName || "Your partner"} declined the team invitation. You're now a free agent looking for a partner.`
-                        : `${currentUser.displayName || currentUser.fullName || "Your partner"} left the team. You're now a free agent looking for a partner.`;
-
                     transaction.set(replyNotifRef, {
                         notificationId: replyNotifRef.id,
                         userId: survivorId,
-                        type: actionType === "DECLINE"
-                            ? NOTIFICATION_TYPE.PARTNER_DECLINED
-                            : NOTIFICATION_TYPE.SYSTEM,
-                        title: title,
-                        message: msg,
+                        type: actionType === "DECLINE" ? NOTIFICATION_TYPE.PARTNER_DECLINED : NOTIFICATION_TYPE.SYSTEM,
+                        title: actionType === "DECLINE" ? "Invitation Declined" : "Partner Left",
+                        message: actionType === "DECLINE"
+                            ? `${currentUser.displayName || currentUser.fullName || "Your partner"} declined the team invitation. You're now a free agent looking for a partner.`
+                            : `${currentUser.displayName || currentUser.fullName || "Your partner"} left the team. You're now a free agent looking for a partner.`,
                         eventId: eventId,
                         read: false,
                         createdAt: serverTimestamp()
                     });
-                    console.log("   ✅ Survivor notified:", survivorId);
                 }
-
-                console.log("\n✅ Transaction completed successfully!");
             });
 
-            console.log("\n🎉 Team dissolution completed successfully!");
             if (onSuccess) onSuccess();
 
         } catch (err: unknown) {
             console.error("\n❌ Dissolve Error:", err);
             const errorMessage = err instanceof Error ? err.message : "Failed to dissolve team.";
             setError(errorMessage);
-            throw err; // Re-throw for UI error handling
+            throw err;
         } finally {
             setLoading(false);
         }

@@ -2,71 +2,51 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // --- HELPER FUNCTIONS ---
-    
-    // 1. Check for Admin (using the Custom Claim we relied on earlier)
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
 
-    // 2. Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // 3. Check if user owns the resource (by UID in path)
     function isOwner(userId) {
       return request.auth != null && request.auth.uid == userId;
     }
 
-    // 4. Validate Image Type (Must be an image)
     function isImage() {
       return request.resource.contentType.matches('image/.*');
     }
 
-    // 5. Validate Size (Max 5MB)
     function isSmallEnough() {
       return request.resource.size < 5 * 1024 * 1024;
     }
 
-    // --- PUBLIC ASSETS (Events & Clubs) ---
-    
-    // Events: Public Read, Admin Write
     match /events/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
 
-    // Clubs: Public Read, Admin Write
     match /club-pictures/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
 
-    // --- USER PROFILE PICTURES ---
-    
-    // Profile Pictures: User can upload their own, anyone authenticated can read
     match /profile-pictures/{userId}/{allPaths=**} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isImage() && isSmallEnough();
     }
 
-    // Alternative path for user avatars
     match /users/{userId}/avatar/{fileName} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isImage() && isSmallEnough();
     }
 
-    // --- USER UPLOADS (General) ---
-    
-    // Users can upload files to their own folder
     match /user-uploads/{userId}/{allPaths=**} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isImage() && isSmallEnough();
     }
 
-    // --- MEDIA LIBRARY (Public assets managed by admins) ---
-    
     match /media/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
