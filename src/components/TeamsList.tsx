@@ -88,10 +88,10 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                     <p className="truncate text-white font-medium hidden sm:block">{team.player1?.displayName} & {team.player2?.displayName}</p>
                                 </div>
                             </div>
-                            <Badge className="bg-green-600 text-white shrink-0"><Check className="w-3 h-3 h-3 mr-1" /><span className="hidden sm:inline">Confirmed</span></Badge>
+                            <Badge className="bg-green-600 text-white shrink-0"><Check className="size-3 mr-1" /><span className="hidden sm:inline">Confirmed</span></Badge>
                         </div>
                         {currentUser && (team.player1Id === currentUser.uid || team.player2Id === currentUser.uid) && (
-                            <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleLeaveTeam(team.teamId)}><LogOut className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => handleLeaveTeam(team.teamId)}><LogOut className="size-3" /></Button>
                         )}
                     </div>
                 ))}
@@ -100,14 +100,14 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
             {waitlistTeams.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-gray-800">
                     <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                        <span className="bg-orange-500/10 text-orange-500 p-1 rounded"><Hourglass className="w-4 h-4" /></span>
+                        <span className="bg-orange-500/10 text-orange-500 p-1 rounded"><Hourglass className="size-4" /></span>
                         Waitlist ({waitlistTeams.length})
                     </h3>
                     {waitlistTeams.map(team => (
                         <div key={team.teamId} className="bg-gray-950 border border-orange-500/30 rounded-xl p-4 flex justify-between items-center">
                             <p className="text-sm text-gray-300">{team.player1?.displayName} & {team.player2?.displayName}</p>
                             {currentUser && (team.player1Id === currentUser.uid || team.player2Id === currentUser.uid) && (
-                                <Button variant="ghost" size="icon" onClick={() => handleLeaveTeam(team.teamId)}><LogOut className="h-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleLeaveTeam(team.teamId)}><LogOut className="size-4" /></Button>
                             )}
                         </div>
                     ))}
@@ -117,7 +117,7 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
             {pendingTeams.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-gray-800">
                     <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                        <span className="bg-yellow-500/10 text-yellow-500 p-1 rounded"><Clock className="w-4 h-4" /></span>
+                        <span className="bg-yellow-500/10 text-yellow-500 p-1 rounded"><Clock className="size-4" /></span>
                         Pending ({pendingTeams.length})
                     </h3>
                     {pendingTeams.map(team => (
