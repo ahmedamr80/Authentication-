@@ -304,18 +304,11 @@ export const useTeamInvite = () => {
                         invite: inviteType,
                     });
                 } else if (inviteMode === "MERGE_P1") {
-                    if (!targetRegId) throw new Error("Missing target registration");
-                    const regRef = doc(db, "registrations", targetRegId);
-                    transaction.update(regRef, {
-                        isPrimary: false,
-                        player2Id: currentUser.uid,
-                        fullNameP2: senderName, // <--- Uses fetched name
-                        partnerStatus: "PENDING",
-                        teamId: teamId,
-                        _debugSource: "useTeamInvite Hook",
-                        lookingForPartner: true,
-                        invite: inviteType,
-                    });
+                    // MULTIPLE INVITES LOGIC:
+                    // We do NOT update the Free Agent's registration here.
+                    // This allows them to receive multiple invites (multiple Pending Teams).
+                    // Their registration remains "Looking for Partner" until they ACCEPT one.
+                    // useTeamAccept will handle linking the registration to the Accepted Team.
                 } else if (inviteMode === "MERGE_P2") {
                     if (!targetRegId) throw new Error("Missing target registration");
                     const regRef = doc(db, "registrations", targetRegId);

@@ -104,15 +104,41 @@ export const useTeamAccept = () => {
                 const isP2 = teamData.player2Id === currentUser.uid;
                 if (!isP1 && !isP2) throw new Error("Not a member.");
 
-                const regQuery = query(collection(db, "registrations"), where("teamId", "==", teamId));
-                const regSnap = await getDocs(regQuery);
-                if (regSnap.empty) throw new Error("No reg.");
-                const regRef = doc(db, "registrations", regSnap.docs[0].id);
+                let regQuery = query(collection(db, "registrations"), where("teamId", "==", teamId));
+                let regSnap = await getDocs(regQuery);
 
+                // Fallback: If not found by teamId (e.g. Free Agent with multiple invites), find by User ID + Event
+                if (regSnap.empty) {
+                    // Logic: If I am P1 in the team, check if I have a registration as P1 for this event
+                    if (isP1) {
+                        // Note: We need eventId from teamData, which is fetched below. 
+                        // But we can't query without eventId efficiently/safely if index missing?
+                        // Ideally we get eventId first. Let's reorder.
+                    }
+                }
+
+                // REORDERED LOGIC START
                 const eventRef = doc(db, "events", teamData.eventId);
                 const eventDoc = await transaction.get(eventRef);
                 if (!eventDoc.exists()) throw new Error("No event.");
                 const eventData = eventDoc.data();
+
+                if (regSnap.empty) {
+                    regQuery = query(collection(db, "registrations"),
+                        where("eventId", "==", teamData.eventId),
+                        where("playerId", "==", currentUser.uid),
+                        where("status", "in", ["CONFIRMED", "WAITLIST"]) // Only valid regs
+                    );
+                    regSnap = await getDocs(regQuery);
+
+                    // Also check if I am P2 in a registration? (Less likely for Accept, usually I am accepting AS P2, or AS P1 (Free Agent))
+                    // If I am Free Agent (MERGE_P1), I am P1 in the Team, and P1 in my Registration.
+                    // Logic holds.
+                }
+
+                if (regSnap.empty) throw new Error("No registration found for user.");
+                const regRef = doc(db, "registrations", regSnap.docs[0].id);
+                // REORDERED LOGIC END
 
                 const currentCount = eventData.registrationsCount || 0;
                 const slotsAvailable = eventData.slotsAvailable || 0;
