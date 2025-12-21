@@ -48,6 +48,24 @@
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
+
+    /* Native App Feel Fixes */
+    overscroll-behavior-y: none;
+    /* Disable pull-to-refresh */
+    touch-action: manipulation;
+    /* Instant taps */
+    -webkit-user-select: none;
+    user-select: none;
+    /* No accidental text selection */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Re-enable selection for interactive elements */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: auto;
+    user-select: auto;
   }
 }
 

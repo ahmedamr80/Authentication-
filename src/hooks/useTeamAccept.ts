@@ -172,11 +172,24 @@ export const useTeamAccept = () => {
 
                 const otherUserId = isP1 ? teamData.player2Id : teamData.player1Id;
                 if (otherUserId) {
+                    const eventDateFormatted = eventData.dateTime?.toDate().toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: '2-digit'
+                    }).replace(/\//g, '-') || 'dd-mm-yy';
+
                     const replyRef = doc(collection(db, "notifications"));
                     transaction.set(replyRef, {
-                        notificationId: replyRef.id, userId: otherUserId, type: NOTIFICATION_TYPE.PARTNER_ACCEPTED,
-                        title: "Team Confirmed!", message: `${accepterName} accepted your invite.`,
-                        fromUserId: currentUser.uid, eventId: teamData.eventId, teamId: teamId, read: false, createdAt: serverTimestamp()
+                        notificationId: replyRef.id,
+                        userId: otherUserId,
+                        type: NOTIFICATION_TYPE.PARTNER_ACCEPTED,
+                        title: "Team Confirmed!",
+                        message: `${accepterName} has accepted your invitation for ${eventData.eventName} on ${eventDateFormatted}, you now a team`,
+                        fromUserId: currentUser.uid,
+                        eventId: teamData.eventId,
+                        teamId: teamId,
+                        read: false,
+                        createdAt: serverTimestamp()
                     });
                 }
             });

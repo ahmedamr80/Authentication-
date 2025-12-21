@@ -165,8 +165,27 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                         });
                     }
                 }
-                // If unitType === "Teams", we do NOTHING to the counts here.
-                // The count will only increase when useTeamAccept confirms a full team.
+                // 4. Notification (Scenario 12)
+                const eventDateFormatted = event.dateTime.toDate().toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit'
+                }).replace(/\//g, '-');
+
+                const notifRef = doc(collection(db, "notifications"));
+                transaction.set(notifRef, {
+                    notificationId: notifRef.id,
+                    userId: user.uid,
+                    type: "system",
+                    title: "Registration Confirmed",
+                    message: `${commonData.fullNameP1}, you are registered for event ${event.eventName} on ${eventDateFormatted}`,
+                    eventId: event.eventId,
+                    eventName: event.eventName,
+                    eventDate: event.dateTime,
+                    read: false,
+                    createdAt: Timestamp.now(),
+                    _debugSource: "RegisterDialog Component"
+                });
             });
 
             showToast("Successfully registered!", "success");

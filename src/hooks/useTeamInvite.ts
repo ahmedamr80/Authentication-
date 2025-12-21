@@ -332,13 +332,19 @@ export const useTeamInvite = () => {
                 }
 
                 // E. Create Notification (Use targetUserId)
+                const eventDateFormatted = event.dateTime.toDate().toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit'
+                }).replace(/\//g, '-');
+
                 const notifRef = doc(collection(db, "notifications"));
                 transaction.set(notifRef, {
                     notificationId: notifRef.id,
                     userId: targetUserId, // Send to the correct target
                     type: "partner_invite",
                     title: "Team Request",
-                    message: `${senderName} wants to team up with you for ${event.eventName}`, // <--- Uses fetched name
+                    message: `${senderName} has invited you to ${event.eventName} on ${eventDateFormatted}`,
                     fromUserId: currentUser.uid,
                     eventId: event.eventId,
                     eventName: event.eventName,

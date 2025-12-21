@@ -117,13 +117,21 @@ export const useTeamDissolve = () => {
                 survivorId = currentUser.uid;
                 console.log("   🎯 CANCEL scenario: Actor (Captain) survives, invitation cancelled");
             }
-            // Scenario 2: Captain Withdraws from Pending (Action: LEAVE, Actor: P1, Status: PENDING)
+            // Scenario 3 & 6: Captain Withdraws from Pending (Action: LEAVE, Actor: P1, Status: PENDING)
             else if (actionType === "LEAVE" && currentRegData.status === "PENDING" && isP1) {
-                // Whole record deleted. No survivor.
-                survivorId = null;
-                console.log("   🎯 WITHDRAW scenario: No survivor - full deletion");
+                const inviteType = currentRegData.invite || "";
+
+                // SN 6: If it was a MERGE (Partner was already registered), P2 survives.
+                if (inviteType.startsWith("MERGE")) {
+                    survivorId = currentRegData.player2Id;
+                    console.log(`   🎯 MERGE scenario (SN 6): Partner (P2) was already registered, P2 survives`);
+                } else {
+                    // SN 3: FRESH invite, no separate registration for P2. Full delete.
+                    survivorId = null;
+                    console.log(`   🎯 FRESH scenario (SN 3): Partner not registered separately, full deletion`);
+                }
             }
-            // Scenario 4, 5, 6: Standard LEAVE (Confirmed/Waitlist/Partner Leaves)
+            // Scenario 4, 5, 7: Standard LEAVE (Confirmed/Waitlist/Partner Leaves)
             else if (actionType === "LEAVE") {
                 // Survivor is the *other* person
                 survivorId = isP1 ? currentRegData.player2Id : currentRegData.playerId;
@@ -286,6 +294,12 @@ export const useTeamDissolve = () => {
                     }
                 }
 
+                const eventDateFormatted = eventData.dateTime?.toDate().toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit'
+                }).replace(/\//g, '-') || 'dd-mm-yy';
+
                 if (slotOpened) {
                     if (candTeamSnap && candTeamSnap.exists() && candRegSnap && candRegSnap.exists()) {
                         const candData = candTeamSnap.data();
@@ -300,7 +314,7 @@ export const useTeamDissolve = () => {
                             userId: candData.player1Id,
                             type: NOTIFICATION_TYPE.SYSTEM,
                             title: "You're In! 🎉",
-                            message: `A slot opened up! Your team has been promoted to CONFIRMED for ${eventData.eventName}.`,
+                            message: `for Event ${eventData.eventName} on ${eventDateFormatted}, You're In! (Promoted)`,
                             eventId: eventId,
                             read: false,
                             createdAt: serverTimestamp()
@@ -312,7 +326,7 @@ export const useTeamDissolve = () => {
                                 userId: candData.player2Id,
                                 type: NOTIFICATION_TYPE.SYSTEM,
                                 title: "You're In! 🎉",
-                                message: `A slot opened up! Your team has been promoted to CONFIRMED for ${eventData.eventName}.`,
+                                message: `for Event ${eventData.eventName} on ${eventDateFormatted}, You're In! (Promoted)`,
                                 eventId: eventId,
                                 read: false,
                                 createdAt: serverTimestamp()
@@ -338,7 +352,7 @@ export const useTeamDissolve = () => {
                         userId: teamData.player2Id,
                         type: NOTIFICATION_TYPE.SYSTEM,
                         title: "Invitation Canceled",
-                        message: `${currentUser.displayName || currentUser.fullName || "The Captain"} canceled the invitation for ${eventData.eventName}.`,
+                        message: `for Event ${eventData.eventName} on ${eventDateFormatted}, Partner cancelled the invitation`,
                         eventId: eventId,
                         read: false,
                         createdAt: serverTimestamp()
@@ -352,7 +366,7 @@ export const useTeamDissolve = () => {
                         userId: teamData.player2Id,
                         type: NOTIFICATION_TYPE.SYSTEM,
                         title: "Team Cancelled",
-                        message: `${currentUser.displayName || currentUser.fullName || "Your partner"} withdrew the team application for ${eventData.eventName}.`,
+                        message: `for Event ${eventData.eventName} on ${eventDateFormatted}, Partner cancelled the invitation`, // Matches SN 3
                         eventId: eventId,
                         read: false,
                         createdAt: serverTimestamp()
@@ -367,8 +381,8 @@ export const useTeamDissolve = () => {
                         type: actionType === "DECLINE" ? NOTIFICATION_TYPE.PARTNER_DECLINED : NOTIFICATION_TYPE.SYSTEM,
                         title: actionType === "DECLINE" ? "Invitation Declined" : "Partner Left",
                         message: actionType === "DECLINE"
-                            ? `${currentUser.displayName || currentUser.fullName || "Your partner"} declined the team invitation. You're now a free agent looking for a partner.`
-                            : `${currentUser.displayName || currentUser.fullName || "Your partner"} left the team. You're now a free agent looking for a partner.`,
+                            ? `for Event ${eventData.eventName} on ${eventDateFormatted}, Partner declined... You're now a free agent.`
+                            : `for Event ${eventData.eventName} on ${eventDateFormatted}, Partner left... You're now a free agent.`,
                         eventId: eventId,
                         read: false,
                         createdAt: serverTimestamp()
