@@ -9,9 +9,12 @@ import {
     limit,
     doc,
     updateDoc,
+    deleteDoc,
     query,
     DocumentData,
+    writeBatch,
 } from "firebase/firestore";
+import { format } from "date-fns";
 import {
     Select,
     SelectContent,
@@ -22,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, Save, Bell, LogOut, Settings, User, Home, Calendar, Users } from "lucide-react";
+import { Loader2, Save, Bell, LogOut, Settings, User, Home, Calendar, Users, Trash2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -38,6 +41,7 @@ function DataManagerPage() {
     const [loading, setLoading] = useState(false);
     const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
     const [saving, setSaving] = useState<Record<string, boolean>>({});
+    const [deleting, setDeleting] = useState<Record<string, boolean>>({});
     const [filters, setFilters] = useState<Record<string, string>>({});
     const [filteredData, setFilteredData] = useState<DocumentData[]>([]);
     const { showToast } = useToast();
@@ -154,8 +158,104 @@ function DataManagerPage() {
         }
     };
 
+    const handleDelete = async (rowId: string) => {
+        if (!confirm("Are you sure you want to delete this record? This cannot be undone.")) return;
+
+        setDeleting((prev) => ({ ...prev, [rowId]: true }));
+        try {
+            await deleteDoc(doc(db, selectedCollection, rowId));
+
+            // Remove from local data
+            setData((prev) => prev.filter(d => d.id !== rowId));
+
+            showToast("Record deleted successfully", "success");
+        } catch (error) {
+            console.error("Error deleting document:", error);
+            showToast("Failed to delete record", "error");
+        } finally {
+            setDeleting((prev) => ({ ...prev, [rowId]: false }));
+        }
+    };
+
+    const handleSaveAll = async () => {
+        const editKeys = Object.keys(edits);
+        if (editKeys.length === 0) return;
+
+        setLoading(true);
+        try {
+            const batch = writeBatch(db);
+            const updatesMap: Record<string, Record<string, unknown>> = {};
+
+            editKeys.forEach(rowId => {
+                const rowEdits = edits[rowId];
+                const cleanUpdates: Record<string, unknown> = {};
+
+                Object.entries(rowEdits).forEach(([key, value]) => {
+                    if (typeof value === 'string') {
+                        if (value === "true") cleanUpdates[key] = true;
+                        else if (value === "false") cleanUpdates[key] = false;
+                        else if (!isNaN(Number(value)) && value.trim() !== "") cleanUpdates[key] = Number(value);
+                        else if (value.startsWith("{") || value.startsWith("[")) {
+                            try {
+                                cleanUpdates[key] = JSON.parse(value);
+                            } catch {
+                                cleanUpdates[key] = value;
+                            }
+                        }
+                        else cleanUpdates[key] = value;
+                    } else {
+                        cleanUpdates[key] = value;
+                    }
+                });
+
+                updatesMap[rowId] = cleanUpdates;
+                const docRef = doc(db, selectedCollection, rowId);
+                batch.update(docRef, cleanUpdates);
+            });
+
+            await batch.commit();
+
+            // Update local data
+            setData((prev) =>
+                prev.map((d) =>
+                    updatesMap[d.id] ? { ...d, ...updatesMap[d.id] } : d
+                )
+            );
+
+            // Clear all edits
+            setEdits({});
+            showToast("All changes saved successfully", "success");
+        } catch (error) {
+            console.error("Error saving batch:", error);
+            showToast("Failed to save batch changes", "error");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const formatValue = (val: unknown): string => {
         if (val === null || val === undefined) return "";
+
+        // Handle Firestore Timestamp-like objects (seconds/nanoseconds)
+        if (typeof val === 'object' && val !== null && 'seconds' in val) {
+            try {
+                const seconds = (val as any).seconds;
+                const nanoseconds = (val as any).nanoseconds || 0;
+                // Convert to Date
+                const date = new Date(seconds * 1000 + nanoseconds / 1000000);
+                return format(date, "dd-MMM-yyyy HH:mm:ss");
+            } catch {
+                return JSON.stringify(val);
+            }
+        }
+
+        // Handle Coordinates (lat/lng)
+        if (typeof val === 'object' && val !== null && 'lat' in val && 'lng' in val) {
+            const lat = (val as any).lat;
+            const lng = (val as any).lng;
+            return `lng:${lng},lat:${lat}`;
+        }
+
         if (typeof val === "object") return JSON.stringify(val);
         return String(val);
     };
@@ -273,7 +373,16 @@ function DataManagerPage() {
                 <div className="flex items-center justify-between">
                     <h1 className="text-3xl font-bold text-white">Data Manager</h1>
                     <div className="flex items-center gap-4">
-                        <Button variant="outline" onClick={handleExportCSV} disabled={data.length === 0} className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
+                        {Object.keys(edits).length > 0 && (
+                            <Button
+                                onClick={handleSaveAll}
+                                className="bg-green-600 hover:bg-green-700 text-white animate-in fade-in"
+                            >
+                                <Save className="h-4 w-4 mr-2" />
+                                Save All ({Object.keys(edits).length})
+                            </Button>
+                        )}
+                        <Button variant="outline" onClick={handleExportCSV} disabled={data.length === 0} className="border-gray-600 text-orange-500 hover:bg-orange-500 hover:text-white transition-colors">
                             <Save className="h-4 w-4 mr-2" />
                             Export CSV
                         </Button>
@@ -302,9 +411,9 @@ function DataManagerPage() {
                         <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                     </div>
                 ) : (
-                    <div className="rounded-md border border-gray-800 overflow-x-auto bg-gray-900">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-950 text-gray-300 uppercase font-medium border-b border-gray-800">
+                    <div className="rounded-md border border-gray-800 overflow-x-auto bg-gray-900 max-h-[70vh] overflow-y-auto">
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="bg-gray-950 text-gray-300 uppercase font-medium border-b border-gray-800 sticky top-0 z-20 shadow-md">
                                 <tr>
                                     <th className="px-4 py-3 min-w-[150px] align-top">
                                         <div className="flex flex-col gap-2">
@@ -330,7 +439,7 @@ function DataManagerPage() {
                                             </div>
                                         </th>
                                     ))}
-                                    <th className="px-4 py-3 sticky right-0 bg-gray-950 shadow-l align-top">
+                                    <th className="px-4 py-3 sticky right-0 bg-gray-950 z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.5)] min-w-[120px]">
                                         Actions
                                     </th>
                                 </tr>
@@ -362,24 +471,34 @@ function DataManagerPage() {
                                                     </td>
                                                 );
                                             })}
-                                            <td className="px-4 py-2 sticky right-0 bg-gray-900 shadow-l">
+                                            <td className="px-4 py-2 sticky right-0 bg-gray-900 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.5)] flex items-center gap-2">
                                                 {hasEdits && (
                                                     <Button
                                                         size="sm"
                                                         onClick={() => handleSave(row.id)}
                                                         disabled={isSaving}
-                                                        className="bg-orange-500 hover:bg-orange-600 text-white"
+                                                        className="h-8 w-8 p-0 bg-orange-500 hover:bg-orange-600 text-white"
                                                     >
                                                         {isSaving ? (
                                                             <Loader2 className="h-4 w-4 animate-spin" />
                                                         ) : (
-                                                            <>
-                                                                <Save className="h-4 w-4 mr-1" />
-                                                                Save
-                                                            </>
+                                                            <Save className="h-4 w-4" />
                                                         )}
                                                     </Button>
                                                 )}
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleDelete(row.id)}
+                                                    disabled={isSaving || deleting[row.id]}
+                                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                                >
+                                                    {deleting[row.id] ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="h-4 w-4" />
+                                                    )}
+                                                </Button>
                                             </td>
                                         </tr>
                                     );
