@@ -66,6 +66,9 @@ export default function MySchedulePage() {
 
                 regsSnap.forEach((doc) => {
                     const data = doc.data();
+                    // Filter out cancelled registrations immediately
+                    if (data.status === "CANCELLED") return;
+
                     if (!eventIds.has(data.eventId)) {
                         items.push({
                             id: data.eventId,
@@ -74,9 +77,7 @@ export default function MySchedulePage() {
                             role: "player",
                             registrationId: doc.id,
                         });
-                        if (data.status !== "CANCELLED") {
-                            eventIds.add(data.eventId);
-                        }
+                        eventIds.add(data.eventId);
                     }
                 });
 
@@ -92,6 +93,9 @@ export default function MySchedulePage() {
 
                 const processTeamDoc = (doc: DocumentData, isPlayer1: boolean) => {
                     const data = doc.data();
+                    // Filter out cancelled teams
+                    if (data.status === "CANCELLED") return;
+
                     if (eventIds.has(data.eventId)) return;
 
                     let myStatus = data.status;
