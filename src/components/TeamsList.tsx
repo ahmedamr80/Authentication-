@@ -123,7 +123,19 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                     {pendingTeams.map(team => (
                         <div key={team.teamId} className="bg-gray-950 border border-orange-500/30 rounded-xl p-4">
                             <div className="flex justify-between items-center mb-2">
-                                <p className="text-sm text-white">{team.player1?.displayName} invited {team.player2?.displayName}</p>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex -space-x-2">
+                                        <Avatar className="h-8 w-8 border-2 border-gray-950">
+                                            <AvatarImage src={team.player1?.photoURL} />
+                                            <AvatarFallback>{team.player1?.displayName?.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                        <Avatar className="h-8 w-8 border-2 border-gray-950">
+                                            <AvatarImage src={team.player2?.photoURL} />
+                                            <AvatarFallback>{team.player2?.displayName?.charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                    </div>
+                                    <p className="text-sm text-white">{team.player1?.displayName} invited {team.player2?.displayName}</p>
+                                </div>
                                 <Badge variant="outline" className="text-yellow-500">Pending</Badge>
                             </div>
                             {currentUser?.uid === team.player2Id && !team.player2Confirmed && (
