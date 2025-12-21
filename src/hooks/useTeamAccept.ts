@@ -7,6 +7,7 @@ import {
     query,
     where,
     getDocs,
+    getDoc,
     serverTimestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -37,7 +38,7 @@ interface OrphanRegData {
     regId: string;
     playerId: string;
     fullNameP1?: string;
-    playerPhotoURL?: string | null;
+    // playerPhotoURL?: string | null;
     status: string;
 }
 
@@ -57,6 +58,40 @@ export const useTeamAccept = () => {
         try {
             console.log("🚀 Starting Team Accept Process");
             const accepterName = await fetchPlayerName(currentUser.uid, currentUser.displayName);
+
+            // Phase 1.0: Fetch target team to get eventId (needed to find Solo Reg)
+            const targetTeamRef = doc(db, "teams", teamId);
+            const targetTeamSnap = await getDocs(query(collection(db, "teams"), where("__name__", "==", teamId))); // using query to avoid reading if not exists? No, getDoc is fine but we want to fail fast if needed. Actually getDoc is better.
+            const targetTeamDoc = await getDoc(targetTeamRef);
+
+            let soloRegToDeleteId: string | null = null;
+            let targetEventId: string | null = null;
+
+            if (targetTeamDoc.exists()) {
+                const data = targetTeamDoc.data();
+                targetEventId = data.eventId;
+
+                // Check for "Old Life" Solo Registration (Reg B)
+                // Where I am the Primary Player (playerId == me) for this Event
+                const soloRegQuery = query(
+                    collection(db, "registrations"),
+                    where("eventId", "==", targetEventId),
+                    where("playerId", "==", currentUser.uid)
+                );
+                const soloRegSnap = await getDocs(soloRegQuery);
+
+                if (!soloRegSnap.empty) {
+                    // We found a registration where I am Primary.
+                    // Verify it's not the one linked to the team (unlikely in Scenario 11, but possible if MERGE_P1 swapped roles?)
+                    // in Scenario 11: Reg A (Team) has me as P2. Reg B (Solo) has me as P1.
+                    // So if I find a Reg where I am P1, it's likely the Solo one I want to nuke.
+                    const soloDoc = soloRegSnap.docs[0];
+                    if (soloDoc.data().teamId !== teamId) {
+                        soloRegToDeleteId = soloDoc.id;
+                        console.log("   🎯 Found Solo Registration to Cleanup:", soloRegToDeleteId);
+                    }
+                }
+            }
 
             // Phase 1: Pre-fetch Orphan Teams
             const otherPendingTeamsQuery = query(
@@ -86,7 +121,7 @@ export const useTeamAccept = () => {
                             regId: regSnap.docs[0].id,
                             playerId: regData.playerId,
                             fullNameP1: regData.fullNameP1,
-                            playerPhotoURL: regData.playerPhotoURL,
+                            // playerPhotoURL: regData.playerPhotoURL,
                             status: regData.status
                         });
                     }
@@ -172,6 +207,10 @@ export const useTeamAccept = () => {
                 transaction.update(teamRef, teamUpdates);
                 transaction.update(regRef, regUpdate);
 
+                if (soloRegToDeleteId) {
+                    transaction.delete(doc(db, "registrations", soloRegToDeleteId));
+                }
+
                 // Cleanup Orphans
                 for (const team of teamsToCleanup) {
                     transaction.delete(doc(db, "teams", team.teamId));
@@ -186,9 +225,10 @@ export const useTeamAccept = () => {
                 for (const reg of orphanRegData) {
                     transaction.update(doc(db, "registrations", reg.regId), {
                         teamId: null, lookingForPartner: true, partnerStatus: "NONE",
-                        player2Id: null, fullNameP2: null, player2Confirmed: false, player2PhotoURL: null, invite: null,
-                        fullNameP1: reg.fullNameP1 ?? null, playerPhotoURL: reg.playerPhotoURL ?? null, status: reg.status ?? STATUS.PENDING,
-                        _lastUpdated: serverTimestamp()
+                        player2Id: null, fullNameP2: null, player2Confirmed: false, //player2PhotoURL: null, 
+                        invite: null,
+                        _debugSource: "useTeamAccept Hook - Orphan Cleanup", _lastUpdated: serverTimestamp()
+                        //  fullNameP1: reg.fullNameP1 ?? null, playerPhotoURL: reg.playerPhotoURL ?? null, status: reg.status ?? STATUS.PENDING,
                     });
                 }
 

@@ -108,7 +108,7 @@ service cloud.firestore {
     
     // --- NOTIFICATIONS ---
     match /notifications/{notificationId} {
-      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
     }
     // --- COUNTERS ---

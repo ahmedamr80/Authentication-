@@ -6,7 +6,8 @@ import {
     Timestamp,
     query,
     where,
-    getDocs
+    getDocs,
+    serverTimestamp
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { User } from "firebase/auth";
@@ -129,7 +130,8 @@ export const useTeamInvite = () => {
                 registrationsRef,
                 where("eventId", "==", event.eventId),
                 where("playerId", "==", partner.uid),
-                where("status", "==", "CONFIRMED")
+                where("status", "==", "CONFIRMED"),
+                where("partnerStatus", "==", "CONFIRMED")
             );
 
             // Check D: is the partner the "Secondary Player" (P2) in any confirmed registration?
@@ -137,7 +139,7 @@ export const useTeamInvite = () => {
                 registrationsRef,
                 where("eventId", "==", event.eventId),
                 where("player2Id", "==", partner.uid),
-                where("status", "==", "CONFIRMED")
+                where("partnerStatus", "==", "CONFIRMED")
             );
 
             // Execute partner checks
@@ -159,6 +161,33 @@ export const useTeamInvite = () => {
                 getDocs(fifthCheck)
             ]);
 
+            // Check F: Is the partner in a PENDING team (either as P1 or P2) in the TEAMS collection?
+            // "your code should check if the potential partner (player2) is already in a Pending Team in the TEAMS collection."
+            const teamsRef = collection(db, "teams");
+
+            const pendingTeamP1Check = query(
+                teamsRef,
+                where("eventId", "==", event.eventId),
+                where("player1Id", "==", partner.uid),
+                where("status", "==", "PENDING")
+            );
+
+            const pendingTeamP2Check = query(
+                teamsRef,
+                where("eventId", "==", event.eventId),
+                where("player2Id", "==", partner.uid),
+                where("status", "==", "PENDING")
+            );
+
+            const [pendingTeamP1Snap, pendingTeamP2Snap] = await Promise.all([
+                getDocs(pendingTeamP1Check),
+                getDocs(pendingTeamP2Check)
+            ]);
+            console.log("Pending team queries outcome:", {
+                partnerAsP1Pending: !pendingTeamP1Snap.empty,
+                partnerAsP2Pending: !pendingTeamP2Snap.empty
+            });
+
             // ---------------------------------------------------------
             // 4. DETERMINE INVITE MODE & VALIDATE PARTNER
             // ---------------------------------------------------------
@@ -176,7 +205,7 @@ export const useTeamInvite = () => {
                 throw new Error("Your partner is already registered in a team.");
             }
 
-            // Priority 2: Partner is Confirmed P1 -> Are they looking?
+            // Priority 2: Partner is Confirmed OR Pending P1 -> Are they looking?
             if (!thirdSnap.empty) {
                 const doc = thirdSnap.docs[0];
                 const data = doc.data();
@@ -190,8 +219,50 @@ export const useTeamInvite = () => {
                     throw new Error("Your partner is already registered and not looking for a teammate.");
                 }
             }
+            // Priority 2b: Partner is in a PENDING Team (as P1 or P2)
+            else if (!pendingTeamP1Snap.empty || !pendingTeamP2Snap.empty) {
+                // If they are in a pending team, they are generally "busy" waiting for someone,
+                // UNLESS they are explicitly marked as "lookingForPartner" (which means they are open to other offers).
+                // However, TEAMS collection doesn't have "lookingForPartner". Registrations do.
+                // We checked "registrations" in fifthCheck (P2) and thirdCheck (P1 Confirmed). 
+                // We need to know if they have a REGISTRATION corresponding to this Team that says "looking".
+
+                // Simplified Logic: 
+                // IF they are P1 in a Pending Team -> They initiated. Check if they are still looking?
+                // IF they are P2 in a Pending Team -> They received. Check if they accepted? (If accepted -> Confirmed. If PENDING -> pending).
+
+                // If they are P1 in Pending Team:
+                if (!pendingTeamP1Snap.empty) {
+                    // They are waiting for someone. We allow efficient "poaching" ONLY if we assume they are open.
+                    // But usually creating a team makes you "Pending" and not "Looking" generally?
+                    // Actually, if I create a team "Me + You", I am Pending. I am NOT looking for anyone else.
+                    // So I should be BLOCKED from receiving invites?
+                    // USER SAID: "if partner is already registered in a Team with status confirmed or waitlist ... if no allow invites"
+                    // So PENDING teams should be IGNORED/ALLOWED.
+
+                    // So we treat this as MERGE_P1 logic usually?
+                    // But we need a target registration to merge into.
+                    // If they are P1 of a pending team, they likely have a corresponding PENDING registration.
+                    // Let's try to find it.
+                    const p1RegQuery = query(registrationsRef, where("teamId", "==", pendingTeamP1Snap.docs[0].id), where("playerId", "==", partner.uid));
+                    const p1RegSnap = await getDocs(p1RegQuery);
+                    if (!p1RegSnap.empty) {
+                        inviteMode = "MERGE_P1";
+                        targetRegId = p1RegSnap.docs[0].id;
+                    }
+                    // If no registration found, it's a loose invite. We can treat as FRESH or MERGE (safe to defaults).
+                }
+                else if (!pendingTeamP2Snap.empty) {
+                    // They are P2 in a Pending Team.
+                    // If they have a "lookingForPartner" registration (fifthCheck), we catch it in Priority 3.
+                    // If they DON'T have a registration (loose invite), we can treat as FRESH.
+                }
+
+                // Fallback: If we didn't catch specific registration above, we allow it (FRESH) or let Priority 3 catch it.
+            }
+
             // Priority 3: Partner is Pending P2 (Orphan P2) -> Are they looking?
-            else if (!fifthSnap.empty) {
+            if (!fifthSnap.empty) {
                 const doc = fifthSnap.docs[0];
                 inviteMode = "MERGE_P2";
                 targetRegId = doc.id;
@@ -228,14 +299,16 @@ export const useTeamInvite = () => {
                     inviteType = "FILL_P2";
                     targetUserId = p2Id; // Notification goes to P2
                 } else if (inviteMode === "MERGE_P1") {
-                    p1Id = partner.uid;
-                    p2Id = currentUser.uid;
-                    p1Name = partner.displayName;
-                    p2Name = senderName; // <--- Uses fetched name
-                    p1Confirmed = false; // P1 must accept the request (Target)
-                    p2Confirmed = true;  // You initiated it (Initiator)
+                    // CHANGED: Even if they are P1 in their registration, 
+                    // in this NEW Team Invite, I am P1 because I am the Initiator.
+                    p1Id = currentUser.uid;
+                    p2Id = partner.uid;
+                    p1Name = senderName;
+                    p2Name = partner.displayName;
+                    p1Confirmed = true;  // I am confirmed (Inviter)
+                    p2Confirmed = false; // Partner must accept (Target)
                     inviteType = "MERGE_P1";
-                    targetUserId = p1Id; // Notification goes to P1
+                    targetUserId = p2Id; // Notification goes to P2 (The Partner)
                 } else if (inviteMode === "MERGE_P2") {
                     p1Id = currentUser.uid;
                     p2Id = partner.uid;
@@ -283,7 +356,7 @@ export const useTeamInvite = () => {
                         fullNameP1: p1Name, // The fetched sender name
                         fullNameP2: p2Name, // The partner name
                         teamId: teamId,
-                        status: "PENDING",
+                        status: "CONFIRMED",
                         partnerStatus: "PENDING",
                         isPrimary: true,
                         invite: inviteType,
@@ -305,10 +378,49 @@ export const useTeamInvite = () => {
                     });
                 } else if (inviteMode === "MERGE_P1") {
                     // MULTIPLE INVITES LOGIC:
-                    // We do NOT update the Free Agent's registration here.
-                    // This allows them to receive multiple invites (multiple Pending Teams).
-                    // Their registration remains "Looking for Partner" until they ACCEPT one.
-                    // useTeamAccept will handle linking the registration to the Accepted Team.
+                    // We need to create a registration for ME (The Inviter, P1) because I am "New" to the event (or at least not the one holding the Free Agent spot).
+                    // We do NOT update the Free Agent's (P2) registration here. They stay "Looking" until they accept.
+
+                    // Optimization: Update existing registration instead of delete + create
+                    // This is safer and cleaner for Firebase transactions.
+                    if (myExistingRegId) {
+                        const existingRegRef = doc(db, "registrations", myExistingRegId);
+                        transaction.update(existingRegRef, {
+                            // Core Team Data
+                            teamId: teamId,
+                            player2Id: partner.uid,
+                            fullNameP2: partner.displayName,
+
+                            // Status Updates
+                            status: "CONFIRMED", // Inviter is CONFIRMED per scenarios.json
+                            partnerStatus: "PENDING",
+                            invite: inviteType,
+                            lookingForPartner: false, // I am waiting for this specific person
+
+                            // Metadata
+                            _debugSource: "useTeamInvite - MERGE_P1 (Updated)",
+                            _lastUpdated: serverTimestamp()
+                        });
+                    } else {
+                        // Create New Registration if I didn't have one
+                        const regRef = doc(collection(db, "registrations"));
+                        transaction.set(regRef, {
+                            registrationId: regRef.id,
+                            eventId: event.eventId,
+                            playerId: currentUser.uid,
+                            player2Id: partner.uid,
+                            fullNameP1: senderName,
+                            fullNameP2: partner.displayName,
+                            teamId: teamId,
+                            status: "CONFIRMED", // Inviter is CONFIRMED per scenarios.json
+                            partnerStatus: "PENDING",
+                            isPrimary: true,
+                            invite: inviteType,
+                            lookingForPartner: false,
+                            _debugSource: "useTeamInvite - MERGE_P1 (New)",
+                            registeredAt: Timestamp.now()
+                        });
+                    }
                 } else if (inviteMode === "MERGE_P2") {
                     if (!targetRegId) throw new Error("Missing target registration");
                     const regRef = doc(db, "registrations", targetRegId);

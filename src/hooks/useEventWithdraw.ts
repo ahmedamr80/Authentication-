@@ -105,7 +105,11 @@ export const useEventWithdraw = () => {
                     // A. Cancel the User's Registration
                     transaction.update(regRef, {
                         status: "CANCELLED",
-                        cancelledAt: Timestamp.now()
+                        cancelledAt: Timestamp.now(),
+                        isPrimary: false,
+                        lookingForPartner: false,
+                        _debugSource: "useEventWithdraw Hook - Cancel the User's Registration"
+
                     });
 
                     // B. Handle Counts & Promotion

@@ -32,7 +32,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 
-const COLLECTIONS = ["users", "events", "registrations", "clubs", "teams"];
+const COLLECTIONS = ["users", "events", "registrations", "clubs", "teams", "notifications"];
 
 function DataManagerPage() {
     const [selectedCollection, setSelectedCollection] = useState<string>("users");
@@ -44,6 +44,8 @@ function DataManagerPage() {
     const [deleting, setDeleting] = useState<Record<string, boolean>>({});
     const [filters, setFilters] = useState<Record<string, string>>({});
     const [filteredData, setFilteredData] = useState<DocumentData[]>([]);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
     const { showToast } = useToast();
     const router = useRouter();
     const { user } = useAuth();
@@ -72,8 +74,10 @@ function DataManagerPage() {
 
     const fetchData = async (collName: string) => {
         setLoading(true);
+        setData([]);
         setEdits({});
         setFilters({});
+        setSelectedIds(new Set());
         try {
             const q = query(collection(db, collName), limit(100));
             const querySnapshot = await getDocs(q);
@@ -233,6 +237,58 @@ function DataManagerPage() {
         }
     };
 
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredData.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredData.map(d => d.id)));
+        }
+    };
+
+    const toggleSelectRow = (id: string) => {
+        const newSelected = new Set(selectedIds);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedIds(newSelected);
+    };
+
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return;
+        if (!confirm(`Are you sure you want to delete ${selectedIds.size} records? This cannot be undone.`)) return;
+
+        setIsBulkDeleting(true);
+        try {
+            const batchArray = [];
+            const idsList = Array.from(selectedIds);
+            const chunkSize = 500;
+
+            for (let i = 0; i < idsList.length; i += chunkSize) {
+                const chunk = idsList.slice(i, i + chunkSize);
+                const batch = writeBatch(db);
+                chunk.forEach(id => {
+                    batch.delete(doc(db, selectedCollection, id));
+                });
+                batchArray.push(batch.commit());
+            }
+
+            await Promise.all(batchArray);
+
+            // Update local state
+            setData(prev => prev.filter(d => !selectedIds.has(d.id)));
+            setSelectedIds(new Set());
+            showToast(`Successfully deleted ${idsList.length} records`, "success");
+
+        } catch (error) {
+            console.error("Error performing bulk delete:", error);
+            showToast("Failed to perform bulk delete", "error");
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
+
     const formatValue = (val: unknown): string => {
         if (val === null || val === undefined) return "";
 
@@ -371,7 +427,24 @@ function DataManagerPage() {
 
             <main className="pt-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-3xl font-bold text-white">Data Manager</h1>
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-3xl font-bold text-white">Data Manager</h1>
+                        {selectedIds.size > 0 && (
+                            <Button
+                                variant="destructive"
+                                onClick={handleBulkDelete}
+                                disabled={isBulkDeleting}
+                                className="animate-in fade-in"
+                            >
+                                {isBulkDeleting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                ) : (
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                Delete Selected ({selectedIds.size})
+                            </Button>
+                        )}
+                    </div>
                     <div className="flex items-center gap-4">
                         {Object.keys(edits).length > 0 && (
                             <Button
@@ -415,6 +488,16 @@ function DataManagerPage() {
                         <table className="w-full text-sm text-left border-collapse">
                             <thead className="bg-gray-950 text-gray-300 uppercase font-medium border-b border-gray-800 sticky top-0 z-20 shadow-md">
                                 <tr>
+                                    <th className="px-4 py-3 min-w-[50px] align-top bg-gray-950 z-20">
+                                        <div className="flex flex-col gap-2 items-center justify-start pt-1">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
+                                                checked={filteredData.length > 0 && selectedIds.size === filteredData.length}
+                                                onChange={toggleSelectAll}
+                                            />
+                                        </div>
+                                    </th>
                                     <th className="px-4 py-3 min-w-[150px] align-top">
                                         <div className="flex flex-col gap-2">
                                             <span>ID</span>
@@ -451,6 +534,14 @@ function DataManagerPage() {
 
                                     return (
                                         <tr key={row.id} className="hover:bg-gray-800/50 transition-colors">
+                                            <td className="px-4 py-2 text-center">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 rounded border-gray-700 bg-gray-900 text-orange-500 focus:ring-orange-500"
+                                                    checked={selectedIds.has(row.id)}
+                                                    onChange={() => toggleSelectRow(row.id)}
+                                                />
+                                            </td>
                                             <td className="px-4 py-2 font-mono text-xs text-gray-400">
                                                 {row.id}
                                             </td>
@@ -506,7 +597,7 @@ function DataManagerPage() {
                                 {filteredData.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={columns.length + 2}
+                                            colSpan={columns.length + 3}
                                             className="px-4 py-8 text-center text-gray-500"
                                         >
                                             No documents found.

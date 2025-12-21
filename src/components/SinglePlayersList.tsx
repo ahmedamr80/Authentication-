@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, UserPlus, Hand, MapPin } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useTeamInvite } from "@/hooks/useTeamInvite";
+import { Team } from "@/components/TeamsList";
 
 export interface SinglePlayer {
     registrationId: string;
@@ -24,10 +25,12 @@ export interface SinglePlayersListProps {
     currentUser: User | null;
     userRegistration?: Registration | null;
     players: SinglePlayer[];
+    teams?: Team[];
     loading: boolean;
+    onManageInvite?: (team: Team) => void;
 }
 
-export function SinglePlayersList({ event, currentUser, userRegistration, players, loading }: SinglePlayersListProps) {
+export function SinglePlayersList({ event, currentUser, userRegistration, players, teams = [], loading, onManageInvite }: SinglePlayersListProps) {
     const { showToast } = useToast();
     const { sendInvite, loading: inviteLoading } = useTeamInvite();
 
@@ -75,63 +78,87 @@ export function SinglePlayersList({ event, currentUser, userRegistration, player
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {players.map((player) => (
-                <div key={player.registrationId} className="bg-gray-900/80 backdrop-blur-sm border border-green-500/30 rounded-xl p-4 hover:border-green-500/50 transition-all group relative overflow-hidden">
-                    <div className="flex items-start gap-4">
-                        <Avatar className="h-12 w-12 border-2 border-gray-800">
-                            <AvatarImage src={player.photoURL} />
-                            <AvatarFallback className="bg-gray-800 text-gray-400">
-                                {player.displayName.charAt(0)}
-                            </AvatarFallback>
-                        </Avatar>
+            {players.map((player) => {
+                // Check if there is an existing interaction
+                const inviteSent = teams.find(t => t.player1Id === currentUser?.uid && t.player2Id === player.playerId && t.status === "PENDING");
+                const inviteReceived = teams.find(t => t.player1Id === player.playerId && t.player2Id === currentUser?.uid && t.status === "PENDING");
 
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                                <h4 className="text-base font-semibold text-white truncate pr-2">
-                                    {player.displayName}
-                                </h4>
-                                {player.playerSkillLevel && (
-                                    <Badge variant="secondary" className="bg-gray-800 text-gray-300 text-[10px] h-5">
-                                        {player.playerSkillLevel}
-                                    </Badge>
-                                )}
-                            </div>
+                return (
+                    <div key={player.registrationId} className="bg-gray-900/80 backdrop-blur-sm border border-green-500/30 rounded-xl p-4 hover:border-green-500/50 transition-all group relative overflow-hidden">
+                        <div className="flex items-start gap-4">
+                            <Avatar className="h-12 w-12 border-2 border-gray-800">
+                                <AvatarImage src={player.photoURL} />
+                                <AvatarFallback className="bg-gray-800 text-gray-400">
+                                    {player.displayName.charAt(0)}
+                                </AvatarFallback>
+                            </Avatar>
 
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {player.playerPosition && (
-                                    <div className="flex items-center text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
-                                        <MapPin className="w-3 h-3 mr-1 text-orange-500" />
-                                        {player.playerPosition}
-                                    </div>
-                                )}
-                                {player.playerHand && (
-                                    <div className="flex items-center text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
-                                        <Hand className="w-3 h-3 mr-1 text-blue-400" />
-                                        {player.playerHand}
-                                    </div>
-                                )}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                    <h4 className="text-base font-semibold text-white truncate pr-2">
+                                        {player.displayName}
+                                    </h4>
+                                    {player.playerSkillLevel && (
+                                        <Badge variant="secondary" className="bg-gray-800 text-gray-300 text-[10px] h-5">
+                                            {player.playerSkillLevel}
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {player.playerPosition && (
+                                        <div className="flex items-center text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
+                                            <MapPin className="w-3 h-3 mr-1 text-orange-500" />
+                                            {player.playerPosition}
+                                        </div>
+                                    )}
+                                    {player.playerHand && (
+                                        <div className="flex items-center text-xs text-gray-400 bg-gray-800/50 px-2 py-1 rounded">
+                                            <Hand className="w-3 h-3 mr-1 text-blue-400" />
+                                            {player.playerHand}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {currentUser && currentUser.uid !== player.playerId && event?.unitType === "Teams" && (
-                        (!userRegistration || userRegistration.lookingForPartner) &&
-                        (player.lookingForPartner || player.partnerStatus === "DENIED") && (
-                            <div className="mt-4 pt-4 border-t border-gray-800 flex justify-end">
-                                <Button
-                                    size="sm"
-                                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8"
-                                    onClick={() => handleInvite(player)}
-                                    disabled={inviteLoading}
-                                >
-                                    {inviteLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <UserPlus className="h-3 w-3 mr-1.5" />}
-                                    Invite to Team
-                                </Button>
-                            </div>
-                        )
-                    )}
-                </div>
-            ))}
+                        {currentUser && currentUser.uid !== player.playerId && event?.unitType === "Teams" && (
+                            (!userRegistration || userRegistration.lookingForPartner) &&
+                            (player.lookingForPartner || player.partnerStatus === "DENIED") && (
+                                <div className="mt-4 pt-4 border-t border-gray-800 flex justify-end">
+                                    {inviteSent ? (
+                                        <Button
+                                            size="sm"
+                                            className="bg-gray-800 text-gray-400 cursor-not-allowed text-xs h-8"
+                                            disabled={true}
+                                        >
+                                            Already Invited
+                                        </Button>
+                                    ) : inviteReceived ? (
+                                        <Button
+                                            size="sm"
+                                            className="bg-green-600 hover:bg-green-700 text-white text-xs h-8"
+                                            onClick={() => onManageInvite?.(inviteReceived)}
+                                        >
+                                            Respond to Invite
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8"
+                                            onClick={() => handleInvite(player)}
+                                            disabled={inviteLoading}
+                                        >
+                                            {inviteLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <UserPlus className="h-3 w-3 mr-1.5" />}
+                                            Invite to Team
+                                        </Button>
+                                    )}
+                                </div>
+                            )
+                        )}
+                    </div>
+                )
+            })}
         </div>
     );
 }

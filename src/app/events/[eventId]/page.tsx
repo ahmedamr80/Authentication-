@@ -314,11 +314,11 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
                 // YOUR LOGIC: They are a "Single Player" if...
                 const explicitlyLooking = r.lookingForPartner === true;
-                const wasDenied = r.partnerStatus === 'DENIED'; // Partner said no, back to market
-                const isOrphan = !r.player2Id; // Registered alone, no invite sent/received
+                // const wasDenied = r.partnerStatus === 'DENIED'; // Partner said no, back to market
+                //const isOrphan = !r.player2Id; // Registered alone, no invite sent/received
 
                 // If any of these are true, show them in the list
-                return explicitlyLooking || wasDenied || isOrphan;
+                return explicitlyLooking //|| wasDenied || isOrphan;
             })
             .map(r => {
                 // Enrich with profile data
@@ -721,7 +721,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     currentUser={user}
                                     userRegistration={userRegistration}
                                     players={singlePlayers}
+                                    teams={teams}
                                     loading={false}
+                                    onManageInvite={handleManageInvite}
                                 />
                             </TabsContent>
                         </Tabs>
@@ -737,7 +739,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     currentUser={user}
                                     userRegistration={userRegistration}
                                     players={confirmedPlayers}
+                                    teams={teams}
                                     loading={false}
+                                    onManageInvite={handleManageInvite}
                                 />
                             </div>
 
@@ -752,7 +756,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                         currentUser={user}
                                         userRegistration={userRegistration}
                                         players={waitlistPlayers}
+                                        teams={teams}
                                         loading={false}
+                                        onManageInvite={handleManageInvite}
                                     />
                                 </div>
                             )}

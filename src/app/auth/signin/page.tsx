@@ -239,6 +239,7 @@ function SignInContent() {
                         fullName: data.fullName || shadowData.fullName || "",
                         registrationStatus: "active",
                         isShadow: false,
+                        isAdmin: false,
                         createdAt: shadowData.createdAt || serverTimestamp(),
                         claimedAt: serverTimestamp(),
                         previousUid: shadowUid
@@ -261,6 +262,8 @@ function SignInContent() {
                         fullName: data.fullName || "",
                         registrationStatus: "active",
                         createdBy: user.uid,
+                        isShadow: false,
+                        isAdmin: false,
                         createdAt: serverTimestamp(),
                     });
                 }
@@ -348,6 +351,7 @@ function SignInContent() {
                         fullName: user.displayName || shadowData.fullName || "",
                         photoUrl: user.photoURL || "",
                         isShadow: false,
+                        isAdmin: false,
                         registrationStatus: "active",
                         createdAt: shadowData.createdAt || serverTimestamp(),
                         claimedAt: serverTimestamp(),
@@ -366,6 +370,7 @@ function SignInContent() {
                         photoUrl: user.photoURL || "",
                         role: "player",
                         isShadow: false,
+                        isAdmin: false,
                         registrationStatus: "active",
                         createdBy: user.uid,
                         createdAt: serverTimestamp(),
