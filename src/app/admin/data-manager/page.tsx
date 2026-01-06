@@ -13,6 +13,7 @@ import {
     query,
     DocumentData,
     writeBatch,
+    Timestamp,
 } from "firebase/firestore";
 import { format } from "date-fns";
 import {
@@ -25,12 +26,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, Save, Bell, LogOut, Settings, User, Home, Calendar, Users, Trash2 } from "lucide-react";
+import { Loader2, Save, Bell, LogOut, Settings, User, Home, Calendar, Users, Trash2, RefreshCw, Calculator } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/lib/firebase";
 
 const COLLECTIONS = ["users", "events", "registrations", "clubs", "teams", "notifications"];
 
@@ -50,6 +53,8 @@ function DataManagerPage() {
     const router = useRouter();
     const { user } = useAuth();
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const [isCleaningUp, setIsCleaningUp] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     useEffect(() => {
         fetchData(selectedCollection);
@@ -113,6 +118,33 @@ function DataManagerPage() {
         }));
     };
 
+    const processInput = (key: string, value: unknown): unknown => {
+        if (typeof value === 'string') {
+            // Date deduction
+            const lowerKey = key.toLowerCase();
+            const isDateKey = lowerKey.includes("date") || lowerKey.includes("time") || lowerKey.endsWith("at");
+            if (isDateKey) {
+                const date = new Date(value);
+                if (!isNaN(date.getTime())) {
+                    return Timestamp.fromDate(date);
+                }
+            }
+
+            if (value === "true") return true;
+            if (value === "false") return false;
+            if (!isNaN(Number(value)) && value.trim() !== "") return Number(value);
+            if (value.startsWith("{") || value.startsWith("[")) {
+                try {
+                    return JSON.parse(value);
+                } catch {
+                    return value; // Fallback to string if invalid JSON
+                }
+            }
+            return value;
+        }
+        return value;
+    };
+
     const handleSave = async (rowId: string) => {
         const rowEdits = edits[rowId];
         if (!rowEdits) return;
@@ -121,22 +153,7 @@ function DataManagerPage() {
         try {
             const updates: Record<string, unknown> = {};
             Object.entries(rowEdits).forEach(([key, value]) => {
-                // Basic type inference
-                if (typeof value === 'string') {
-                    if (value === "true") updates[key] = true;
-                    else if (value === "false") updates[key] = false;
-                    else if (!isNaN(Number(value)) && value.trim() !== "") updates[key] = Number(value);
-                    else if (value.startsWith("{") || value.startsWith("[")) {
-                        try {
-                            updates[key] = JSON.parse(value);
-                        } catch {
-                            updates[key] = value; // Fallback to string if invalid JSON
-                        }
-                    }
-                    else updates[key] = value;
-                } else {
-                    updates[key] = value;
-                }
+                updates[key] = processInput(key, value);
             });
 
             await updateDoc(doc(db, selectedCollection, rowId), updates);
@@ -195,21 +212,7 @@ function DataManagerPage() {
                 const cleanUpdates: Record<string, unknown> = {};
 
                 Object.entries(rowEdits).forEach(([key, value]) => {
-                    if (typeof value === 'string') {
-                        if (value === "true") cleanUpdates[key] = true;
-                        else if (value === "false") cleanUpdates[key] = false;
-                        else if (!isNaN(Number(value)) && value.trim() !== "") cleanUpdates[key] = Number(value);
-                        else if (value.startsWith("{") || value.startsWith("[")) {
-                            try {
-                                cleanUpdates[key] = JSON.parse(value);
-                            } catch {
-                                cleanUpdates[key] = value;
-                            }
-                        }
-                        else cleanUpdates[key] = value;
-                    } else {
-                        cleanUpdates[key] = value;
-                    }
+                    cleanUpdates[key] = processInput(key, value);
                 });
 
                 updatesMap[rowId] = cleanUpdates;
@@ -315,6 +318,47 @@ function DataManagerPage() {
         if (typeof val === "object") return JSON.stringify(val);
         return String(val);
     };
+
+    const handleManualCleanup = async () => {
+        setIsCleaningUp(true);
+        try {
+            const cleanupFn = httpsCallable(functions, 'manualEventCleanup');
+            const result = await cleanupFn();
+            const data = result.data as { count: number, message: string };
+            showToast(`${data.message} (${data.count} updated)`, "success");
+            // Refresh data to show changes
+            await fetchData("events");
+        } catch (error) {
+            console.error("Cleanup failed:", error);
+            showToast("Failed to cleanup events", "error");
+        } finally {
+            setIsCleaningUp(false);
+        }
+    };
+
+    const handleSyncCounts = async () => {
+        setIsSyncing(true);
+        try {
+            const syncFn = httpsCallable(functions, 'recalculateEventCounts');
+            const result = await syncFn();
+            const data = result.data as { scanned: number, updated: number, details: string[] };
+
+            if (data.updated > 0) {
+                showToast(`Synced! Scanned ${data.scanned}, Fixed ${data.updated} events.`, "success");
+            } else {
+                showToast(`Sync Complete. Scanned ${data.scanned} events. All counts match.`, "success");
+            }
+
+            // Refresh data to show changes
+            await fetchData("events");
+        } catch (error) {
+            console.error("Sync failed:", error);
+            showToast("Failed to sync event counts", "error");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
 
     const handleExportCSV = () => {
         if (data.length === 0) {
@@ -454,6 +498,36 @@ function DataManagerPage() {
                                 <Save className="h-4 w-4 mr-2" />
                                 Save All ({Object.keys(edits).length})
                             </Button>
+                        )}
+                        {selectedCollection === "events" && (
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={handleSyncCounts}
+                                    disabled={isSyncing}
+                                    className="border-gray-600 text-purple-400 hover:bg-purple-400/10 hover:text-purple-300 transition-colors"
+                                >
+                                    {isSyncing ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : (
+                                        <Calculator className="h-4 w-4 mr-2" />
+                                    )}
+                                    Sync Counts
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={handleManualCleanup}
+                                    disabled={isCleaningUp}
+                                    className="border-gray-600 text-blue-400 hover:bg-blue-400/10 hover:text-blue-300 transition-colors"
+                                >
+                                    {isCleaningUp ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    ) : (
+                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                    )}
+                                    Update Status
+                                </Button>
+                            </div>
                         )}
                         <Button variant="outline" onClick={handleExportCSV} disabled={data.length === 0} className="border-gray-600 text-orange-500 hover:bg-orange-500 hover:text-white transition-colors">
                             <Save className="h-4 w-4 mr-2" />

@@ -2,6 +2,7 @@ const CACHE_NAME = 'ewp-cache-v1';
 const ASSETS_TO_CACHE = [
     '/',
     '/manifest.json',
+    '/logo.svg',
     '/logo.png',
     '/favicon.ico'
 ];

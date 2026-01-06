@@ -12,10 +12,13 @@ const firebaseConfig = {
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
+import { getFunctions } from "firebase/functions";
+
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const functions = getFunctions(app);
 
-export { app, auth, db, storage };
+export { app, auth, db, storage, functions };

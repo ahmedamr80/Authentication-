@@ -240,6 +240,7 @@ function SignInContent() {
                         registrationStatus: "active",
                         isShadow: false,
                         isAdmin: false,
+                        role: "player",
                         createdAt: shadowData.createdAt || serverTimestamp(),
                         claimedAt: serverTimestamp(),
                         previousUid: shadowUid
@@ -264,6 +265,7 @@ function SignInContent() {
                         createdBy: user.uid,
                         isShadow: false,
                         isAdmin: false,
+                        role: "player",
                         createdAt: serverTimestamp(),
                     });
                 }
@@ -296,6 +298,9 @@ function SignInContent() {
                             fullName: currentUserCred.user.displayName || "",
                             registrationStatus: "active",
                             createdBy: currentUserCred.user.uid,
+                            isShadow: false,
+                            isAdmin: false,
+                            role: "player",
                             createdAt: serverTimestamp(),
                         });
                     } else {
@@ -353,6 +358,7 @@ function SignInContent() {
                         isShadow: false,
                         isAdmin: false,
                         registrationStatus: "active",
+                        role: "player",
                         createdAt: shadowData.createdAt || serverTimestamp(),
                         claimedAt: serverTimestamp(),
                         previousUid: shadowUid

@@ -87,3 +87,4 @@ export const onUserUpdate = onDocumentWritten("users/{userId}", async (event) =>
         logger.debug(`No admin status change for ${userId}. Data:`, afterData);
     }
 });
+export * from "./updateEventStatus";
