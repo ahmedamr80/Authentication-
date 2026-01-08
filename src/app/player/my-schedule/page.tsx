@@ -273,7 +273,6 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function ScheduleCard({ item }: { item: ScheduleItem }) {
-    // FIX: Use dateTime and calculate end time based on duration
     const eventDate = item.event.dateTime.toDate();
     const endDate = addMinutes(eventDate, item.event.duration);
 
