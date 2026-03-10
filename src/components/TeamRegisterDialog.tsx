@@ -198,26 +198,42 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
             const profile = await ensureProfileSynced();
 
             await runTransaction(db, async (transaction) => {
-                // 1. Check Event Slots
-                const eventRef = doc(db, "events", event.eventId);
-                const eventDoc = await transaction.get(eventRef);
-                if (!eventDoc.exists()) throw new Error("Event not found");
-
-
-                // Register as Single
+                // Register as Single (Scenario 12)
+                // In Team events, solo players (Free Agents) are always CONFIRMED 
+                // and do not increment registrationsCount.
                 const regRef = doc(collection(db, "registrations"));
+                const regId = regRef.id;
+
                 transaction.set(regRef, {
-                    registrationId: regRef.id,
+                    registrationId: regId,
                     eventId: event.eventId,
                     playerId: user.uid,
                     registeredAt: Timestamp.now(),
-                    status: "CONFIRMED", // Confirmed as a single player
+                    status: "CONFIRMED",
                     partnerStatus: "NONE",
                     lookingForPartner: true,
-                    // USE SYNCED DATA
+                    isPrimary: true,
                     fullNameP1: profile?.displayName || profile?.fullName || user.displayName || "Unknown Player",
                     playerPhotoURL: profile?.photoURL || profile?.photoUrl || user.photoURL || "",
                     _debugSource: "TeamRegisterDialog.tsx - handleRegisterSingle"
+                });
+
+                // Create Notification for the user
+                const eventDateFormatted = event.dateTime.toDate().toLocaleDateString('en-GB', {
+                    day: '2-digit', month: '2-digit', year: '2-digit'
+                }).replace(/\//g, '-');
+
+                const notifRef = doc(collection(db, "notifications"));
+                transaction.set(notifRef, {
+                    notificationId: notifRef.id,
+                    userId: user.uid,
+                    type: "system",
+                    title: "Free Agent Registration",
+                    message: `You are registered as a Free Agent for ${event.eventName} on ${eventDateFormatted}. You will be confirmed once a team is formed.`,
+                    eventId: event.eventId,
+                    read: false,
+                    createdAt: Timestamp.now(),
+                    _debugSource: "TeamRegisterDialog.tsx"
                 });
             });
 

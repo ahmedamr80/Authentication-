@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { collection, doc, runTransaction, Timestamp, query, orderBy, getDocs, getDoc } from "firebase/firestore";
+import { useState, useEffect, use } from "react";
+import { collection, doc, Timestamp, query, orderBy, getDocs, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Loader2, Save, Camera, MapPin, Calendar } from "lucide-react";
@@ -35,51 +35,44 @@ interface CreateEventFormData {
     coordinates: { lat: number; lng: number } | null;
 }
 
-export default function CreateEventPage() {
+export default function EditEventPage({ params }: { params: Promise<{ eventId: string }> }) {
+    const { eventId } = use(params);
     const [saving, setSaving] = useState(false);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [loadingEvent, setLoadingEvent] = useState(true);
     const { showToast } = useToast();
     const router = useRouter();
     const { user, isAdmin, loading: authLoading } = useAuth();
-    // 1. Calculate Date: Today + 7 Days
-    const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 7);
-    defaultDate.setHours(18, 0, 0, 0); // Optional: Defaults to 6:00 PM
-    // Adjust for timezone offset to ensure it shows local time, not UTC
-    const offset = defaultDate.getTimezoneOffset() * 60000;
-    const localISOTime = (new Date(defaultDate.getTime() - offset)).toISOString().slice(0, 16);
+
     const [formData, setFormData] = useState<CreateEventFormData>({
-        eventName: "Padel Games",
+        eventName: "",
         locationName: "",
         clubId: null,
-        dateTime: localISOTime, // <--- Set to next week,
+        dateTime: "",
         duration: 60,
         unitType: "Players",
         isPublic: true,
         isTeamRegistration: false,
         slotsAvailable: 8,
-        pricePerPlayer: 75,
-        termsAndConditions: `• Registration: Teams are preferred, but individuals may register.
-• Payment: Required at least 24 hours in advance. Unpaid slots may be forfeited.
-• Cancellation: No refunds for cancellations made within 24 hours.
-• Substitutions: Allowed (participants arrange reimbursement privately).
-• Rules & Fees: Official tournament rules apply. Prices vary by venue.`,
-        logoUrl: "https://firebasestorage.googleapis.com/v0/b/db-padel-reg.firebasestorage.app/o/events%2F1761906495228_IMG_8759.png?alt=media&token=558e21b5-f050-4d42-ba10-74fa69ce2755",
+        pricePerPlayer: 0,
+        termsAndConditions: "",
+        logoUrl: "",
         coordinates: null,
     });
 
     const [clubs, setClubs] = useState<{ id: string; name: string; location?: { coordinates?: { lat: number; lng: number } } }[]>([]);
     const [loadingClubs, setLoadingClubs] = useState(true);
+
     // Redirect non-admins
     useEffect(() => {
-        // Only run this logic once auth is finished loading
-        if (!authLoading) {
+        if (!authLoading && !loadingEvent) {
             if (!isAdmin) {
-                showToast("Access Denied: You do not have permission to create events.", "error");
-                router.push("/events"); // Send them back to safety
+                showToast("Access Denied: You do not have permission to edit events.", "error");
+                router.push("/events");
             }
         }
-    }, [isAdmin, authLoading, router, showToast]);
+    }, [isAdmin, authLoading, loadingEvent, router, showToast]);
+
     useEffect(() => {
         const fetchClubs = async () => {
             try {
@@ -102,52 +95,42 @@ export default function CreateEventPage() {
     }, []);
 
     useEffect(() => {
-        const fetchClonedEvent = async () => {
-            if (typeof window === 'undefined') return;
-            const searchParams = new URLSearchParams(window.location.search);
-            const cloneFrom = searchParams.get('cloneFrom');
-
-            if (cloneFrom) {
-                try {
-                    const eventDoc = await getDoc(doc(db, "events", cloneFrom));
-                    if (eventDoc.exists()) {
-                        const data = eventDoc.data();
-
-                        // Set start date to next week default
-                        const defaultDate = new Date();
-                        defaultDate.setDate(defaultDate.getDate() + 7);
-                        defaultDate.setHours(18, 0, 0, 0);
-                        const offset = defaultDate.getTimezoneOffset() * 60000;
-                        const localISOTime = (new Date(defaultDate.getTime() - offset)).toISOString().slice(0, 16);
-
-                        setFormData({
-                            eventName: data.eventName ? `${data.eventName} (Copy)` : "",
-                            locationName: data.locationName || "",
-                            clubId: data.clubId || null,
-                            dateTime: localISOTime,
-                            duration: data.duration || 60,
-                            unitType: data.unitType || "Players",
-                            isPublic: data.isPublic ?? true,
-                            isTeamRegistration: data.isTeamRegistration ?? false,
-                            slotsAvailable: data.slotsAvailable || 8,
-                            pricePerPlayer: data.pricePerPlayer || 0,
-                            termsAndConditions: data.termsAndConditions || "",
-                            logoUrl: data.logoUrl || "",
-                            coordinates: data.coordinates || null,
-                        });
-                        showToast("Event details cloned successfully!", "success");
-                    }
-                } catch (error) {
-                    console.error("Error fetching cloned event:", error);
-                    showToast("Failed to clone event details", "error");
+        const fetchEvent = async () => {
+            if (!eventId) return;
+            try {
+                const eventDoc = await getDoc(doc(db, "events", eventId));
+                if (eventDoc.exists()) {
+                    const data = eventDoc.data();
+                    const eventDate = data.dateTime.toDate();
+                    const offset = eventDate.getTimezoneOffset() * 60000;
+                    const localISOTime = (new Date(eventDate.getTime() - offset)).toISOString().slice(0, 16);
+                    setFormData({
+                        eventName: data.eventName || "",
+                        locationName: data.locationName || "",
+                        clubId: data.clubId || null,
+                        dateTime: localISOTime,
+                        duration: data.duration || 60,
+                        unitType: data.unitType || "Players",
+                        isPublic: data.isPublic ?? true,
+                        isTeamRegistration: data.isTeamRegistration ?? false,
+                        slotsAvailable: data.slotsAvailable || 8,
+                        pricePerPlayer: data.pricePerPlayer || 0,
+                        termsAndConditions: data.termsAndConditions || "",
+                        logoUrl: data.logoUrl || "",
+                        coordinates: data.coordinates || null,
+                    });
+                } else {
+                    showToast("Event not found", "error");
+                    router.push("/events");
                 }
+            } catch (error) {
+                console.error("Error fetching event:", error);
+            } finally {
+                setLoadingEvent(false);
             }
         };
-
-        if (!authLoading && isAdmin) {
-            fetchClonedEvent();
-        }
-    }, [authLoading, isAdmin, showToast]);
+        fetchEvent();
+    }, [eventId, router, showToast]);
 
     const isValidUrl = (url: string) => {
         try {
@@ -192,7 +175,7 @@ export default function CreateEventPage() {
         }
     };
 
-    const handleCreate = async () => {
+    const handleUpdate = async () => {
         if (!formData.eventName.trim()) {
             showToast("Please enter an event name", "error");
             return;
@@ -210,7 +193,7 @@ export default function CreateEventPage() {
         try {
             const currentUser = auth.currentUser;
             if (!currentUser) {
-                showToast("You must be logged in to create an event", "error");
+                showToast("You must be logged in to update an event", "error");
                 router.push("/auth/signin");
                 return;
             }
@@ -229,63 +212,23 @@ export default function CreateEventPage() {
                 termsAndConditions: formData.termsAndConditions.trim(),
                 logoUrl: formData.logoUrl,
                 coordinates: formData.coordinates,
-                adminId: currentUser.uid,
-                status: "Upcoming",
-                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now(),
             };
 
-            let newEventId = "";
+            const eventRef = doc(db, "events", eventId);
+            await updateDoc(eventRef, eventData);
 
-            await runTransaction(db, async (transaction) => {
-                const counterRef = doc(db, "counters", "events");
-                const counterDoc = await transaction.get(counterRef);
-
-                if (!counterDoc.exists()) {
-                    throw new Error("Counter document does not exist!");
-                }
-
-                const lastIndex = counterDoc.data().lastIndex || 0;
-                const newIndex = lastIndex + 1;
-
-                newEventId = `EVENT${String(newIndex).padStart(3, '0')}`;
-
-                const eventRef = doc(db, "events", newEventId);
-
-                transaction.set(eventRef, {
-                    ...eventData,
-                    eventId: newEventId
-                });
-
-                transaction.update(counterRef, { lastIndex: newIndex });
-            });
-
-            showToast("Event created successfully!", "success");
-            router.push(`/events/${newEventId}`);
+            showToast("Event updated successfully!", "success");
+            router.push(`/events/${eventId}`);
         } catch (error) {
-            console.error("Error creating event:", error);
-            showToast("Failed to create event", "error");
+            console.error("Error updating event:", error);
+            showToast("Failed to update event", "error");
         } finally {
             setSaving(false);
         }
     };
 
-
-
-    const getDefaultDateTime = () => {
-        const now = new Date();
-        now.setHours(now.getHours() + 1);
-        now.setMinutes(0);
-        const offset = now.getTimezoneOffset() * 60000;
-        return new Date(now.getTime() - offset).toISOString().slice(0, 16);
-    };
-
-    useEffect(() => {
-        if (!formData.dateTime) {
-            setFormData(prev => ({ ...prev, dateTime: getDefaultDateTime() }));
-        }
-    }, [formData.dateTime]);
-    // Block rendering until we know their role
-    if (authLoading || !isAdmin) {
+    if (authLoading || loadingEvent || !isAdmin) {
         return (
             <div className="min-h-screen bg-black flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -294,20 +237,18 @@ export default function CreateEventPage() {
     }
     return (
         <div className="min-h-screen bg-black text-white pb-safe relative">
-            {/* Background Gradient */}
             <div className="fixed inset-0 z-0 bg-linear-to-b from-gray-900 via-black to-black" />
 
             <Header user={user} showBack={true} onBack={() => router.back()} />
 
-            {/* Main Content */}
             <div className="container mx-auto px-4 pt-24 relative z-10 max-w-4xl">
                 <div className="flex items-center gap-4 mb-8">
                     <div className="p-3 bg-orange-500/10 rounded-full">
                         <Calendar className="w-8 h-8 text-orange-500" />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold text-white">Create New Event</h1>
-                        <p className="text-gray-400">Fill in the details to create a new padel event</p>
+                        <h1 className="text-3xl font-bold text-white">Edit Event</h1>
+                        <p className="text-gray-400">Update the details of your padel event</p>
                     </div>
                 </div>
 
@@ -512,7 +453,7 @@ export default function CreateEventPage() {
                                     <Label htmlFor="unitType" className="text-gray-300">Unit Type</Label>
                                     <Select
                                         value={formData.unitType}
-                                        onValueChange={(value) => handleInputChange("unitType", value)}
+                                        onValueChange={(value: "Players" | "Teams") => handleInputChange("unitType", value)}
                                     >
                                         <SelectTrigger className="bg-gray-950/50 border-gray-800 text-white">
                                             <SelectValue placeholder="Select unit type" />
@@ -560,25 +501,25 @@ export default function CreateEventPage() {
                     <div className="flex justify-end gap-4 pt-4 pb-8">
                         <Button
                             variant="outline"
-                            onClick={() => router.push("/events")}
+                            onClick={() => router.push(`/events/${eventId}`)}
                             className="border-gray-700 text-gray-300 hover:bg-gray-800"
                         >
                             Cancel
                         </Button>
                         <Button
-                            onClick={handleCreate}
+                            onClick={handleUpdate}
                             disabled={saving}
                             className="bg-orange-500 hover:bg-orange-600 text-white"
                         >
                             {saving ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Creating...
+                                    Saving...
                                 </>
                             ) : (
                                 <>
                                     <Save className="w-4 h-4 mr-2" />
-                                    Create Event
+                                    Save Changes
                                 </>
                             )}
                         </Button>

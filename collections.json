@@ -1,0 +1,141 @@
+{
+    "collections": [
+        {
+            "name": "users",
+            "description": "Stores user profile information and credentials.",
+            "fields": {
+                "uid": "String - The unique Firebase Authentication ID.",
+                "email": "String - User email address.",
+                "fullName": "String - User's full name.",
+                "role": "String - User role (e.g., 'player', 'admin').",
+                "isAdmin": "Boolean - Whether the user has administrative privileges.",
+                "isShadow": "Boolean - Whether the user is a shadow player (created by admin, not a real registered user).",
+                "phone": "String - Contact phone number.",
+                "gender": "String - User gender (Male/Female).",
+                "dateOfBirth": "Timestamp - User's date of birth.",
+                "skillLevel": "String - User's skill level (e.g., 'Beginner', 'Intermediate').",
+                "hand": "String - Preferred hand (Right/Left).",
+                "position": "String - Preferred court position (Left/Right/Both).",
+                "location": "String - User's city/country.",
+                "photoUrl": "String - URL to the user's profile picture in Firebase Storage.",
+                "registrationStatus": "String - Activity status (e.g., 'active').",
+                "createdAt": "Timestamp - Date of account creation.",
+                "updatedAt": "Timestamp - Date of last profile update.",
+                "createdBy": "String - Who created the record (e.g., 'user', 'admin').",
+                "nickname": "String (Optional) - User's nickname.",
+                "notes": "String (Optional) - Administrative or personal notes."
+            },
+            "population": "Populated during registration (src/app/auth/signin/page.tsx) or when an admin creates a shadow player (src/app/admin/users/page.tsx). Updated via the profile settings page."
+        },
+        {
+            "name": "events",
+            "description": "Stores details about specific Padel events.",
+            "fields": {
+                "eventId": "String - Custom ID (e.g., EVENT022) generated from counters.",
+                "eventName": "String - Name of the event.",
+                "adminId": "String - UID of the admin who created the event.",
+                "status": "String - Current event status ('Upcoming', 'Past', 'Cancelled').",
+                "dateTime": "Timestamp - Date and time when the event starts.",
+                "duration": "Number - Duration of the event in minutes.",
+                "locationName": "String - The name of the venue or club.",
+                "clubId": "String (Optional) - Reference to a document in the 'clubs' collection.",
+                "coordinates": "Object {lat: Number, lng: Number} - Geographic location.",
+                "pricePerPlayer": "Number - Cost to participate per person.",
+                "slotsAvailable": "Number - Maximum capacity for the event.",
+                "registrationsCount": "Number - Number of confirmed participants.",
+                "waitlistCount": "Number - Number of teams/players currently on the waitlist.",
+                "unitType": "String - Registration type ('Players' or 'Teams').",
+                "isPublic": "Boolean - Whether the event is visible to all users.",
+                "isTeamRegistration": "Boolean - If true, players register as pairs.",
+                "logoUrl": "String - URL to the event image/logo.",
+                "termsAndConditions": "String - Rules and policy details.",
+                "cancellationMessage": "String (Optional) - Reason for cancellation if status is 'Cancelled'.",
+                "createdAt": "Timestamp - When the event was created."
+            },
+            "population": "Created by admins in src/app/events/create/page.tsx. The eventId is incremented using the 'counters' collection. registrationsCount and waitlistCount are dynamically updated by participation hooks (useTeamInvite, useTeamAccept, etc.)."
+        },
+        {
+            "name": "registrations",
+            "description": "Links users to events, tracking their participation status.",
+            "fields": {
+                "registrationId": "String - Unique ID for the registration record.",
+                "eventId": "String - The ID of the event the user is registered for.",
+                "playerId": "String - UID of the primary participant.",
+                "player2Id": "String (Optional) - UID of the teammate (if applicable).",
+                "fullNameP1": "String - Name of the primary player (denormalized for display).",
+                "fullNameP2": "String (Optional) - Name of the teammate (denormalized).",
+                "teamId": "String (Optional) - Link to a document in the 'teams' collection.",
+                "status": "String - Status ('CONFIRMED', 'WAITLIST', 'PENDING', 'CANCELLED').",
+                "partnerStatus": "String - Teammate's response status ('CONFIRMED', 'PENDING', 'NONE', 'DENIED').",
+                "isPrimary": "Boolean - If true, this user is the one who initiated the registration.",
+                "lookingForPartner": "Boolean - If true, the user is registered but needs a teammate.",
+                "waitlistPosition": "Number - The user's order in the waitlist.",
+                "registeredAt": "Timestamp - When the user first attempted to register.",
+                "confirmedAt": "Timestamp - When the registration was finalized (e.g., after partner acceptance or payment).",
+                "invite": "String - The logic path used for registration ('FRESH', 'MERGE_P1', etc.).",
+                "_debugSource": "String - Internal tracking of which hook or component created the record."
+            },
+            "population": "Managed primarily via custom hooks: useTeamInvite (sending invites), useTeamAccept (confirming), useTeamDissolve (deleting), and useEventWithdraw. It also handles waitlist promotion logic."
+        },
+        {
+            "name": "teams",
+            "description": "Pairs two players for a specific event.",
+            "fields": {
+                "teamId": "String - Unique ID of the team.",
+                "eventId": "String - The ID of the event.",
+                "player1Id": "String - UID of the first player (usually the initiator).",
+                "player2Id": "String - UID of the teammate.",
+                "fullNameP1": "String - Denormalized name of player 1.",
+                "fullNameP2": "String - Denormalized name of player 2.",
+                "player1Confirmed": "Boolean - Whether player 1 has confirmed participation.",
+                "player2Confirmed": "Boolean - Whether player 2 has confirmed participation.",
+                "status": "String - Team status ('CONFIRMED', 'PENDING').",
+                "invite": "String - The invite type used to form the team.",
+                "createdAt": "Timestamp - When the team was formed.",
+                "_debugSource": "String - Internal tracking of creation source."
+            },
+            "population": "Created in src/hooks/useTeamInvite.ts when a player invites another. The status remains 'PENDING' until player 2 accepts via src/hooks/useTeamAccept.ts."
+        },
+        {
+            "name": "clubs",
+            "description": "Stores details about Padel clubs/venues.",
+            "fields": {
+                "name": "String - Name of the club.",
+                "location": "Object {address: String, coordinates: {lat: Number, lng: Number}} - Venue address and GPS data.",
+                "phone": "String - Club contact number.",
+                "pictureUrl": "String - URL to the club's image.",
+                "notes": "String - Additional information about the club.",
+                "createdAt": "Timestamp - When the club was added.",
+                "updatedAt": "Timestamp - Last update date."
+            },
+            "population": "Populated by admins in src/app/clubs/create/page.tsx."
+        },
+        {
+            "name": "notifications",
+            "description": "Stores user-specific messages and alerts.",
+            "fields": {
+                "notificationId": "String - Unique ID for the notification.",
+                "userId": "String - UID of the recipient.",
+                "type": "String - Category ('partner_invite', 'partner_accepted', 'system', 'WAITLIST_PROMOTED').",
+                "title": "String - Subject line of the notification.",
+                "message": "String - The body text.",
+                "read": "Boolean - Whether the user has seen the notification.",
+                "fromUserId": "String (Optional) - UID of the user who triggered the notification.",
+                "eventId": "String (Optional) - Related event ID.",
+                "eventName": "String (Optional) - Name of the related event (for display).",
+                "eventDate": "Timestamp (Optional) - Date of the related event.",
+                "teamId": "String (Optional) - Related team ID.",
+                "createdAt": "Timestamp - When the notification was sent."
+            },
+            "population": "Triggered by system events in hooks (useTeamInvite, useTeamAccept, useEventWithdraw) or during registration."
+        },
+        {
+            "name": "counters",
+            "description": "Maintains auto-incrementing counters for unique IDs.",
+            "fields": {
+                "lastIndex": "Number - The last used index for a specific entity (currently used for 'events')."
+            },
+            "population": "Managed via transactions in src/app/events/create/page.tsx during the event creation process."
+        }
+    ]
+}

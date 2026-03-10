@@ -22,33 +22,34 @@ service firebase.storage {
       return request.resource.size < 5 * 1024 * 1024;
     }
 
-    match /events/{allPaths=**} {
+    // Relaxed rule: allow admins read/write access to everything,
+    // and allow everyone to read any image, allowing root listing.
+    match /{allPaths=**} {
       allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /events/{allPaths=**} {
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
 
     match /club-pictures/{allPaths=**} {
-      allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
 
     match /profile-pictures/{userId}/{allPaths=**} {
-      allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isImage() && isSmallEnough();
     }
 
     match /users/{userId}/avatar/{fileName} {
-      allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isImage() && isSmallEnough();
     }
 
     match /user-uploads/{userId}/{allPaths=**} {
-      allow read: if isAuthenticated();
       allow write: if isOwner(userId) && isImage() && isSmallEnough();
     }
 
     match /media/{allPaths=**} {
-      allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
   }

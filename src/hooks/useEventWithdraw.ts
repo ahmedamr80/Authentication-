@@ -117,51 +117,54 @@ export const useEventWithdraw = () => {
                     const currentWaitlistCount = currentEventData.waitlistCount || 0;
 
                     if (registration.status === "CONFIRMED") {
-                        // CHECK: Do we have a valid waitlist snapshot?
-                        if (waitlistSnap && waitlistSnap.exists()) {
-                            // CASE: Confirmed player leaves, Waitlist player promoted.
-                            // Net result: Registrations count stays same. Waitlist count decreases.
+                        // 3. UPDATE COUNTS (Scenario 14 vs 15)
+                        // Only decrement if this is a "Players" event. 
+                        // In "Teams" event, solo players (Free Agents) don't consume slots.
+                        if (event.unitType === "Players") {
+                            // CHECK: Do we have a valid waitlist snapshot?
+                            if (waitlistSnap && waitlistSnap.exists()) {
+                                // CASE: Confirmed player leaves, Waitlist player promoted.
+                                const firstWaitlistRef = waitlistSnap.ref;
+                                transaction.update(firstWaitlistRef, {
+                                    status: "CONFIRMED",
+                                    waitlistPosition: null,
+                                    promotedAt: Timestamp.now()
+                                });
 
-                            const firstWaitlistRef = waitlistSnap.ref;
+                                transaction.update(eventRef, {
+                                    waitlistCount: Math.max(0, currentWaitlistCount - 1)
+                                });
 
-                            // Promote
-                            transaction.update(firstWaitlistRef, {
-                                status: "CONFIRMED",
-                                waitlistPosition: null, // Clear position as they are now confirmed
-                                promotedAt: Timestamp.now()
-                            });
+                                // Notify Promoted Player
+                                const notifRef = doc(collection(db, "notifications"));
+                                const promotedPlayerId = firstWaitlistPlayer?.playerId || (waitlistSnap.data() as Registration).playerId;
 
-                            // Update Event Counts
-                            transaction.update(eventRef, {
-                                waitlistCount: Math.max(0, currentWaitlistCount - 1)
-                                // registrationsCount stays the same
-                            });
-
-                            // Notify Promoted Player
-                            const notifRef = doc(collection(db, "notifications"));
-                            const promotedPlayerId = firstWaitlistPlayer?.playerId || (waitlistSnap.data() as Registration).playerId;
-
-                            transaction.set(notifRef, {
-                                notificationId: notifRef.id,
-                                userId: promotedPlayerId,
-                                type: "WAITLIST_PROMOTED",
-                                title: "You're In!",
-                                message: `You've been promoted from the waitlist for ${event.eventName}!`,
-                                eventId: event.eventId,
-                                read: false,
-                                createdAt: Timestamp.now()
-                            });
-                        } else {
-                            // CASE: Confirmed player leaves, NO replacement.
-                            transaction.update(eventRef, {
-                                registrationsCount: Math.max(0, currentRegCount - 1)
-                            });
+                                transaction.set(notifRef, {
+                                    notificationId: notifRef.id,
+                                    userId: promotedPlayerId,
+                                    type: "WAITLIST_PROMOTED",
+                                    title: "You're In!",
+                                    message: `You've been promoted from the waitlist for ${event.eventName}!`,
+                                    eventId: event.eventId,
+                                    read: false,
+                                    createdAt: Timestamp.now()
+                                });
+                            } else {
+                                // CASE: Confirmed player leaves, NO replacement.
+                                transaction.update(eventRef, {
+                                    registrationsCount: Math.max(0, currentRegCount - 1)
+                                });
+                            }
                         }
                     } else if (registration.status === "WAITLIST") {
-                        // CASE: Waitlist player leaves.
-                        transaction.update(eventRef, {
-                            waitlistCount: Math.max(0, currentWaitlistCount - 1)
-                        });
+                        // Only decrement waitlistCount if this is a "Players" event
+                        // (Free agents should technically never be on waitlist for Teams events in Scenario 12, 
+                        // but we preserve safety here).
+                        if (event.unitType === "Players") {
+                            transaction.update(eventRef, {
+                                waitlistCount: Math.max(0, currentWaitlistCount - 1)
+                            });
+                        }
                     }
                 });
 

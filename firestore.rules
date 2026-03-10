@@ -30,7 +30,9 @@ service cloud.firestore {
       // We check if the NEW data contains any of these forbidden keys
       allow create: if isAdmin() || (
         isOwner(uid) && 
-        !request.resource.data.keys().hasAny(['role', 'isAdmin', 'isShadow'])
+        request.resource.data.get('role', 'player') == 'player' &&
+        request.resource.data.get('isAdmin', false) == false &&
+        request.resource.data.get('isShadow', false) == false
       );
       
       // 3. Updating: 

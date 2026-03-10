@@ -9,7 +9,7 @@ import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy } from "lucide-react";
 import { TeamsList, Team } from "@/components/TeamsList";
 import { SinglePlayersList, SinglePlayer } from "@/components/SinglePlayersList";
 import { RegisterDialog } from "@/components/RegisterDialog";
@@ -53,7 +53,7 @@ const calculateSpotsLeft = (event: EventData, registrations: Registration[], tea
 export default function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
     const { eventId } = use(params);
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isAdmin } = useAuth();
     const { showToast } = useToast();
     const { withdraw } = useEventWithdraw();
     // State
@@ -269,29 +269,31 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
     // C. Build the Team List (Single Source of Truth: The 'teams' collection)
     const teamsWithPlayers = useMemo(() => {
-        return teams.map(team => {
-            const p1 = userProfiles[team.player1Id];
-            const p2 = userProfiles[team.player2Id];
-            const teamLegacy = team as TeamWithLegacyData;
+        return [...teams]
+            .sort((a, b) => (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0))
+            .map(team => {
+                const p1 = userProfiles[team.player1Id];
+                const p2 = userProfiles[team.player2Id];
+                const teamLegacy = team as TeamWithLegacyData;
 
-            return {
-                ...team,
-                player1: p1 ? {
-                    uid: team.player1Id,
-                    displayName: p1.fullName || p1.fullname || p1.displayName || teamLegacy.player1Name || teamLegacy.fullNameP1 || "Unknown Player",
-                    // Prioritize team-stored photo (if any) -> profile photo
-                    photoURL: teamLegacy.player1PhotoURL || p1.photoURL || p1.photoUrl || undefined,
-                    skillLevel: p1.skillLevel || p1.level || undefined
-                } : undefined,
-                player2: p2 ? {
-                    uid: team.player2Id,
-                    displayName: p2.fullName || p2.fullname || p2.displayName || teamLegacy.player2Name || teamLegacy.fullNameP2 || "Unknown Player",
-                    // Prioritize team-stored photo (if any) -> profile photo
-                    photoURL: teamLegacy.player2PhotoURL || p2.photoURL || p2.photoUrl || undefined,
-                    skillLevel: p2.skillLevel || p2.level || undefined
-                } : undefined
-            };
-        });
+                return {
+                    ...team,
+                    player1: p1 ? {
+                        uid: team.player1Id,
+                        displayName: p1.fullName || p1.fullname || p1.displayName || teamLegacy.player1Name || teamLegacy.fullNameP1 || "Unknown Player",
+                        // Prioritize team-stored photo (if any) -> profile photo
+                        photoURL: teamLegacy.player1PhotoURL || p1.photoURL || p1.photoUrl || undefined,
+                        skillLevel: p1.skillLevel || p1.level || undefined
+                    } : undefined,
+                    player2: p2 ? {
+                        uid: team.player2Id,
+                        displayName: p2.fullName || p2.fullname || p2.displayName || teamLegacy.player2Name || teamLegacy.fullNameP2 || "Unknown Player",
+                        // Prioritize team-stored photo (if any) -> profile photo
+                        photoURL: teamLegacy.player2PhotoURL || p2.photoURL || p2.photoUrl || undefined,
+                        skillLevel: p2.skillLevel || p2.level || undefined
+                    } : undefined
+                };
+            });
     }, [teams, userProfiles]);
 
     // D. Build the Single Players List (Free Agents)
@@ -320,6 +322,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 // If any of these are true, show them in the list
                 return explicitlyLooking //|| wasDenied || isOrphan;
             })
+            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
             .map(r => {
                 // Enrich with profile data
                 const profile = userProfiles[r.playerId];
@@ -347,6 +350,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
         return registrations
             .filter(r => r.status === "CONFIRMED")
+            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
             .map(r => {
                 const profile = userProfiles[r.playerId];
                 return {
@@ -371,6 +375,29 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
         return registrations
             .filter(r => r.status === "WAITLIST")
+            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
+            .map(r => {
+                const profile = userProfiles[r.playerId];
+                return {
+                    registrationId: r.registrationId,
+                    playerId: r.playerId,
+                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
+                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl,
+                    lookingForPartner: false,
+                    playerHand: profile?.hand,
+                    playerPosition: profile?.position,
+                    playerSkillLevel: profile?.skillLevel || profile?.level
+                } as SinglePlayer;
+            });
+    }, [registrations, userProfiles, event]);
+
+    // G. Changed Minds Players List (All Modes)
+    const changedMindPlayers = useMemo(() => {
+        if (!event) return [];
+
+        return registrations
+            .filter(r => r.status !== "CONFIRMED" && r.status !== "WAITLIST" && r.status !== "PENDING")
+            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
             .map(r => {
                 const profile = userProfiles[r.playerId];
                 return {
@@ -499,6 +526,26 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                         </div>
 
                         <div className="flex items-center gap-2">
+                            {isAdmin && (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="hidden md:flex text-blue-500 border-blue-500 hover:bg-blue-500 hover:text-white"
+                                        onClick={() => router.push(`/events/create?cloneFrom=${eventId}`)}
+                                    >
+                                        <Copy className="w-4 h-4 mr-1" /> Clone
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="hidden md:flex text-orange-500 border-orange-500 hover:bg-orange-500 hover:text-white"
+                                        onClick={() => router.push(`/events/${eventId}/edit`)}
+                                    >
+                                        Edit
+                                    </Button>
+                                </>
+                            )}
                             {!isPastEvent && <AddToCalendarButton event={event} />}
 
                             <Button
@@ -762,6 +809,28 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     />
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* Changed Minds Section at the very bottom */}
+                    {changedMindPlayers.length > 0 && (
+                        <div className="w-full mt-12 pt-8 border-t border-gray-800">
+                            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-red-500">
+                                <AlertCircle className="h-5 w-5" />
+                                Changed Minds ({changedMindPlayers.length})
+                            </h3>
+                            <p className="text-sm text-gray-400 mb-4">
+                                Players who registered but later cancelled or changed their minds.
+                            </p>
+                            <SinglePlayersList
+                                event={event}
+                                currentUser={user}
+                                userRegistration={userRegistration}
+                                players={changedMindPlayers}
+                                teams={teams}
+                                loading={false}
+                                onManageInvite={handleManageInvite}
+                            />
                         </div>
                     )}
                 </div> {/* End of Event Card */}
