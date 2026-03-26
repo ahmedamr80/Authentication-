@@ -392,8 +392,12 @@ function SignInContent() {
             }
             handleSuccess(result);
         } catch (error: unknown) {
-            console.error("Sign-in failed:", error);
             const err = error as { code?: string; customData?: { email?: string }; message?: string };
+            if (err.code === "auth/popup-closed-by-user") {
+                // User closed the popup — not a real error, just silently ignore
+                return;
+            }
+            console.error("Sign-in failed:", error);
             if (err.code === "auth/account-exists-with-different-credential") {
                 const email = err.customData?.email;
                 if (email) {

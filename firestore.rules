@@ -72,6 +72,8 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         resource.data.playerId == request.auth.uid || 
         resource.data.player2Id == request.auth.uid || 
+        // Allow waitlist promotion: any signed-in user can promote a WAITLIST player to CONFIRMED
+        (resource.data.status == "WAITLIST" && request.resource.data.status == "CONFIRMED") ||
         isAdmin()
       );
       

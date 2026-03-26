@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock, Check, LogOut, Hourglass } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
+import Link from "next/link";
 import { User } from "firebase/auth";
 import { useToast } from "@/context/ToastContext";
 import { useTeamDissolve } from "@/hooks/useTeamDissolve";
@@ -113,18 +114,22 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                     <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                                         {/* Overlapping Avatars - smaller on mobile */}
                                         <div className="flex items-center -space-x-2 sm:-space-x-3 shrink-0">
-                                            <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900 z-10">
-                                                <AvatarImage src={team.player1?.photoURL} />
-                                                <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
-                                                    {team.player1?.displayName?.charAt(0) || "?"}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900">
-                                                <AvatarImage src={team.player2?.photoURL} />
-                                                <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
-                                                    {team.player2?.displayName?.charAt(0) || "?"}
-                                                </AvatarFallback>
-                                            </Avatar>
+                                            <Link href={`/community/${team.player1Id}`}>
+                                                <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900 z-10 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                                    <AvatarImage src={team.player1?.photoURL} />
+                                                    <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
+                                                        {team.player1?.displayName?.charAt(0) || "?"}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                            </Link>
+                                            <Link href={`/community/${team.player2Id}`}>
+                                                <Avatar className="h-9 w-9 sm:h-12 sm:w-12 border-2 border-gray-900 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                                    <AvatarImage src={team.player2?.photoURL} />
+                                                    <AvatarFallback className="bg-gray-800 text-gray-400 text-xs sm:text-sm">
+                                                        {team.player2?.displayName?.charAt(0) || "?"}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                            </Link>
                                         </div>
 
                                         {/* Names and Skill Levels - truncate on mobile */}
@@ -132,15 +137,15 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                             {/* Stacked on mobile, inline on larger screens */}
                                             <div className="hidden sm:block">
                                                 <p className="text-sm font-medium text-white truncate">
-                                                    {team.player1?.displayName || "Unknown"} & {team.player2?.displayName || "Unknown"}
+                                                    <Link href={`/community/${team.player1Id}`} className="hover:text-orange-400 transition-colors">{team.player1?.displayName || "Unknown"}</Link> & <Link href={`/community/${team.player2Id}`} className="hover:text-orange-400 transition-colors">{team.player2?.displayName || "Unknown"}</Link>
                                                 </p>
                                             </div>
                                             <div className="sm:hidden">
                                                 <p className="text-xs font-medium text-white truncate">
-                                                    {team.player1?.displayName || "Unknown"}
+                                                    <Link href={`/community/${team.player1Id}`} className="hover:text-orange-400 transition-colors">{team.player1?.displayName || "Unknown"}</Link>
                                                 </p>
                                                 <p className="text-xs text-gray-400 truncate">
-                                                    & {team.player2?.displayName || "Unknown"}
+                                                    & <Link href={`/community/${team.player2Id}`} className="hover:text-orange-400 transition-colors">{team.player2?.displayName || "Unknown"}</Link>
                                                 </p>
                                             </div>
                                             <div className="hidden sm:flex items-center gap-2 mt-1">
@@ -201,22 +206,26 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="flex items-center -space-x-3">
-                                            <Avatar className="h-10 w-10 border-2 border-gray-950 z-10 grayscale opacity-80">
-                                                <AvatarImage src={team.player1?.photoURL} />
-                                                <AvatarFallback className="bg-gray-800 text-gray-400">
-                                                    {team.player1?.displayName?.charAt(0)}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <Avatar className="h-10 w-10 border-2 border-gray-950 grayscale opacity-80">
-                                                <AvatarImage src={team.player2?.photoURL} />
-                                                <AvatarFallback className="bg-gray-800 text-gray-400">
-                                                    {team.player2?.displayName?.charAt(0)}
-                                                </AvatarFallback>
-                                            </Avatar>
+                                            <Link href={`/community/${team.player1Id}`}>
+                                                <Avatar className="h-10 w-10 border-2 border-gray-950 z-10 grayscale opacity-80 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                                    <AvatarImage src={team.player1?.photoURL} />
+                                                    <AvatarFallback className="bg-gray-800 text-gray-400">
+                                                        {team.player1?.displayName?.charAt(0)}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                            </Link>
+                                            <Link href={`/community/${team.player2Id}`}>
+                                                <Avatar className="h-10 w-10 border-2 border-gray-950 grayscale opacity-80 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                                    <AvatarImage src={team.player2?.photoURL} />
+                                                    <AvatarFallback className="bg-gray-800 text-gray-400">
+                                                        {team.player2?.displayName?.charAt(0)}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                            </Link>
                                         </div>
                                         <div>
                                             <p className="text-sm font-medium text-gray-300">
-                                                {team.player1?.displayName || "Unknown"} & {team.player2?.displayName || "Unknown"}
+                                                <Link href={`/community/${team.player1Id}`} className="hover:text-orange-400 transition-colors">{team.player1?.displayName || "Unknown"}</Link> & <Link href={`/community/${team.player2Id}`} className="hover:text-orange-400 transition-colors">{team.player2?.displayName || "Unknown"}</Link>
                                             </p>
                                             <Badge variant="outline" className="mt-1 bg-orange-500/10 text-orange-500 border-orange-500/20 text-[10px] h-5">
                                                 Waitlist
@@ -264,18 +273,22 @@ export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center gap-3">
                                             <div className="flex items-center">
-                                                <Avatar className="h-10 w-10 border-2 border-gray-800 z-10">
-                                                    <AvatarImage src={team.player1?.photoURL} />
-                                                    <AvatarFallback>{team.player1?.displayName?.charAt(0)}</AvatarFallback>
-                                                </Avatar>
-                                                <Avatar className="h-10 w-10 border-2 border-gray-800 -ml-3 opacity-50 grayscale z-0">
-                                                    <AvatarImage src={team.player2?.photoURL} />
-                                                    <AvatarFallback>{team.player2?.displayName?.charAt(0)}</AvatarFallback>
-                                                </Avatar>
+                                                <Link href={`/community/${team.player1Id}`}>
+                                                    <Avatar className="h-10 w-10 border-2 border-gray-800 z-10 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                                        <AvatarImage src={team.player1?.photoURL} />
+                                                        <AvatarFallback>{team.player1?.displayName?.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                </Link>
+                                                <Link href={`/community/${team.player2Id}`}>
+                                                    <Avatar className="h-10 w-10 border-2 border-gray-800 -ml-3 opacity-50 grayscale z-0 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                                        <AvatarImage src={team.player2?.photoURL} />
+                                                        <AvatarFallback>{team.player2?.displayName?.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                </Link>
                                             </div>
                                             <div>
                                                 <p className="text-sm font-medium text-white">
-                                                    {team.player1?.displayName}
+                                                    <Link href={`/community/${team.player1Id}`} className="hover:text-orange-400 transition-colors">{team.player1?.displayName}</Link>
                                                 </p>
                                                 <p className="text-xs text-gray-500">
                                                     {isInvitedUser

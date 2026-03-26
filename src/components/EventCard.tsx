@@ -94,6 +94,7 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
     }, [event.clubId]);
 
     const isPast = dynamicStatus === "Past" || dynamicStatus === "Cancelled";
+    const isPastOrActive = isPast || dynamicStatus === "Active";
 
     return (
         <Card className={`overflow-hidden bg-gray-900 border-gray-800 hover:border-orange-500 transition-all duration-300 h-full flex flex-col group relative ${isPast ? 'opacity-60 grayscale' : ''}`}>
@@ -204,7 +205,7 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
 
             {/* Footer Section with Button */}
             <CardFooter className="p-4 pt-0">
-                {isPast ? (
+                {isPastOrActive ? (
                     <Link href={`/events/${event.eventId}`} className="w-full">
                         <Button
                             variant="outline"

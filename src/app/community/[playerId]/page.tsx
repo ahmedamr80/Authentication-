@@ -210,6 +210,26 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-300">Hand</label>
+                            <Select onValueChange={(val) => form.setValue("hand", val as "right" | "left")} defaultValue={form.getValues("hand")}>
+                                <SelectTrigger className="bg-gray-950 border-gray-800 text-white"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                                    <SelectItem value="right">Right</SelectItem>
+                                    <SelectItem value="left">Left</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-300">Gender</label>
+                            <Select onValueChange={(val) => form.setValue("gender", val as "male" | "female")} defaultValue={form.getValues("gender")}>
+                                <SelectTrigger className="bg-gray-950 border-gray-800 text-white"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                                    <SelectItem value="male">Male</SelectItem>
+                                    <SelectItem value="female">Female</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
 
                     {/* Admin Only Fields */}
@@ -433,16 +453,16 @@ export default function PublicProfilePage() {
 
     return (
         <div className="min-h-screen bg-gray-950 text-white pb-24">
-            <Header user={user} showBack={true} onBack={() => router.push("/community")} />
+            <Header user={user} showBack={true} onBack={() => router.back()} />
 
             <main className="pt-24 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8">
                 <Button
                     variant="ghost"
-                    onClick={() => router.push("/community")}
+                    onClick={() => router.back()}
                     className="text-gray-400 hover:text-white mb-2 pl-0 hover:bg-transparent"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Community
+                    Back
                 </Button>
 
                 {/* Conditional Rendering based on Role */}

@@ -27,6 +27,8 @@ export default function DashboardPage() {
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setUnreadCount(snapshot.size);
+        }, (error) => {
+            if (error.code !== "permission-denied") console.error("Dashboard notification listener error:", error);
         });
 
         return () => unsubscribe();

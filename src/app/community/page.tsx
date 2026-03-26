@@ -79,7 +79,14 @@ export default function CommunityPage() {
                     fetchedMembers = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as PlayerData));
                 }
 
-                setMembers(fetchedMembers);
+                // Deduplicate by uid to prevent React key warnings
+                const uniqueMap = new Map<string, PlayerData>();
+                fetchedMembers.forEach(m => {
+                    if (m.uid && !uniqueMap.has(m.uid)) {
+                        uniqueMap.set(m.uid, m);
+                    }
+                });
+                setMembers(Array.from(uniqueMap.values()));
 
             } catch (error) {
                 console.error("Error fetching members:", error);
@@ -250,8 +257,8 @@ export default function CommunityPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredAndSortedMembers.map((player) => (
-                            <PlayerCard key={player.uid} player={player} />
+                        {filteredAndSortedMembers.map((player, index) => (
+                            <PlayerCard key={player.uid || `player-${index}`} player={player} />
                         ))}
                     </div>
                 )}

@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserPlus, Hand, MapPin } from "lucide-react";
+import Link from "next/link";
 import { useToast } from "@/context/ToastContext";
 import { useTeamInvite } from "@/hooks/useTeamInvite";
 import { Team } from "@/components/TeamsList";
@@ -86,18 +87,22 @@ export function SinglePlayersList({ event, currentUser, userRegistration, player
                 return (
                     <div key={player.registrationId} className="bg-gray-900/80 backdrop-blur-sm border border-green-500/30 rounded-xl p-4 hover:border-green-500/50 transition-all group relative overflow-hidden">
                         <div className="flex items-start gap-4">
-                            <Avatar className="h-12 w-12 border-2 border-gray-800">
-                                <AvatarImage src={player.photoURL} />
-                                <AvatarFallback className="bg-gray-800 text-gray-400">
-                                    {player.displayName.charAt(0)}
-                                </AvatarFallback>
-                            </Avatar>
+                            <Link href={`/community/${player.playerId}`}>
+                                <Avatar className="h-12 w-12 border-2 border-gray-800 cursor-pointer hover:ring-2 hover:ring-orange-500 transition-all">
+                                    <AvatarImage src={player.photoURL} />
+                                    <AvatarFallback className="bg-gray-800 text-gray-400">
+                                        {player.displayName.charAt(0)}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </Link>
 
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
-                                    <h4 className="text-base font-semibold text-white truncate pr-2">
-                                        {player.displayName}
-                                    </h4>
+                                    <Link href={`/community/${player.playerId}`} className="hover:text-orange-400 transition-colors">
+                                        <h4 className="text-base font-semibold text-white truncate pr-2 hover:text-orange-400">
+                                            {player.displayName}
+                                        </h4>
+                                    </Link>
                                     {player.playerSkillLevel && (
                                         <Badge variant="secondary" className="bg-gray-800 text-gray-300 text-[10px] h-5">
                                             {player.playerSkillLevel}

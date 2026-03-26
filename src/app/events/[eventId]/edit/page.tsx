@@ -236,7 +236,7 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
         );
     }
     return (
-        <div className="min-h-screen bg-black text-white pb-safe relative">
+        <div className="min-h-screen bg-black text-white pb-32 relative">
             <div className="fixed inset-0 z-0 bg-linear-to-b from-gray-900 via-black to-black" />
 
             <Header user={user} showBack={true} onBack={() => router.back()} />
@@ -284,8 +284,8 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                                     <Input
                                         id="duration"
                                         type="number"
-                                        value={formData.duration}
-                                        onChange={(e) => handleInputChange("duration", parseInt(e.target.value) || 60)}
+                                        value={formData.duration || ""}
+                                        onChange={(e) => handleInputChange("duration", e.target.value === "" ? 0 : parseInt(e.target.value))}
                                         min={15}
                                         step={15}
                                         inputMode="numeric"
@@ -364,8 +364,8 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                                     <Input
                                         id="price"
                                         type="number"
-                                        value={formData.pricePerPlayer}
-                                        onChange={(e) => handleInputChange("pricePerPlayer", parseFloat(e.target.value) || 0)}
+                                        value={formData.pricePerPlayer || ""}
+                                        onChange={(e) => handleInputChange("pricePerPlayer", e.target.value === "" ? 0 : parseFloat(e.target.value))}
                                         min={0}
                                         step={5}
                                         inputMode="decimal"
@@ -498,7 +498,7 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                         </CardContent>
                     </Card>
 
-                    <div className="flex justify-end gap-4 pt-4 pb-8">
+                    <div className="flex justify-end gap-4 pt-4 pb-24">
                         <Button
                             variant="outline"
                             onClick={() => router.push(`/events/${eventId}`)}

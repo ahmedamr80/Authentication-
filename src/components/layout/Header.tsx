@@ -36,6 +36,9 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
 
         const unsubNotif = onSnapshot(notifQ, (snapshot) => {
             setUnreadCount(snapshot.size);
+        }, (error) => {
+            // Suppress permission-denied errors during auth state transitions
+            if (error.code !== "permission-denied") console.error("Notification listener error:", error);
         });
 
         // 2. Profile Listener (to get latest photo/name)
@@ -48,6 +51,9 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
                     photoURL: data.photoUrl || data.photoURL // Prioritize custom 'photoUrl' over 'photoURL'
                 });
             }
+        }, (error) => {
+            // Suppress permission-denied errors during auth state transitions
+            if (error.code !== "permission-denied") console.error("Profile listener error:", error);
         });
 
         return () => {
