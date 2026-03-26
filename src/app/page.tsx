@@ -1,7 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter, redirect } from "next/navigation";
 import { useEffect } from "react";
 import Image from "next/image";
 
@@ -12,13 +12,15 @@ export default function Home() {
   useEffect(() => {
     if (!loading) {
       if (user) {
-        router.push("/dashboard");
+        router.replace("/dashboard");
       } else {
-        router.push("/auth/signin");
+        router.replace("/auth/signin");
       }
     }
   }, [user, loading, router]);
 
+  // Show a brief loading screen while auth state resolves.
+  // The redirect in next.config.mjs handles the server-side case.
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
       <div className="flex flex-col items-center gap-4">

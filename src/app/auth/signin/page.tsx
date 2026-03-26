@@ -13,7 +13,6 @@ import {
     UserCredential,
     setPersistence,
     browserLocalPersistence,
-    onAuthStateChanged,
     sendPasswordResetEmail
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp, runTransaction, collection, query, where, getDocs, writeBatch, updateDoc } from "firebase/firestore";
@@ -153,20 +152,7 @@ function SignInContent() {
         }
     }, [form, isSignUp]);
 
-    // Debugging code
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (user) {
-                console.log("Current authenticated user:", {
-                    uid: user.uid,
-                    email: user.email,
-                    emailVerified: user.emailVerified, // Log verification status
-                    verificationConfig: EMAIL_VERIFICATION_ON
-                });
-            }
-        });
-        return () => unsubscribe();
-    }, []);
+
 
     const handleSuccess = (user: UserCredential | { user: { emailVerified: boolean } }) => {
         // ------------------------------------------------------------------
@@ -188,11 +174,14 @@ function SignInContent() {
 
         showToast(isSignUp ? "Account created successfully!" : "Signed in successfully!", "success");
         const returnTo = searchParams.get("returnTo") || "/dashboard";
-        router.push(returnTo);
+        router.replace(returnTo);
     };
 
     const handleError = (error: unknown) => {
         const err = error as { code?: string; message?: string };
+        // Silently ignore popup-closed — not a real error
+        if (err.code === "auth/popup-closed-by-user") return;
+
         let message = "An error occurred.";
         if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
             message = "Invalid email or password.";
@@ -200,8 +189,6 @@ function SignInContent() {
             message = "Email is already in use. Please sign in.";
         } else if (err.code === "auth/account-exists-with-different-credential") {
             message = "An account already exists with the same email address but different sign-in credentials.";
-        } else if (err.code === "auth/popup-closed-by-user") {
-            message = "Sign-in popup closed.";
         } else {
             console.error("Auth Error:", error);
             message = err.message || message;
@@ -212,6 +199,7 @@ function SignInContent() {
     const onSubmit = async (data: AuthFormValues) => {
         setIsLoading(true);
         try {
+            await setPersistence(auth, browserLocalPersistence);
             let userCred: UserCredential | undefined;
             if (isSignUp) {
                 userCred = await createUserWithEmailAndPassword(auth, data.email, data.password);
@@ -746,40 +734,4 @@ export default function SignInPage() {
         </Suspense>
     );
 
-}
-export function TestEmailButton() {
-    const [status, setStatus] = useState("Idle");
-
-    const testSend = async () => {
-        const user = auth.currentUser;
-        if (!user) {
-            setStatus("No user logged in. Sign in first.");
-            return;
-        }
-
-        setStatus("Sending...");
-        console.log("Attempting to send verification to:", user.email);
-
-        try {
-            await sendEmailVerification(user);
-            setStatus("✅ Success! Firebase accepted the request.");
-            console.log("Firebase sent the email successfully.");
-        } catch (error: unknown) {
-            const err = error as { code?: string; message?: string };
-            setStatus(`❌ Error: ${err.code} - ${err.message}`);
-            console.error("Full Email Error:", error);
-        }
-    };
-
-    return (
-        <div className="p-4 bg-gray-100 border rounded">
-            <p>Current Status: <strong>{status}</strong></p>
-            <button
-                onClick={testSend}
-                className="bg-blue-600 text-white px-4 py-2 mt-2 rounded"
-            >
-                Force Send Verification Email
-            </button>
-        </div>
-    );
 }
