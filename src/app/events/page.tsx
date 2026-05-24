@@ -39,6 +39,9 @@ export default function EventsPage() {
     const [userRegistrations, setUserRegistrations] = useState<Record<string, "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED">>({});
     const { user, isAdmin } = useAuth();
 
+    // Live registration counts (single source of truth)
+    const [liveRegistrationsCounts, setLiveRegistrationsCounts] = useState<Record<string, number>>({});
+
     // Real-time events listener
     useEffect(() => {
         const eventsRef = collection(db, "events");
@@ -86,6 +89,46 @@ export default function EventsPage() {
 
         return () => unsubscribe();
     }, [showToast]);
+
+    // Real-time registrations count listener (single source of truth)
+    useEffect(() => {
+        // Listen to ALL confirmed registrations for Players-type events
+        const regsRef = collection(db, "registrations");
+        const regsQuery = query(regsRef, where("status", "==", "CONFIRMED"));
+
+        const unsubRegs = onSnapshot(regsQuery, (snapshot) => {
+            const counts: Record<string, number> = {};
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const eid = data.eventId;
+                if (eid) {
+                    counts[eid] = (counts[eid] || 0) + 1;
+                }
+            });
+            setLiveRegistrationsCounts(prev => ({ ...prev, ...counts }));
+        });
+
+        // Listen to ALL confirmed teams for Teams-type events
+        const teamsRef = collection(db, "teams");
+        const teamsQuery = query(teamsRef, where("status", "==", "CONFIRMED"));
+
+        const unsubTeams = onSnapshot(teamsQuery, (snapshot) => {
+            const teamCounts: Record<string, number> = {};
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const eid = data.eventId;
+                if (eid) {
+                    teamCounts[eid] = (teamCounts[eid] || 0) + 1;
+                }
+            });
+            setLiveRegistrationsCounts(prev => ({ ...prev, ...teamCounts }));
+        });
+
+        return () => {
+            unsubRegs();
+            unsubTeams();
+        };
+    }, []);
 
     const handleRefresh = () => {
         setRefreshing(true);
@@ -165,6 +208,17 @@ export default function EventsPage() {
                 active.push(event);
             } else if (status === "Upcoming") {
                 upcoming.push(event);
+            } else if (status === "Cancelled") {
+                const now = new Date();
+                const eventDate = event.dateTime.toDate();
+                const endDate = new Date(eventDate.getTime() + event.duration * 60000);
+                if (now >= eventDate && now < endDate) {
+                    active.push(event);
+                } else if (now < eventDate) {
+                    upcoming.push(event);
+                } else {
+                    past.push(event);
+                }
             } else {
                 past.push(event);
             }
@@ -308,6 +362,7 @@ export default function EventsPage() {
                                 title="Happening Now"
                                 events={filteredEvents.active.slice(0, visibleCount)}
                                 userRegistrations={userRegistrations}
+                                liveRegistrationsCounts={liveRegistrationsCounts}
                             />
                         )}
 
@@ -316,6 +371,7 @@ export default function EventsPage() {
                                 title="Upcoming Events"
                                 events={filteredEvents.upcoming.slice(0, visibleCount)}
                                 userRegistrations={userRegistrations}
+                                liveRegistrationsCounts={liveRegistrationsCounts}
                             />
                         )}
 
@@ -324,6 +380,7 @@ export default function EventsPage() {
                                 title="Past Events"
                                 events={filteredEvents.past.slice(0, visibleCount)}
                                 userRegistrations={userRegistrations}
+                                liveRegistrationsCounts={liveRegistrationsCounts}
                             />
                         )}
 

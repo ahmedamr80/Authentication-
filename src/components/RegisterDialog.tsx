@@ -125,7 +125,7 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
 
                     // Profile Data
                     fullNameP1: userProfile.displayName || userProfile.fullName || user.displayName || "Unknown Player",
-                    playerPhotoURL: userProfile.photoURL || userProfile.photoUrl || user.photoURL || "",
+                    playerPhotoURL: userProfile.photoUrl || userProfile.photoURL || user.photoURL || "",
                     playerSkillLevel: userProfile.skillLevel || "Beginner",
                     playerHand: userProfile.hand || "Right",
                     playerPosition: userProfile.position || "Both",

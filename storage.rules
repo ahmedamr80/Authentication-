@@ -38,15 +38,15 @@ service firebase.storage {
     }
 
     match /profile-pictures/{userId}/{allPaths=**} {
-      allow write: if isOwner(userId) && isImage() && isSmallEnough();
+      allow write: if isAdmin() || (isOwner(userId) && isImage() && isSmallEnough());
     }
 
     match /users/{userId}/avatar/{fileName} {
-      allow write: if isOwner(userId) && isImage() && isSmallEnough();
+      allow write: if isAdmin() || (isOwner(userId) && isImage() && isSmallEnough());
     }
 
     match /user-uploads/{userId}/{allPaths=**} {
-      allow write: if isOwner(userId) && isImage() && isSmallEnough();
+      allow write: if isAdmin() || (isOwner(userId) && isImage() && isSmallEnough());
     }
 
     match /media/{allPaths=**} {

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar, Clock, MapPin, Users } from "lucide-react";
+import { Calendar, Clock, MapPin, Users, CalendarX, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { Timestamp, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 
 export interface EventData {
     adminId: string;
@@ -49,9 +50,10 @@ export const calculateEventStatus = (event: EventData): "Active" | "Upcoming" | 
 interface EventCardProps {
     event: EventData;
     userRegistrationStatus?: "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED" | null;
+    liveRegistrationsCount?: number;
 }
 
-export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
+export function EventCard({ event, userRegistrationStatus, liveRegistrationsCount }: EventCardProps) {
     const eventDate = event.dateTime.toDate();
     const dynamicStatus = calculateEventStatus(event);
     const formattedDate = eventDate.toLocaleDateString('en-US', {
@@ -65,7 +67,8 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
         hour12: true
     });
 
-    const filledSlots = event.registrationsCount || 0;
+    // Use live-computed count when available, fall back to denormalized counter
+    const filledSlots = liveRegistrationsCount ?? event.registrationsCount ?? 0;
     const totalSlots = event.slotsAvailable;
     const progressPercentage = Math.min(100, (filledSlots / totalSlots) * 100);
     const remainingSlots = Math.max(0, totalSlots - filledSlots);
@@ -93,11 +96,12 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
         }
     }, [event.clubId]);
 
-    const isPast = dynamicStatus === "Past" || dynamicStatus === "Cancelled";
-    const isPastOrActive = isPast || dynamicStatus === "Active";
+    const isCancelled = dynamicStatus === "Cancelled";
+    const isPast = dynamicStatus === "Past";
+    const isPastOrActive = isPast || dynamicStatus === "Active" || isCancelled;
 
     return (
-        <Card className={`overflow-hidden bg-gray-900 border-gray-800 hover:border-orange-500 transition-all duration-300 h-full flex flex-col group relative ${isPast ? 'opacity-60 grayscale' : ''}`}>
+        <Card className={`overflow-hidden bg-gray-900 border-gray-800 hover:border-orange-500 transition-all duration-300 h-full flex flex-col group relative ${isPast ? 'opacity-60 grayscale' : ''} ${isCancelled ? 'border-red-900/60 bg-linear-to-b from-gray-900 via-gray-900 to-red-950/15 shadow-lg shadow-red-950/20 hover:border-red-500/50' : ''}`}>
             <Link href={`/events/${event.eventId}`} className="block relative">
                 {/* Image Section */}
                 <div className="relative h-48 w-full bg-gray-800 overflow-hidden">
@@ -107,7 +111,7 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
                             alt={event.eventName}
                             fill
                             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                            className="object-cover group-hover:scale-110 transition-transform duration-700"
+                            className={`object-cover group-hover:scale-110 transition-transform duration-700 ${isCancelled ? 'grayscale opacity-30' : ''}`}
                         />
                     ) : (
                         <div className="flex items-center justify-center h-full text-gray-700 bg-gray-800">
@@ -117,6 +121,15 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
 
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-linear-to-t from-gray-950 via-gray-950/40 to-transparent" />
+
+                    {/* Cancelled Banner Over Image */}
+                    {isCancelled && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                            <span className="bg-red-600/90 text-white font-extrabold px-4 py-2 rounded text-sm tracking-widest border border-red-500/30 uppercase shadow-lg shadow-red-950/50 animate-pulse">
+                                Event Cancelled
+                            </span>
+                        </div>
+                    )}
 
                     {/* Price Badge (Top Left) */}
                     <div className="absolute top-3 left-3">
@@ -128,7 +141,7 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
 
                     {/* Status Badge (Top Right) */}
                     <div className="absolute top-3 right-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-950/80 backdrop-blur-sm border border-gray-800 text-gray-300`}>
+                        <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-950/80 backdrop-blur-sm border ${isCancelled ? 'border-red-900 text-red-400 bg-red-950/40' : 'border-gray-800 text-gray-300'}`}>
                             {dynamicStatus}
                         </span>
                     </div>
@@ -206,14 +219,57 @@ export function EventCard({ event, userRegistrationStatus }: EventCardProps) {
             {/* Footer Section with Button */}
             <CardFooter className="p-4 pt-0">
                 {isPastOrActive ? (
-                    <Link href={`/events/${event.eventId}`} className="w-full">
-                        <Button
-                            variant="outline"
-                            className="w-full border-blue-800 text-blue-500 hover:text-white hover:bg-blue-700 hover:border-blue-700 transition-colors"
-                        >
-                            View Details
-                        </Button>
-                    </Link>
+                    isCancelled ? (
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <Button
+                                    className="w-full bg-red-950/40 text-red-400 border border-red-900/50 hover:bg-red-900 hover:text-white transition-all font-bold"
+                                >
+                                    View Cancellation Reason
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="bg-gray-900 border-gray-800 text-white sm:max-w-md">
+                                <DialogHeader>
+                                    <DialogTitle className="text-red-400 flex items-center gap-2 text-xl font-bold">
+                                        <AlertTriangle className="w-5 h-5 text-red-500" /> Event Cancelled
+                                    </DialogTitle>
+                                    <DialogDescription className="text-gray-400 text-sm">
+                                        The organizer has cancelled this padel event.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="py-6 px-4 bg-red-950/20 rounded-xl border border-red-900/30 space-y-3">
+                                    <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+                                        <CalendarX className="w-4 h-4" />
+                                        <span>Cancellation Message:</span>
+                                    </div>
+                                    <p className="text-white italic text-base bg-black/40 p-4 rounded-lg border border-gray-800 leading-relaxed">
+                                        &ldquo;{event.cancellationMessage || "No cancellation message provided."}&rdquo;
+                                    </p>
+                                </div>
+                                <div className="flex gap-3 justify-end mt-4">
+                                    <Link href={`/events/${event.eventId}`} className="grow">
+                                        <Button className="w-full bg-gray-800 hover:bg-gray-700 text-white">
+                                            View Details
+                                        </Button>
+                                    </Link>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" className="border-gray-800 hover:bg-gray-800 text-gray-300">
+                                            Close
+                                        </Button>
+                                    </DialogTrigger>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    ) : (
+                        <Link href={`/events/${event.eventId}`} className="w-full">
+                            <Button
+                                variant="outline"
+                                className="w-full border-blue-800 text-blue-500 hover:text-white hover:bg-blue-700 hover:border-blue-700 transition-colors"
+                            >
+                                View Details
+                            </Button>
+                        </Link>
+                    )
                 ) : (
                     <>
                         {userRegistrationStatus === "WAITLIST" ? (

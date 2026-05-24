@@ -137,9 +137,9 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                 needsUpdate = true;
             }
 
-            if (!userProfile.photoURL && !userProfile.photoUrl && user.photoURL) {
-                updates.photoURL = user.photoURL;
-                userProfile.photoURL = user.photoURL;
+            if (!userProfile.photoUrl && !userProfile.photoURL && user.photoURL) {
+                updates.photoUrl = user.photoURL;
+                userProfile.photoUrl = user.photoURL;
                 needsUpdate = true;
             }
 
@@ -156,7 +156,7 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
             // Fallback to auth user if sync fails, but ideally shouldn't happen
             return {
                 displayName: user.displayName,
-                photoURL: user.photoURL,
+                photoUrl: user.photoURL,
                 uid: user.uid
             };
         }
@@ -182,7 +182,7 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                 // Pass the synced profile as override
                 syncedProfile ? {
                     displayName: syncedProfile.displayName || syncedProfile.fullName,
-                    photoURL: syncedProfile.photoURL || syncedProfile.photoUrl
+                    photoURL: syncedProfile.photoUrl || syncedProfile.photoURL
                 } : undefined
             );
         } catch (error) {
@@ -214,7 +214,7 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     lookingForPartner: true,
                     isPrimary: true,
                     fullNameP1: profile?.displayName || profile?.fullName || user.displayName || "Unknown Player",
-                    playerPhotoURL: profile?.photoURL || profile?.photoUrl || user.photoURL || "",
+                    playerPhotoURL: profile?.photoUrl || profile?.photoURL || user.photoURL || "",
                     _debugSource: "TeamRegisterDialog.tsx - handleRegisterSingle"
                 });
 

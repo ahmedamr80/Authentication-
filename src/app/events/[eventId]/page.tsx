@@ -9,7 +9,7 @@ import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy, CalendarX } from "lucide-react";
 import { TeamsList, Team } from "@/components/TeamsList";
 import { SinglePlayersList, SinglePlayer } from "@/components/SinglePlayersList";
 import { RegisterDialog } from "@/components/RegisterDialog";
@@ -281,15 +281,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     player1: p1 ? {
                         uid: team.player1Id,
                         displayName: p1.fullName || p1.fullname || p1.displayName || teamLegacy.player1Name || teamLegacy.fullNameP1 || "Unknown Player",
-                        // Prioritize team-stored photo (if any) -> profile photo
-                        photoURL: teamLegacy.player1PhotoURL || p1.photoURL || p1.photoUrl || undefined,
+                        // Prioritize LIVE profile photo -> team-stored snapshot -> fallback
+                        photoURL: p1.photoUrl || p1.photoURL || teamLegacy.player1PhotoURL || undefined,
                         skillLevel: p1.skillLevel || p1.level || undefined
                     } : undefined,
                     player2: p2 ? {
                         uid: team.player2Id,
                         displayName: p2.fullName || p2.fullname || p2.displayName || teamLegacy.player2Name || teamLegacy.fullNameP2 || "Unknown Player",
-                        // Prioritize team-stored photo (if any) -> profile photo
-                        photoURL: teamLegacy.player2PhotoURL || p2.photoURL || p2.photoUrl || undefined,
+                        // Prioritize LIVE profile photo -> team-stored snapshot -> fallback
+                        photoURL: p2.photoUrl || p2.photoURL || teamLegacy.player2PhotoURL || undefined,
                         skillLevel: p2.skillLevel || p2.level || undefined
                     } : undefined
                 };
@@ -330,8 +330,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     registrationId: r.registrationId,
                     playerId: r.playerId,
                     displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown Player",
-                    // Prioritize registration photo -> profile photo
-                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl || undefined,
+                    // Prioritize LIVE profile photo -> registration snapshot -> fallback
+                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: r.lookingForPartner || false,
                     playerHand: profile?.hand || r.playerHand,
                     playerPosition: profile?.position || r.playerPosition,
@@ -357,7 +357,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     registrationId: r.registrationId,
                     playerId: r.playerId,
                     displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
-                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl,
+                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: false, // In singles mode, you are just "in", not looking
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
@@ -382,7 +382,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     registrationId: r.registrationId,
                     playerId: r.playerId,
                     displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
-                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl,
+                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
@@ -404,7 +404,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     registrationId: r.registrationId,
                     playerId: r.playerId,
                     displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
-                    photoURL: r.playerPhotoURL || profile?.photoURL || profile?.photoUrl,
+                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
@@ -472,6 +472,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     }
 
     const isPastEvent = event.eventDate ? event.eventDate.toDate() < new Date() : false;
+    const isCancelledEvent = event.status === "Cancelled" || !!event.cancellationMessage;
     const showTeams = event.unitType === "Teams";
 
     return (
@@ -517,8 +518,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             <ArrowLeft className="h-4 w-4 mr-2" /> Back
                         </Button>
                         <div className="flex gap-2">
-                            <Badge variant={isPastEvent ? "secondary" : "default"} className={`${isPastEvent ? "bg-gray-800 text-gray-400" : "bg-orange-500 text-white"} border-0`}>
-                                {isPastEvent ? "Past Event" : "Upcoming"}
+                            <Badge variant={isCancelledEvent ? "destructive" : isPastEvent ? "secondary" : "default"} className={`${isCancelledEvent ? "bg-red-600 text-white animate-pulse" : isPastEvent ? "bg-gray-800 text-gray-400" : "bg-orange-500 text-white"} border-0`}>
+                                {isCancelledEvent ? "Cancelled" : isPastEvent ? "Past Event" : "Upcoming"}
                             </Badge>
                             <Badge variant="outline" className="border-gray-700 text-gray-400">
                                 {event.unitType}
@@ -558,6 +559,20 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             </Button>
                         </div>
                     </div>
+
+                    {isCancelledEvent && (
+                        <div className="bg-red-950/40 backdrop-blur-xl border border-red-500/30 rounded-2xl p-6 mb-8 flex flex-col sm:flex-row items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                            <div className="p-3 bg-red-500/10 rounded-full shrink-0">
+                                <AlertCircle className="w-6 h-6 text-red-500" />
+                            </div>
+                            <div className="space-y-1 grow">
+                                <h3 className="text-lg font-bold text-red-400">This Event Has Been Cancelled</h3>
+                                <p className="text-white font-medium bg-black/40 p-4 rounded-lg border border-red-900/20 mt-2 italic leading-relaxed">
+                                    &ldquo;{event.cancellationMessage || "No cancellation message provided."}&rdquo;
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Event Details Content */}
                     <div className="flex flex-col md:flex-row justify-between gap-8">
@@ -668,60 +683,69 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
                     {/* Register Buttons */}
                     {!isPastEvent && (
-                        <div className="mt-8 mb-8 pt-6 border-t border-gray-800 flex flex-col items-center justify-center gap-6 text-center">
-                            <div className="text-sm text-gray-400">
-                                <span className="block">Registration closes soon</span>
-                                <span className="font-bold text-white">
-                                    {event.unitType === "Players" && spotsLeft <= 0
-                                        ? "Event is full - Join waitlist"
-                                        : `${spotsLeft} spots remaining`}
-                                </span>
+                        isCancelledEvent ? (
+                            <div className="mt-8 mb-8 pt-6 border-t border-gray-800 flex flex-col items-center justify-center gap-2 text-center">
+                                <Badge variant="destructive" className="bg-red-600 text-white font-bold px-4 py-1.5 text-sm uppercase">
+                                    Registration Closed
+                                </Badge>
+                                <p className="text-gray-400 text-sm mt-1">This event has been cancelled and registrations are disabled.</p>
                             </div>
+                        ) : (
+                            <div className="mt-8 mb-8 pt-6 border-t border-gray-800 flex flex-col items-center justify-center gap-6 text-center">
+                                <div className="text-sm text-gray-400">
+                                    <span className="block">Registration closes soon</span>
+                                    <span className="font-bold text-white">
+                                        {event.unitType === "Players" && spotsLeft <= 0
+                                            ? "Event is full - Join waitlist"
+                                            : `${spotsLeft} spots remaining`}
+                                    </span>
+                                </div>
 
-                            <div className="flex gap-3 w-full md:w-auto justify-center">
-                                {userRegistration ? (
-                                    <Button
-                                        className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-bold"
-                                        onClick={handleWithdraw}
-                                    >
-                                        Withdraw
-                                    </Button>
-                                ) : (
-                                    <>
-                                        {/* Only show Register to Event for Players mode */}
-                                        {event.unitType === "Players" && (
-                                            <Button
-                                                className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
-                                                onClick={() => {
-                                                    if (!user) {
-                                                        router.push(`/auth/signin?returnTo=/events/${eventId}`);
-                                                        return;
-                                                    }
-                                                    setIsRegisterOpen(true);
-                                                }}
-                                            >
-                                                {spotsLeft <= 0 ? "Join Waitlist" : "Register to Event"}
-                                            </Button>
-                                        )}
-                                        {/* Only show Register Team for Teams mode */}
-                                        {event.unitType === "Teams" && (
-                                            <Button
-                                                className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
-                                                onClick={() => {
-                                                    if (!user) {
-                                                        router.push(`/auth/signin?returnTo=/events/${eventId}`);
-                                                        return;
-                                                    }
-                                                    setIsTeamRegisterOpen(true);
-                                                }}
-                                            >
-                                                {spotsLeft === 0 ? "Register Team to Waitlist" : "Register Team"}
-                                            </Button>
-                                        )}
-                                    </>
-                                )}
+                                <div className="flex gap-3 w-full md:w-auto justify-center">
+                                    {userRegistration ? (
+                                        <Button
+                                            className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-bold"
+                                            onClick={handleWithdraw}
+                                        >
+                                            Withdraw
+                                        </Button>
+                                    ) : (
+                                        <>
+                                            {/* Only show Register to Event for Players mode */}
+                                            {event.unitType === "Players" && (
+                                                <Button
+                                                    className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
+                                                    onClick={() => {
+                                                        if (!user) {
+                                                            router.push(`/auth/signin?returnTo=/events/${eventId}`);
+                                                            return;
+                                                        }
+                                                        setIsRegisterOpen(true);
+                                                    }}
+                                                >
+                                                    {spotsLeft <= 0 ? "Join Waitlist" : "Register to Event"}
+                                                </Button>
+                                            )}
+                                            {/* Only show Register Team for Teams mode */}
+                                            {event.unitType === "Teams" && (
+                                                <Button
+                                                    className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
+                                                    onClick={() => {
+                                                        if (!user) {
+                                                            router.push(`/auth/signin?returnTo=/events/${eventId}`);
+                                                            return;
+                                                        }
+                                                        setIsTeamRegisterOpen(true);
+                                                    }}
+                                                >
+                                                    {spotsLeft === 0 ? "Register Team to Waitlist" : "Register Team"}
+                                                </Button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                        </div>
+                        )
                     )}
                     {/* Tabs */}
                     {showTeams ? (

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { collection, doc, Timestamp, query, orderBy, getDocs, getDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, Timestamp, query, orderBy, getDocs, getDoc, updateDoc, where, limit, runTransaction } from "firebase/firestore";
 import { auth, db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Loader2, Save, Camera, MapPin, Calendar } from "lucide-react";
+import { Loader2, Save, Camera, MapPin, Calendar, CalendarX, AlertCircle } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -59,6 +59,11 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
         logoUrl: "",
         coordinates: null,
     });
+
+    const [originalSlotsAvailable, setOriginalSlotsAvailable] = useState<number>(8);
+    const [isCancelled, setIsCancelled] = useState(false);
+    const [originalIsCancelled, setOriginalIsCancelled] = useState(false);
+    const [cancellationMessage, setCancellationMessage] = useState("");
 
     const [clubs, setClubs] = useState<{ id: string; name: string; location?: { coordinates?: { lat: number; lng: number } } }[]>([]);
     const [loadingClubs, setLoadingClubs] = useState(true);
@@ -119,6 +124,11 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                         logoUrl: data.logoUrl || "",
                         coordinates: data.coordinates || null,
                     });
+                    setOriginalSlotsAvailable(data.slotsAvailable || 8);
+                    const cancelled = data.status === "Cancelled" || !!data.cancellationMessage;
+                    setIsCancelled(cancelled);
+                    setOriginalIsCancelled(cancelled);
+                    setCancellationMessage(data.cancellationMessage || "");
                 } else {
                     showToast("Event not found", "error");
                     router.push("/events");
@@ -188,6 +198,10 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
             showToast("Please select a location", "error");
             return;
         }
+        if (isCancelled && !cancellationMessage.trim()) {
+            showToast("Please enter a cancellation message", "error");
+            return;
+        }
 
         setSaving(true);
         try {
@@ -198,7 +212,9 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                 return;
             }
 
-            const eventData = {
+            const newSlots = formData.slotsAvailable;
+
+            const baseEventData = {
                 eventName: formData.eventName.trim(),
                 locationName: formData.locationName.trim(),
                 clubId: formData.clubId,
@@ -207,7 +223,7 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                 unitType: formData.unitType,
                 isPublic: formData.isPublic,
                 isTeamRegistration: formData.isTeamRegistration,
-                slotsAvailable: formData.slotsAvailable,
+                slotsAvailable: newSlots,
                 pricePerPlayer: formData.pricePerPlayer,
                 termsAndConditions: formData.termsAndConditions.trim(),
                 logoUrl: formData.logoUrl,
@@ -216,7 +232,345 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
             };
 
             const eventRef = doc(db, "events", eventId);
-            await updateDoc(eventRef, eventData);
+
+            // CASE A: NEW CANCELLATION
+            if (isCancelled && !originalIsCancelled) {
+                await runTransaction(db, async (transaction) => {
+                    const eventSnap = await transaction.get(eventRef);
+                    if (!eventSnap.exists()) throw new Error("Event not found");
+
+                    transaction.update(eventRef, {
+                        ...baseEventData,
+                        status: "Cancelled",
+                        cancellationMessage: cancellationMessage.trim(),
+                    });
+
+                    // Fetch and notify confirmed players
+                    if (formData.unitType === "Players") {
+                        const confirmedQuery = query(
+                            collection(db, "registrations"),
+                            where("eventId", "==", eventId),
+                            where("status", "==", "CONFIRMED")
+                        );
+                        const confirmedSnap = await getDocs(confirmedQuery);
+                        for (const regDoc of confirmedSnap.docs) {
+                            const notifRef = doc(collection(db, "notifications"));
+                            transaction.set(notifRef, {
+                                notificationId: notifRef.id,
+                                userId: regDoc.data().playerId,
+                                type: "EVENT_CANCELLED",
+                                title: "Event Cancelled ❌",
+                                message: `The event "${formData.eventName.trim()}" has been cancelled. Message: "${cancellationMessage.trim()}"`,
+                                eventId: eventId,
+                                read: false,
+                                createdAt: Timestamp.now()
+                            });
+                        }
+                    } else {
+                        // Teams Mode
+                        const confirmedTeamsQuery = query(
+                            collection(db, "teams"),
+                            where("eventId", "==", eventId),
+                            where("status", "==", "CONFIRMED")
+                        );
+                        const confirmedTeamsSnap = await getDocs(confirmedTeamsQuery);
+                        for (const teamDoc of confirmedTeamsSnap.docs) {
+                            const teamData = teamDoc.data();
+                            const players = [teamData.player1Id, teamData.player2Id].filter(Boolean);
+                            for (const playerId of players) {
+                                const notifRef = doc(collection(db, "notifications"));
+                                transaction.set(notifRef, {
+                                    notificationId: notifRef.id,
+                                    userId: playerId,
+                                    type: "EVENT_CANCELLED",
+                                    title: "Event Cancelled ❌",
+                                    message: `The event "${formData.eventName.trim()}" has been cancelled. Message: "${cancellationMessage.trim()}"`,
+                                    eventId: eventId,
+                                    read: false,
+                                    createdAt: Timestamp.now()
+                                });
+                            }
+                        }
+                    }
+                });
+
+                showToast("Event cancelled and players notified!", "success");
+                router.push(`/events/${eventId}`);
+                return;
+            }
+
+            const cancelledStatus = isCancelled ? "Cancelled" : "Upcoming";
+            const cancellationMsg = isCancelled ? cancellationMessage.trim() : null;
+
+            // CASE B: CAPACITY CHANGE (Only process queue if event is NOT cancelled)
+            if (!isCancelled && newSlots !== originalSlotsAvailable) {
+                if (newSlots > originalSlotsAvailable) {
+                    // Capacity Increased
+                    const diff = newSlots - originalSlotsAvailable;
+                    if (formData.unitType === "Players") {
+                        const waitlistQuery = query(
+                            collection(db, "registrations"),
+                            where("eventId", "==", eventId),
+                            where("status", "==", "WAITLIST"),
+                            orderBy("registeredAt", "asc")
+                        );
+                        const waitlistSnap = await getDocs(waitlistQuery);
+
+                        await runTransaction(db, async (transaction) => {
+                            const eventSnap = await transaction.get(eventRef);
+                            if (!eventSnap.exists()) throw new Error("Event not found");
+
+                            const curEvent = eventSnap.data();
+                            const curConfirmed = curEvent.registrationsCount || 0;
+                            const curWaitlist = curEvent.waitlistCount || 0;
+
+                            let promoteCount = 0;
+                            if (!waitlistSnap.empty) {
+                                const waitlistedToPromote = waitlistSnap.docs.slice(0, diff);
+                                promoteCount = waitlistedToPromote.length;
+
+                                for (const regDoc of waitlistedToPromote) {
+                                    const regRef = doc(db, "registrations", regDoc.id);
+                                    transaction.update(regRef, {
+                                        status: "CONFIRMED",
+                                        waitlistPosition: null,
+                                        promotedAt: Timestamp.now()
+                                    });
+
+                                    const notifRef = doc(collection(db, "notifications"));
+                                    transaction.set(notifRef, {
+                                        notificationId: notifRef.id,
+                                        userId: regDoc.data().playerId,
+                                        type: "WAITLIST_PROMOTED",
+                                        title: "You're In! 🎉",
+                                        message: `You've been promoted from the waitlist for ${formData.eventName.trim()}!`,
+                                        eventId: eventId,
+                                        read: false,
+                                        createdAt: Timestamp.now()
+                                    });
+                                }
+                            }
+
+                            transaction.update(eventRef, {
+                                ...baseEventData,
+                                status: cancelledStatus,
+                                cancellationMessage: cancellationMsg,
+                                registrationsCount: curConfirmed + promoteCount,
+                                waitlistCount: Math.max(0, curWaitlist - promoteCount)
+                            });
+                        });
+                    } else {
+                        // Teams Mode
+                        const waitlistTeamsQuery = query(
+                            collection(db, "teams"),
+                            where("eventId", "==", eventId),
+                            where("status", "==", "WAITLIST"),
+                            orderBy("createdAt", "asc")
+                        );
+                        const waitlistTeamsSnap = await getDocs(waitlistTeamsQuery);
+
+                        await runTransaction(db, async (transaction) => {
+                            const eventSnap = await transaction.get(eventRef);
+                            if (!eventSnap.exists()) throw new Error("Event not found");
+
+                            const curEvent = eventSnap.data();
+                            const curConfirmed = curEvent.registrationsCount || 0;
+                            const curWaitlist = curEvent.waitlistCount || 0;
+
+                            let promoteCount = 0;
+                            if (!waitlistTeamsSnap.empty) {
+                                const teamsToPromote = waitlistTeamsSnap.docs.slice(0, diff);
+                                promoteCount = teamsToPromote.length;
+
+                                for (const teamDoc of teamsToPromote) {
+                                    const teamId = teamDoc.id;
+                                    const teamData = teamDoc.data();
+                                    const teamRef = doc(db, "teams", teamId);
+
+                                    transaction.update(teamRef, {
+                                        status: "CONFIRMED",
+                                        promotedAt: Timestamp.now()
+                                    });
+
+                                    const regQuery = query(
+                                        collection(db, "registrations"),
+                                        where("teamId", "==", teamId)
+                                    );
+                                    const regSnap = await getDocs(regQuery);
+                                    for (const regDoc of regSnap.docs) {
+                                        transaction.update(doc(db, "registrations", regDoc.id), {
+                                            status: "CONFIRMED",
+                                            waitlistPosition: null,
+                                            confirmedAt: Timestamp.now()
+                                        });
+                                    }
+
+                                    const players = [teamData.player1Id, teamData.player2Id].filter(Boolean);
+                                    for (const playerId of players) {
+                                        const notifRef = doc(collection(db, "notifications"));
+                                        transaction.set(notifRef, {
+                                            notificationId: notifRef.id,
+                                            userId: playerId,
+                                            type: "WAITLIST_PROMOTED",
+                                            title: "You're In! 🎉",
+                                            message: `Your team has been promoted from the waitlist for ${formData.eventName.trim()}!`,
+                                            eventId: eventId,
+                                            read: false,
+                                            createdAt: Timestamp.now()
+                                        });
+                                    }
+                                }
+                            }
+
+                            transaction.update(eventRef, {
+                                ...baseEventData,
+                                status: cancelledStatus,
+                                cancellationMessage: cancellationMsg,
+                                registrationsCount: curConfirmed + promoteCount,
+                                waitlistCount: Math.max(0, curWaitlist - promoteCount)
+                            });
+                        });
+                    }
+                } else {
+                    // Capacity Decreased
+                    const diff = originalSlotsAvailable - newSlots;
+                    if (formData.unitType === "Players") {
+                        const confirmedQuery = query(
+                            collection(db, "registrations"),
+                            where("eventId", "==", eventId),
+                            where("status", "==", "CONFIRMED"),
+                            orderBy("registeredAt", "asc")
+                        );
+                        const confirmedSnap = await getDocs(confirmedQuery);
+
+                        await runTransaction(db, async (transaction) => {
+                            const eventSnap = await transaction.get(eventRef);
+                            if (!eventSnap.exists()) throw new Error("Event not found");
+
+                            const curEvent = eventSnap.data();
+                            const curConfirmed = curEvent.registrationsCount || 0;
+                            const curWaitlist = curEvent.waitlistCount || 0;
+
+                            let demotedCount = 0;
+                            if (!confirmedSnap.empty && confirmedSnap.docs.length > newSlots) {
+                                const demotedRegs = confirmedSnap.docs.slice(newSlots);
+                                demotedCount = demotedRegs.length;
+
+                                let waitlistPos = curWaitlist;
+                                for (const regDoc of demotedRegs) {
+                                    waitlistPos++;
+                                    const regRef = doc(db, "registrations", regDoc.id);
+                                    transaction.update(regRef, {
+                                        status: "WAITLIST",
+                                        waitlistPosition: waitlistPos,
+                                        demotedAt: Timestamp.now()
+                                    });
+
+                                    const notifRef = doc(collection(db, "notifications"));
+                                    transaction.set(notifRef, {
+                                        notificationId: notifRef.id,
+                                        userId: regDoc.data().playerId,
+                                        type: "WAITLIST_DEMOTED",
+                                        title: "Moved to Waitlist ⏳",
+                                        message: `Due to a change in event capacity, you have been moved to the waiting list for ${formData.eventName.trim()}.`,
+                                        eventId: eventId,
+                                        read: false,
+                                        createdAt: Timestamp.now()
+                                    });
+                                }
+                            }
+
+                            transaction.update(eventRef, {
+                                ...baseEventData,
+                                status: cancelledStatus,
+                                cancellationMessage: cancellationMsg,
+                                registrationsCount: Math.max(0, curConfirmed - demotedCount),
+                                waitlistCount: curWaitlist + demotedCount
+                            });
+                        });
+                    } else {
+                        // Teams Mode
+                        const confirmedTeamsQuery = query(
+                            collection(db, "teams"),
+                            where("eventId", "==", eventId),
+                            where("status", "==", "CONFIRMED"),
+                            orderBy("createdAt", "asc")
+                        );
+                        const confirmedTeamsSnap = await getDocs(confirmedTeamsQuery);
+
+                        await runTransaction(db, async (transaction) => {
+                            const eventSnap = await transaction.get(eventRef);
+                            if (!eventSnap.exists()) throw new Error("Event not found");
+
+                            const curEvent = eventSnap.data();
+                            const curConfirmed = curEvent.registrationsCount || 0;
+                            const curWaitlist = curEvent.waitlistCount || 0;
+
+                            let demotedCount = 0;
+                            if (!confirmedTeamsSnap.empty && confirmedTeamsSnap.docs.length > newSlots) {
+                                const demotedTeamsList = confirmedTeamsSnap.docs.slice(newSlots);
+                                demotedCount = demotedTeamsList.length;
+
+                                let waitlistPos = curWaitlist;
+                                for (const teamDoc of demotedTeamsList) {
+                                    waitlistPos++;
+                                    const teamId = teamDoc.id;
+                                    const teamData = teamDoc.data();
+                                    const teamRef = doc(db, "teams", teamId);
+
+                                    transaction.update(teamRef, {
+                                        status: "WAITLIST",
+                                        demotedAt: Timestamp.now()
+                                    });
+
+                                    const regQuery = query(
+                                        collection(db, "registrations"),
+                                        where("teamId", "==", teamId)
+                                    );
+                                    const regSnap = await getDocs(regQuery);
+                                    for (const regDoc of regSnap.docs) {
+                                        transaction.update(doc(db, "registrations", regDoc.id), {
+                                            status: "WAITLIST",
+                                            waitlistPosition: waitlistPos,
+                                            demotedAt: Timestamp.now()
+                                        });
+                                    }
+
+                                    const players = [teamData.player1Id, teamData.player2Id].filter(Boolean);
+                                    for (const playerId of players) {
+                                        const notifRef = doc(collection(db, "notifications"));
+                                        transaction.set(notifRef, {
+                                            notificationId: notifRef.id,
+                                            userId: playerId,
+                                            type: "WAITLIST_DEMOTED",
+                                            title: "Moved to Waitlist ⏳",
+                                            message: `Due to a change in event capacity, your team has been moved to the waiting list for ${formData.eventName.trim()}.`,
+                                            eventId: eventId,
+                                            read: false,
+                                            createdAt: Timestamp.now()
+                                        });
+                                    }
+                                }
+                            }
+
+                            transaction.update(eventRef, {
+                                ...baseEventData,
+                                status: cancelledStatus,
+                                cancellationMessage: cancellationMsg,
+                                registrationsCount: Math.max(0, curConfirmed - demotedCount),
+                                waitlistCount: curWaitlist + demotedCount
+                            });
+                        });
+                    }
+                }
+            } else {
+                // CASE C: NORMAL UPDATE (No capacity change)
+                await updateDoc(eventRef, {
+                    ...baseEventData,
+                    status: cancelledStatus,
+                    cancellationMessage: cancellationMsg,
+                });
+            }
 
             showToast("Event updated successfully!", "success");
             router.push(`/events/${eventId}`);
@@ -495,6 +849,40 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                                     className="bg-gray-950/50 border-gray-800 text-white placeholder:text-gray-500"
                                 />
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="bg-red-950/20 backdrop-blur-xl border-red-900/30">
+                        <CardHeader>
+                            <CardTitle className="text-red-400 flex items-center gap-2">
+                                <CalendarX className="w-5 h-5" /> Cancel Event
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center space-x-2">
+                                <Switch
+                                    id="isCancelled"
+                                    checked={isCancelled}
+                                    onCheckedChange={(checked) => {
+                                        setIsCancelled(checked);
+                                        if (!checked) setCancellationMessage("");
+                                    }}
+                                />
+                                <Label htmlFor="isCancelled" className="text-gray-300">Cancel this event</Label>
+                            </div>
+                            {isCancelled && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                    <Label htmlFor="cancellationMessage" className="text-gray-300">Cancellation Message *</Label>
+                                    <Textarea
+                                        id="cancellationMessage"
+                                        rows={3}
+                                        value={cancellationMessage}
+                                        onChange={(e) => setCancellationMessage(e.target.value)}
+                                        placeholder="Provide a reason for the cancellation..."
+                                        className="bg-gray-950/50 border-gray-800 text-white placeholder:text-gray-500"
+                                    />
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

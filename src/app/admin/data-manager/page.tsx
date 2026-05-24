@@ -11,6 +11,8 @@ import {
     updateDoc,
     deleteDoc,
     query,
+    where,
+    orderBy,
     DocumentData,
     writeBatch,
     Timestamp,
@@ -37,6 +39,8 @@ import { functions } from "@/lib/firebase";
 
 const COLLECTIONS = ["users", "events", "registrations", "clubs", "teams", "notifications"];
 
+const EVENT_FILTERED_COLLECTIONS = ["registrations", "teams"];
+
 function DataManagerPage() {
     const [selectedCollection, setSelectedCollection] = useState<string>("users");
     const [data, setData] = useState<DocumentData[]>([]);
@@ -56,10 +60,54 @@ function DataManagerPage() {
     const [isCleaningUp, setIsCleaningUp] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
 
+    // Event filtering for registrations/teams
+    const [availableEvents, setAvailableEvents] = useState<{ id: string; title: string }[]>([]);
+    const [selectedEventId, setSelectedEventId] = useState<string>("");
+    const [loadingEvents, setLoadingEvents] = useState(false);
+
+    const needsEventFilter = EVENT_FILTERED_COLLECTIONS.includes(selectedCollection);
+
+    // Fetch events list when switching to a collection that needs it
     useEffect(() => {
-        fetchData(selectedCollection);
+        if (needsEventFilter) {
+            fetchEventsList();
+            // Clear data until an event is picked
+            setData([]);
+            setColumns([]);
+            setSelectedEventId("");
+        } else {
+            setAvailableEvents([]);
+            setSelectedEventId("");
+            fetchData(selectedCollection);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCollection]);
+
+    // When an event is picked, fetch the filtered collection data
+    useEffect(() => {
+        if (needsEventFilter && selectedEventId) {
+            fetchData(selectedCollection, selectedEventId);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedEventId]);
+
+    const fetchEventsList = async () => {
+        setLoadingEvents(true);
+        try {
+            const q = query(collection(db, "events"), orderBy("date", "desc"), limit(50));
+            const snap = await getDocs(q);
+            const events = snap.docs.map((d) => ({
+                id: d.id,
+                title: (d.data().title as string) || d.id,
+            }));
+            setAvailableEvents(events);
+        } catch (error) {
+            console.error("Error fetching events list:", error);
+            showToast("Failed to fetch events", "error");
+        } finally {
+            setLoadingEvents(false);
+        }
+    };
 
     useEffect(() => {
         if (Object.keys(filters).length === 0) {
@@ -77,16 +125,21 @@ function DataManagerPage() {
         setFilteredData(filtered);
     }, [data, filters]);
 
-    const fetchData = async (collName: string) => {
+    const fetchData = async (collName: string, eventId?: string) => {
         setLoading(true);
         setData([]);
         setEdits({});
         setFilters({});
         setSelectedIds(new Set());
         try {
-            const q = query(collection(db, collName), limit(100));
+            let q;
+            if (eventId && EVENT_FILTERED_COLLECTIONS.includes(collName)) {
+                q = query(collection(db, collName), where("eventId", "==", eventId));
+            } else {
+                q = query(collection(db, collName), limit(100));
+            }
             const querySnapshot = await getDocs(q);
-            const docs = querySnapshot.docs.map((doc) => ({
+            const docs: DocumentData[] = querySnapshot.docs.map((doc) => ({
                 id: doc.id,
                 ...doc.data(),
             }));
@@ -98,7 +151,22 @@ function DataManagerPage() {
                     if (k !== "id") allKeys.add(k);
                 });
             });
-            setColumns(Array.from(allKeys).sort());
+
+            // For "users" collection, exclude specific fields
+            const USERS_EXCLUDED_FIELDS = ["updatedAt", "createdAt", "claimedAt", "nickname", "notes"];
+            if (collName === "users") {
+                USERS_EXCLUDED_FIELDS.forEach((f) => allKeys.delete(f));
+            }
+
+            // Remove columns that are entirely empty across all rows
+            const filteredKeys = Array.from(allKeys).filter((key) => {
+                return docs.some((d) => {
+                    const val = d[key];
+                    return val !== null && val !== undefined && val !== "";
+                });
+            });
+
+            setColumns(filteredKeys.sort());
             setData(docs);
         } catch (error) {
             console.error("Error fetching data:", error);
@@ -550,6 +618,26 @@ function DataManagerPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        {needsEventFilter && (
+                            <div className="w-[250px]">
+                                <Select
+                                    value={selectedEventId}
+                                    onValueChange={setSelectedEventId}
+                                    disabled={loadingEvents}
+                                >
+                                    <SelectTrigger className="bg-gray-900 border-gray-800 text-white focus:ring-orange-500">
+                                        <SelectValue placeholder={loadingEvents ? "Loading events..." : "Select Event"} />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60">
+                                        {availableEvents.map((ev) => (
+                                            <SelectItem key={ev.id} value={ev.id}>
+                                                {ev.title}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                     </div>
                 </div>
 
