@@ -178,7 +178,7 @@ export const useTeamAccept = () => {
                 const currentCount = eventData.registrationsCount || 0;
                 const slotsAvailable = eventData.slotsAvailable || 0;
                 const isFull = currentCount >= slotsAvailable;
-                let finalStatus: "CONFIRMED" | "WAITLIST" = isFull ? STATUS.WAITLIST : STATUS.CONFIRMED;
+                const finalStatus: "CONFIRMED" | "WAITLIST" = isFull ? STATUS.WAITLIST : STATUS.CONFIRMED;
 
                 if (isFull) {
                     transaction.update(eventRef, { waitlistCount: (eventData.waitlistCount || 0) + 1 });

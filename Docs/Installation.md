@@ -56,6 +56,8 @@ NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abcdefgh
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+NEXT_PUBLIC_FIREBASE_VAPID_KEY=your_vapid_key_here
 
 # Firebase Admin SDK (SERVER-SIDE ONLY)
 # Path to service account JSON file
