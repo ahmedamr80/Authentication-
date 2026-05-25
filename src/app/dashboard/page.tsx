@@ -9,11 +9,14 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { Button } from "@/components/ui/button";
 
 export default function DashboardPage() {
     const router = useRouter();
     const { user } = useAuth();
     const [unreadCount, setUnreadCount] = useState(0);
+    const { notificationPermissionStatus, requestPermission } = usePushNotifications();
 
     useEffect(() => {
         if (!user) return;
@@ -111,6 +114,23 @@ export default function DashboardPage() {
                         <p className="text-gray-400">What would you like to do today?</p>
                     </div>
                 </div>
+
+                {notificationPermissionStatus === 'default' && (
+                    <Card className="bg-orange-500/10 border-orange-500/20">
+                        <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <Bell className="w-6 h-6 text-orange-400" />
+                                <div>
+                                    <h3 className="font-semibold text-white">Enable Push Notifications</h3>
+                                    <p className="text-sm text-gray-400">Get instantly notified about event updates and messages.</p>
+                                </div>
+                            </div>
+                            <Button onClick={requestPermission} className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600">
+                                Enable
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {menuItems.map((item) => (
