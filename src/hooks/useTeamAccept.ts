@@ -178,7 +178,7 @@ export const useTeamAccept = () => {
                 const currentCount = eventData.registrationsCount || 0;
                 const slotsAvailable = eventData.slotsAvailable || 0;
                 const isFull = currentCount >= slotsAvailable;
-                let finalStatus: "CONFIRMED" | "WAITLIST" = isFull ? STATUS.WAITLIST : STATUS.CONFIRMED;
+                const finalStatus: "CONFIRMED" | "WAITLIST" = isFull ? STATUS.WAITLIST : STATUS.CONFIRMED;
 
                 if (isFull) {
                     transaction.update(eventRef, { waitlistCount: (eventData.waitlistCount || 0) + 1 });
@@ -187,7 +187,9 @@ export const useTeamAccept = () => {
                 }
 
                 // Update accepted team
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const teamUpdates: Record<string, any> = { status: finalStatus };
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const regUpdate: Record<string, any> = {
                     status: finalStatus,
                     partnerStatus: "CONFIRMED",
@@ -261,6 +263,7 @@ export const useTeamAccept = () => {
             });
 
             if (onSuccess) onSuccess();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
             console.error(err);
             setError(err.message);

@@ -366,8 +366,8 @@ function DataManagerPage() {
         // Handle Firestore Timestamp-like objects (seconds/nanoseconds)
         if (typeof val === 'object' && val !== null && 'seconds' in val) {
             try {
-                const seconds = (val as any).seconds;
-                const nanoseconds = (val as any).nanoseconds || 0;
+                const seconds = (val as Record<string, unknown>).seconds as number;
+                const nanoseconds = ((val as Record<string, unknown>).nanoseconds as number) || 0;
                 // Convert to Date
                 const date = new Date(seconds * 1000 + nanoseconds / 1000000);
                 return format(date, "dd-MMM-yyyy HH:mm:ss");
@@ -378,8 +378,8 @@ function DataManagerPage() {
 
         // Handle Coordinates (lat/lng)
         if (typeof val === 'object' && val !== null && 'lat' in val && 'lng' in val) {
-            const lat = (val as any).lat;
-            const lng = (val as any).lng;
+            const lat = (val as Record<string, unknown>).lat as number;
+            const lng = (val as Record<string, unknown>).lng as number;
             return `lng:${lng},lat:${lat}`;
         }
 

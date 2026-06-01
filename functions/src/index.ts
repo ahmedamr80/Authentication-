@@ -12,10 +12,8 @@ import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 
-admin.initializeApp();
-
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+// Admin is initialized lazily inside each function handler to prevent
+// deployment timeouts. Do NOT call admin.initializeApp() at the top level.
 
 // For cost control, you can set the maximum number of containers that can be
 // running at the same time. This helps mitigate the impact of unexpected
@@ -29,7 +27,17 @@ admin.initializeApp();
 // this will be the maximum concurrent request count.
 setGlobalOptions({ maxInstances: 10 });
 
+/**
+ * Lazily initializes the Firebase Admin SDK. Safe to call multiple times.
+ */
+function ensureAdminInitialized() {
+    if (admin.apps.length === 0) {
+        admin.initializeApp();
+    }
+}
+
 export const onUserUpdate = onDocumentWritten("users/{userId}", async (event) => {
+    ensureAdminInitialized();
     const userId = event.params.userId;
     const beforeData = event.data?.before.data();
     const afterData = event.data?.after.data();

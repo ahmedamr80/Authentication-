@@ -3,18 +3,18 @@ import * as logger from "firebase-functions/logger";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 
-// Ensure admin is initialized
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
+// Admin will be initialized lazily inside functions to prevent deployment timeouts on module load.
 
-const db = admin.firestore();
 
 /**
  * Shared logic to find upcoming events that are now past their start time
  * and update their status to "past".
  */
 async function updatePastEvents() {
+    if (admin.apps.length === 0) {
+        admin.initializeApp();
+    }
+    const db = admin.firestore();
     const now = admin.firestore.Timestamp.now();
 
     // Query for events where status is "upcoming" and dateTime < now
@@ -99,6 +99,10 @@ export const recalculateEventCounts = onCall({
     timeoutSeconds: 300,
     memory: "512MiB"
 }, async (request) => {
+    if (admin.apps.length === 0) {
+        admin.initializeApp();
+    }
+    const db = admin.firestore();
     logger.info("Starting recalculateEventCounts...");
     try {
         const eventsSnapshot = await db.collection("events").get();

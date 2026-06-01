@@ -6,7 +6,7 @@
     "dev": "next dev --port 5000 --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --port 5000 --hostname 0.0.0.0",
-    "lint": "eslint"
+    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=true eslint ."
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -22,7 +22,8 @@
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "firebase": "^12.6.0",
-    "firebase-admin": "^13.6.0",
+    "firebase-admin": "^13.10.0",
+    "firebase-functions": "^7.2.5",
     "lucide-react": "^0.555.0",
     "next": "^16.0.10",
     "react": "19.2.0",
@@ -38,7 +39,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "baseline-browser-mapping": "^2.8.32",
+    "baseline-browser-mapping": "^2.10.32",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "^16.0.10",
     "tailwindcss": "^4",
