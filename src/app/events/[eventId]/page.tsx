@@ -9,7 +9,7 @@ import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy, CalendarX } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy } from "lucide-react";
 import { TeamsList, Team } from "@/components/TeamsList";
 import { SinglePlayersList, SinglePlayer } from "@/components/SinglePlayersList";
 import { RegisterDialog } from "@/components/RegisterDialog";
@@ -483,6 +483,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     src={event.logoUrl || event.eventImage || event.image || "/placeholder-event.jpg"}
                     alt={event.title || "Event Image"}
                     fill
+                    sizes="100vw"
                     className="object-cover opacity-60"
                     priority
                 />

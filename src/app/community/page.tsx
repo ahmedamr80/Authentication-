@@ -7,8 +7,30 @@ import { db } from "@/lib/firebase";
 import { PlayerCard, PlayerData } from "@/components/PlayerCard";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { Loader2, Users, ArrowLeft, Search } from "lucide-react";
+import { Users, ArrowLeft, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const PlayerCardSkeleton = () => (
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5 space-y-4 flex flex-col items-center text-center animate-pulse">
+        <Skeleton className="w-20 h-20 rounded-full bg-gray-800" />
+        <div className="space-y-2 w-full flex flex-col items-center">
+            <Skeleton className="h-5 w-2/3 bg-gray-800" />
+            <Skeleton className="h-4 w-1/2 bg-gray-800" />
+        </div>
+        <div className="grid grid-cols-2 gap-2 w-full pt-2 border-t border-gray-800/60">
+            <div className="space-y-1">
+                <Skeleton className="h-3 w-1/2 mx-auto bg-gray-800" />
+                <Skeleton className="h-4 w-3/4 mx-auto bg-gray-800" />
+            </div>
+            <div className="space-y-1">
+                <Skeleton className="h-3 w-1/2 mx-auto bg-gray-800" />
+                <Skeleton className="h-4 w-3/4 mx-auto bg-gray-800" />
+            </div>
+        </div>
+        <Skeleton className="h-9 w-full rounded-xl bg-gray-800 mt-2" />
+    </div>
+);
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/context/ToastContext";
 import { CommunityFilters, CommunityFiltersState } from "@/components/CommunityFilters";
@@ -183,13 +205,7 @@ export default function CommunityPage() {
 
 
 
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-950">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-            </div>
-        );
-    }
+
 
     return (
         <div className="min-h-screen bg-gray-950 text-white pb-24">
@@ -244,7 +260,13 @@ export default function CommunityPage() {
                 </div>
 
                 {/* Grid Section */}
-                {filteredAndSortedMembers.length === 0 ? (
+                {loading ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <PlayerCardSkeleton key={i} />
+                        ))}
+                    </div>
+                ) : filteredAndSortedMembers.length === 0 ? (
                     <div className="text-center py-12 bg-gray-900 rounded-xl border border-dashed border-gray-800">
                         <Users className="w-12 h-12 text-gray-600 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-white">No members found</h3>

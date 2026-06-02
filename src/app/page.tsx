@@ -2,25 +2,33 @@
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
-      if (user) {
+    // 2.5s fallback timeout to prevent hanging on loading screen if Auth initialization is slow/blocked
+    const timer = setTimeout(() => {
+      setTimedOut(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!loading || timedOut) {
+      if (user && !timedOut) {
         router.replace("/dashboard");
       } else {
         router.replace("/auth/signin");
       }
     }
-  }, [user, loading, router]);
+  }, [user, loading, timedOut, router]);
 
   // Show a brief loading screen while auth state resolves.
-  // The redirect in next.config.mjs handles the server-side case.
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
       <div className="flex flex-col items-center gap-4">

@@ -47,29 +47,7 @@ const profileSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
-interface UserProfile {
-    uid: string;
-    displayName: string;
-    photoUrl?: string;
-    photoURL?: string;
-    fullName?: string;
-    bio?: string;
-    location?: string;
-    skillLevel?: string;
-    position?: string;
-    hand?: string;
-    role?: string;
-    createdAt?: { seconds: number; nanoseconds: number };
-    nickname?: string;
-    dateOfBirth?: { seconds: number; nanoseconds: number } | null;
-    // Admin fields
-    notes?: string;
-    phone?: string;
-    gender?: string;
-    registrationStatus?: string;
-    isShadow?: boolean;
-    isAdmin?: boolean;
-}
+import { UserProfile } from "@/types";
 
 // ----------------------------------------------------------------------
 // 2. ADMIN VIEW COMPONENT (Full Edit Access)

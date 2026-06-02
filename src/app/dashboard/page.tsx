@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Calendar, Users, Image as ImageIcon, User, Building2, Bell, CalendarClock } from "lucide-react";
+import { Calendar, Users, Image as ImageIcon, User, Building2, Bell, CalendarClock, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -9,11 +9,39 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
+
+const PUSH_PROMPT_DISMISSED_KEY = "ewp_push_prompt_dismissed";
 
 export default function DashboardPage() {
     const router = useRouter();
     const { user } = useAuth();
     const [unreadCount, setUnreadCount] = useState(0);
+    const { notificationPermissionStatus, requestPermission } = usePushNotifications();
+    const [pushPromptDismissed, setPushPromptDismissed] = useState(true); // default true to avoid flash
+
+    // Check localStorage for dismissed state on mount
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const dismissed = localStorage.getItem(PUSH_PROMPT_DISMISSED_KEY) === "true";
+            setTimeout(() => {
+                setPushPromptDismissed(dismissed);
+            }, 0);
+        }
+    }, []);
+
+    const dismissPushPrompt = () => {
+        setPushPromptDismissed(true);
+        localStorage.setItem(PUSH_PROMPT_DISMISSED_KEY, "true");
+    };
+
+    const handleEnableNotifications = async () => {
+        await requestPermission();
+        dismissPushPrompt();
+    };
+
+    const showPushPrompt =
+        notificationPermissionStatus === "default" && !pushPromptDismissed;
 
     useEffect(() => {
         if (!user) return;
@@ -111,6 +139,36 @@ export default function DashboardPage() {
                         <p className="text-gray-400">What would you like to do today?</p>
                     </div>
                 </div>
+
+                {/* Push Notification Opt-in Prompt */}
+                {showPushPrompt && (
+                    <div className="relative overflow-hidden rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-600/20 via-indigo-600/20 to-purple-600/20 p-4">
+                        <button
+                            onClick={dismissPushPrompt}
+                            className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors"
+                            aria-label="Dismiss notification prompt"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 rounded-full bg-blue-500/20 shrink-0">
+                                <Bell className="w-6 h-6 text-blue-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-white">Stay in the loop</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                    Get notified about event invites, team updates, and more.
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleEnableNotifications}
+                                className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+                            >
+                                Enable
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {menuItems.map((item) => (

@@ -7,6 +7,33 @@ import { EventData } from "@/components/EventCard";
 import { EventFilters, EventFilter } from "@/components/EventFilters";
 import { EventSection } from "@/components/EventSection";
 import { Loader2, Plus, CalendarX } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const EventCardSkeleton = () => (
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden space-y-4 p-5 animate-pulse">
+        <div className="flex gap-4 items-center">
+            <Skeleton className="w-14 h-14 rounded-xl shrink-0 bg-gray-800" />
+            <div className="space-y-2 flex-1 min-w-0">
+                <Skeleton className="h-5 w-3/4 bg-gray-800" />
+                <Skeleton className="h-4 w-1/2 bg-gray-800" />
+            </div>
+        </div>
+        <div className="space-y-2.5 pt-2">
+            <div className="flex items-center gap-2">
+                <Skeleton className="h-4 w-4 rounded bg-gray-800" />
+                <Skeleton className="h-4 w-1/3 bg-gray-800" />
+            </div>
+            <div className="flex items-center gap-2">
+                <Skeleton className="h-4 w-4 rounded bg-gray-800" />
+                <Skeleton className="h-4 w-1/4 bg-gray-800" />
+            </div>
+        </div>
+        <div className="flex justify-between items-center pt-4 border-t border-gray-800/60">
+            <Skeleton className="h-8 w-20 rounded-lg bg-gray-800" />
+            <Skeleton className="h-9 w-24 rounded-lg bg-gray-800" />
+        </div>
+    </div>
+);
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -271,13 +298,7 @@ export default function EventsPage() {
         setVisibleCount((prev) => prev + EVENTS_PER_PAGE);
     };
 
-    if (isEventsLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-950">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-            </div>
-        );
-    }
+
 
     return (
         <div className="min-h-screen bg-gray-950 text-white pb-24">
@@ -317,41 +338,45 @@ export default function EventsPage() {
                     isRefreshing={refreshing}
                 />
 
-                {!hasEventsToShow ? (
-                    <div className="text-center py-16 space-y-4">
-                        <div className="flex justify-center">
-                            <div className="p-6 bg-gray-900 rounded-full">
-                                <CalendarX className="w-16 h-16 text-gray-600" />
+                {isEventsLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <EventCardSkeleton key={i} />
+                        ))}
+                    </div>
+                ) : !hasEventsToShow ? (
+                    <div className="flex flex-col items-center justify-center text-center py-16 px-4 bg-gray-900/40 rounded-2xl border border-gray-850 shadow-2xl relative overflow-hidden backdrop-blur-sm">
+                        <div className="relative mb-6">
+                            <div className="absolute inset-0 bg-orange-500/10 rounded-full blur-xl transform scale-150 animate-pulse"></div>
+                            <div className="relative p-5 bg-gray-900 rounded-full border border-gray-800 shadow-xl">
+                                <CalendarX className="w-10 h-10 text-orange-500/70" />
                             </div>
                         </div>
-                        <h3 className="text-xl font-semibold text-gray-300">No events found</h3>
-                        <p className="text-gray-500 max-w-md mx-auto">
+                        <h3 className="text-xl font-semibold text-white mb-2">No Events Found</h3>
+                        <p className="text-gray-400 text-sm max-w-sm mb-8">
                             {searchQuery
-                                ? `No events match "${searchQuery}". Try a different search term.`
+                                ? `We couldn't find any events matching "${searchQuery}". Let's try adjusting the search query.`
                                 : activeFilter !== "all"
-                                    ? `No ${activeFilter} events at the moment.`
-                                    : "There are no events available right now."}
+                                    ? `There are no ${activeFilter} events right now. Check back soon!`
+                                    : "There are no padel events available at the moment. Check back later or create a new one!"}
                         </p>
-                        <div className="flex justify-center gap-3 pt-4">
+                        <div className="flex flex-wrap justify-center gap-3">
                             {(searchQuery || activeFilter !== "all") && (
                                 <Button
                                     variant="outline"
                                     onClick={handleClearFilters}
-                                    className="border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
+                                    className="border-gray-800 text-gray-300 hover:text-white hover:bg-gray-800 rounded-xl px-5 py-2.5 transition-all duration-200"
                                 >
                                     Clear Filters
                                 </Button>
                             )}
                             <Button
-                                variant="outline"
                                 onClick={handleRefresh}
                                 disabled={refreshing}
-                                className="border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
+                                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02]"
                             >
-                                {refreshing ? (
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                ) : null}
-                                Refresh
+                                {refreshing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                Refresh List
                             </Button>
                         </div>
                     </div>

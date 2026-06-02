@@ -21,11 +21,6 @@ const STATUS = {
     CANCELLED: "CANCELLED"
 } as const;
 
-const NOTIFICATION_TYPE = {
-    SYSTEM: "system",
-    PARTNER_DECLINED: "partner_declined",
-    WAITLIST_PROMOTED: "waitlist_promoted"
-} as const;
 
 export interface DissolveUser {
     uid: string;
@@ -35,13 +30,6 @@ export interface DissolveUser {
     //  photoUrl?: string;
 }
 
-interface SurvivorProfile {
-    uid: string;
-    fullName?: string;
-    displayName?: string;
-    //  photoURL?: string;
-    //  photoUrl?: string;
-}
 
 // EXPANDED: Action Types to match the Scenario Table
 export type DissolveAction = "DECLINE" | "LEAVE" | "CANCEL";
@@ -302,7 +290,7 @@ export const useTeamDissolve = () => {
                     transaction.update(doc(db, "notifications", notificationId), { read: true });
                 }
                 // Send "Partner Left" notifications to Survivor...
-                const eventDateFormatted = eventData.dateTime?.toDate().toLocaleDateString('en-GB') || 'Date';
+
                 if (survivorId) {
                     const notifRef = doc(collection(db, "notifications"));
                     transaction.set(notifRef, {

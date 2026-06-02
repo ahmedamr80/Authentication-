@@ -14,21 +14,8 @@ import { EventData } from "@/components/EventCard";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 
-interface Notification {
-    notificationId: string;
-    type: "partner_invite" | "partner_accepted" | "partner_declined" | "welcome" | "system";
-    title: string;
-    message: string;
-    read: boolean;
-    createdAt: Timestamp;
-    eventId?: string;
-    eventName?: string;
-    eventDate?: Timestamp;
-    fromUserId?: string;
-    teamId?: string;
-    action?: string;
-    redirect?: string;
-}
+import { Notification } from "@/types";
+
 
 export default function NotificationsPage() {
     const { user } = useAuth();
@@ -187,12 +174,24 @@ export default function NotificationsPage() {
 
                 <div className="space-y-3">
                     {notifications.length === 0 ? (
-                        <Card className="bg-gray-900 border-gray-800">
-                            <CardContent className="flex flex-col items-center justify-center py-12 text-gray-500">
-                                <Bell className="w-12 h-12 mb-4 opacity-20" />
-                                <p>No notifications yet</p>
-                            </CardContent>
-                        </Card>
+                        <div className="flex flex-col items-center justify-center text-center py-16 px-4 bg-gray-905 rounded-2xl border border-gray-900 shadow-2xl relative overflow-hidden">
+                            <div className="relative mb-6">
+                                <div className="absolute inset-0 bg-blue-500/10 rounded-full blur-xl transform scale-150 animate-pulse"></div>
+                                <div className="relative p-5 bg-gray-900 rounded-full border border-gray-800 shadow-xl">
+                                    <Bell className="w-10 h-10 text-gray-400 opacity-60" />
+                                </div>
+                            </div>
+                            <h3 className="text-xl font-semibold text-white mb-2">All Caught Up!</h3>
+                            <p className="text-gray-400 text-sm max-w-sm mb-8">
+                                You don&apos;t have any notifications at the moment. We&apos;ll notify you when someone invites you or an event status updates.
+                            </p>
+                            <Button 
+                                onClick={() => router.push("/events")}
+                                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02]"
+                            >
+                                Browse Upcoming Events
+                            </Button>
+                        </div>
                     ) : (
                         notifications.map((notification) => (
                             <Card

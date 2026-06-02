@@ -4,7 +4,30 @@ import { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ClubCard, ClubData } from "@/components/ClubCard";
-import { Loader2, Building2, Plus } from "lucide-react";
+import { Building2, Plus } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const ClubCardSkeleton = () => (
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden animate-pulse">
+        <Skeleton className="h-48 w-full bg-gray-800" />
+        <div className="p-5 space-y-4">
+            <div className="space-y-2">
+                <Skeleton className="h-6 w-2/3 bg-gray-800" />
+                <Skeleton className="h-4 w-1/2 bg-gray-800" />
+            </div>
+            <div className="space-y-2 pt-2 border-t border-gray-800/60">
+                <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4 rounded bg-gray-800" />
+                    <Skeleton className="h-4 w-3/4 bg-gray-800" />
+                </div>
+                <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4 rounded bg-gray-800" />
+                    <Skeleton className="h-4 w-1/2 bg-gray-800" />
+                </div>
+            </div>
+        </div>
+    </div>
+);
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -54,13 +77,7 @@ export default function ClubsPage() {
         fetchClubs();
     }, [showToast]);
 
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-950">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-            </div>
-        );
-    }
+
 
     return (
         <div className="min-h-screen bg-gray-950 text-white pb-24">
@@ -92,7 +109,13 @@ export default function ClubsPage() {
                     )}
                 </div>
 
-                {clubs.length === 0 ? (
+                {loading ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <ClubCardSkeleton key={i} />
+                        ))}
+                    </div>
+                ) : clubs.length === 0 ? (
                     <div className="text-center py-12 bg-gray-900/50 rounded-xl border border-dashed border-gray-800">
                         <Building2 className="w-12 h-12 text-gray-600 mx-auto mb-4" />
                         <p className="text-gray-500 text-lg">No clubs found.</p>

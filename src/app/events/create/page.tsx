@@ -444,6 +444,7 @@ export default function CreateEventPage() {
                                                         src={formData.logoUrl}
                                                         alt="Event Logo"
                                                         fill
+                                                        sizes="(max-width: 640px) 100vw, 128px"
                                                         className="object-cover"
                                                     />
                                                 ) : (

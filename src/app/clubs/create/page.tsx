@@ -174,6 +174,7 @@ export default function CreateClubPage() {
                                                 src={pictureUrl}
                                                 alt="Club Preview"
                                                 fill
+                                                sizes="(max-width: 640px) 100vw, 320px"
                                                 className="object-cover"
                                             />
                                         ) : (

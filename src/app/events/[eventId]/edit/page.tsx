@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { collection, doc, Timestamp, query, orderBy, getDocs, getDoc, updateDoc, where, limit, runTransaction } from "firebase/firestore";
+import { collection, doc, Timestamp, query, orderBy, getDocs, getDoc, updateDoc, where, runTransaction } from "firebase/firestore";
 import { auth, db, storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Loader2, Save, Camera, MapPin, Calendar, CalendarX, AlertCircle } from "lucide-react";
+import { Loader2, Save, Camera, MapPin, Calendar, CalendarX } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -433,7 +433,6 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                     }
                 } else {
                     // Capacity Decreased
-                    const diff = originalSlotsAvailable - newSlots;
                     if (formData.unitType === "Players") {
                         const confirmedQuery = query(
                             collection(db, "registrations"),
@@ -739,6 +738,7 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                                                         src={formData.logoUrl}
                                                         alt="Event Logo"
                                                         fill
+                                                        sizes="(max-width: 640px) 100vw, 128px"
                                                         className="object-cover"
                                                     />
                                                 ) : (

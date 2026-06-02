@@ -322,6 +322,7 @@ export default function PlayerProfilePage() {
                                         src={photoUrl}
                                         alt="Profile"
                                         fill
+                                        sizes="128px"
                                         className="object-cover"
                                     />
                                 ) : (

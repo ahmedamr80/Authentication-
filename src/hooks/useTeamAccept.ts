@@ -61,7 +61,6 @@ export const useTeamAccept = () => {
 
             // Phase 1.0: Fetch target team to get eventId (needed to find Solo Reg)
             const targetTeamRef = doc(db, "teams", teamId);
-            const targetTeamSnap = await getDocs(query(collection(db, "teams"), where("__name__", "==", teamId))); // using query to avoid reading if not exists? No, getDoc is fine but we want to fail fast if needed. Actually getDoc is better.
             const targetTeamDoc = await getDoc(targetTeamRef);
 
             let soloRegToDeleteId: string | null = null;
@@ -187,10 +186,8 @@ export const useTeamAccept = () => {
                 }
 
                 // Update accepted team
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const teamUpdates: Record<string, any> = { status: finalStatus };
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const regUpdate: Record<string, any> = {
+                const teamUpdates: Record<string, string | boolean | null | undefined> = { status: finalStatus };
+                const regUpdate: Record<string, string | number | boolean | Timestamp | null | undefined> = {
                     status: finalStatus,
                     partnerStatus: "CONFIRMED",
                     waitlistPosition: finalStatus === STATUS.WAITLIST ? (eventData.waitlistCount || 0) + 1 : 0,
@@ -263,10 +260,9 @@ export const useTeamAccept = () => {
             });
 
             if (onSuccess) onSuccess();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
+        } catch (err) {
             console.error(err);
-            setError(err.message);
+            setError(err instanceof Error ? err.message : "An unknown error occurred");
         } finally {
             setLoading(false);
         }

@@ -96,3 +96,4 @@ export const onUserUpdate = onDocumentWritten("users/{userId}", async (event) =>
     }
 });
 export * from "./updateEventStatus";
+export * from "./sendPushNotification";
