@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { collection, query, where, getDocs, Timestamp, doc, runTransaction, limi
 import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
 import { useTeamInvite } from "@/hooks/useTeamInvite";
+import { t } from "@/lib/i18n";
 
 interface TeamRegisterDialogProps {
     event: EventData;
@@ -45,6 +46,8 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
 
     // Hook integration
     const { sendInvite, loading: inviteLoading } = useTeamInvite();
+    
+    const isSubmittingRef = useRef(false);
 
     // Reset state when dialog opens
     useEffect(() => {
@@ -163,7 +166,8 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
     };
 
     const handleInvitePartner = async (partner: UserProfile) => {
-        if (!user) return;
+        if (!user || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
 
         // 1. Sync Sender Profile before sending invite
         // Capture the synced profile to ensure we send the latest name/photo
@@ -187,11 +191,14 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
             );
         } catch (error) {
             showToast(error instanceof Error ? error.message : "Failed to send invite", "error");
+        } finally {
+            isSubmittingRef.current = false;
         }
     };
 
     const handleRegisterSingle = async () => {
-        if (!user) return;
+        if (!user || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setLoading(true);
         try {
             // 1. Sync Profile First
@@ -245,19 +252,20 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
             showToast(error instanceof Error ? error.message : "Failed to register", "error");
         } finally {
             setLoading(false);
+            isSubmittingRef.current = false;
         }
     };
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                {trigger || <Button>Register Team</Button>}
+                {trigger || <Button>{t("Register Team")}</Button>}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Team Registration</DialogTitle>
+                    <DialogTitle>{t("Team Registration")}</DialogTitle>
                     <DialogDescription>
-                        Choose how you want to join {event.eventName}
+                        {t("Choose how you want to join")} {event.eventName}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -269,8 +277,8 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                             onClick={() => setMode("PARTNER")}
                         >
                             <UserPlus className="h-8 w-8 text-blue-600" />
-                            <span className="font-semibold">I have a partner</span>
-                            <span className="text-xs text-gray-500 font-normal">Invite a friend to play with you</span>
+                            <span className="font-semibold">{t("I have a partner")}</span>
+                            <span className="text-xs text-gray-500 font-normal">{t("Invite a friend to play with you")}</span>
                         </Button>
                         <Button
                             variant="outline"
@@ -279,8 +287,8 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                             disabled={loading}
                         >
                             {loading ? <Loader2 className="h-8 w-8 animate-spin" /> : <UserIcon className="h-8 w-8 text-green-600" />}
-                            <span className="font-semibold">Find me a partner</span>
-                            <span className="text-xs text-gray-500 font-normal">Join the &quot;Free Agents&quot; list</span>
+                            <span className="font-semibold">{t("Find me a partner")}</span>
+                            <span className="text-xs text-gray-500 font-normal">{t("Join the \"Free Agents\" list")}</span>
                         </Button>
                     </div>
                 )}
@@ -289,7 +297,7 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     <div className="space-y-4 py-4">
                         <div className="flex gap-2">
                             <Input
-                                placeholder="Search by name or email..."
+                                placeholder={t("Search by name or email...")}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -307,17 +315,17 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                                         <span className="text-xs text-gray-500">{result.email}</span>
                                     </div>
                                     <Button size="sm" onClick={() => handleInvitePartner(result)} disabled={inviteLoading}>
-                                        {inviteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Invite"}
+                                        {inviteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Invite")}
                                     </Button>
                                 </div>
                             ))}
                             {searchResults.length === 0 && searchQuery && !searching && (
-                                <p className="text-center text-sm text-gray-500 py-2">No users found</p>
+                                <p className="text-center text-sm text-gray-500 py-2">{t("No users found")}</p>
                             )}
                         </div>
 
                         <Button variant="ghost" size="sm" onClick={() => setMode("SELECT")} className="w-full">
-                            Back
+                            {t("Back")}
                         </Button>
                     </div>
                 )}

@@ -98,9 +98,17 @@ export const useEventWithdraw = () => {
                     }
 
                     const eventDoc = await transaction.get(eventRef);
-
                     if (!eventDoc.exists()) throw new Error("Event not found");
                     const currentEventData = eventDoc.data();
+
+                    const regSnap = await transaction.get(regRef);
+                    if (!regSnap.exists()) throw new Error("Registration not found");
+                    const currentRegData = regSnap.data();
+
+                    // Guard: If already cancelled, do not proceed (prevents duplicate count decrement)
+                    if (currentRegData.status === "CANCELLED") {
+                        return;
+                    }
 
                     // A. Cancel the User's Registration
                     transaction.update(regRef, {
@@ -109,14 +117,13 @@ export const useEventWithdraw = () => {
                         isPrimary: false,
                         lookingForPartner: false,
                         _debugSource: "useEventWithdraw Hook - Cancel the User's Registration"
-
                     });
 
                     // B. Handle Counts & Promotion
                     const currentRegCount = currentEventData.registrationsCount || 0;
                     const currentWaitlistCount = currentEventData.waitlistCount || 0;
 
-                    if (registration.status === "CONFIRMED") {
+                    if (currentRegData.status === "CONFIRMED") {
                         // 3. UPDATE COUNTS (Scenario 14 vs 15)
                         // Only decrement if this is a "Players" event. 
                         // In "Teams" event, solo players (Free Agents) don't consume slots.
@@ -156,7 +163,7 @@ export const useEventWithdraw = () => {
                                 });
                             }
                         }
-                    } else if (registration.status === "WAITLIST") {
+                    } else if (currentRegData.status === "WAITLIST") {
                         // Only decrement waitlistCount if this is a "Players" event
                         // (Free agents should technically never be on waitlist for Teams events in Scenario 12, 
                         // but we preserve safety here).

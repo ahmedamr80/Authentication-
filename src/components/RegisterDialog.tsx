@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
@@ -12,7 +12,7 @@ import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
 import { Registration } from "@/lib/types";
 import { useEventWithdraw } from "@/hooks/useEventWithdraw";
-
+import { t } from "@/lib/i18n";
 
 interface RegisterDialogProps {
     event: EventData;
@@ -33,6 +33,9 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
     const { showToast } = useToast();
     const [isRegistered, setIsRegistered] = useState(false);
     const [existingRegistration, setExistingRegistration] = useState<Registration | null>(null);
+
+    const isRegisteringRef = useRef(false);
+    const isWithdrawingRef = useRef(false);
 
     const checkRegistration = useCallback(async () => {
         if (!user) return;
@@ -60,7 +63,8 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
     }, [open, user, checkRegistration]);
 
     const handleRegister = async () => {
-        if (!user) return;
+        if (!user || isRegisteringRef.current) return;
+        isRegisteringRef.current = true;
         console.log("Registering for event:", event.eventId, "Event Data:", event);
         setLoading(true);
 
@@ -137,18 +141,27 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                 };
 
                 if (recycledDoc) {
-                    // RECYCLE
+                    // RECYCLE - check current state inside transaction to prevent race conditions
                     const regRef = doc(db, "registrations", recycledDoc.id);
+                    const regSnap = await transaction.get(regRef);
+                    if (regSnap.exists()) {
+                        const currentReg = regSnap.data();
+                        if (currentReg.status === "CONFIRMED" || currentReg.status === "WAITLIST") {
+                            throw new Error("ALREADY_REGISTERED");
+                        }
+                    }
                     transaction.update(regRef, {
                         ...commonData,
-                        cancelledAt: deleteField()
+                        cancelledAt: deleteField(),
+                        _debugSource: "RegisterDialog Component - Recycled"
                     });
                 } else {
                     // CREATE NEW
                     const newRegRef = doc(collection(db, "registrations"));
                     transaction.set(newRegRef, {
                         registrationId: newRegRef.id,
-                        ...commonData
+                        ...commonData,
+                        _debugSource: "RegisterDialog Component"
                     });
                 }
 
@@ -188,19 +201,28 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                 });
             });
 
-            showToast("Successfully registered!", "success");
+            showToast(t("Successfully registered!"), "success");
             if (onSuccess) onSuccess();
             if (setOpen) setOpen(false);
 
         } catch (error) {
-            console.error("Registration error:", error);
-            showToast("Failed to register. Please try again.", "error");
+            console.error(t("Registration error:"), error);
+            const errorMessage = error instanceof Error ? error.message : "";
+            if (errorMessage === "ALREADY_REGISTERED") {
+                showToast(t("You are already registered for this event."), "warning");
+                if (onSuccess) onSuccess();
+                if (setOpen) setOpen(false);
+            } else {
+                showToast(t("Failed to register. Please try again."), "error");
+            }
         } finally {
             setLoading(false);
+            isRegisteringRef.current = false;
         }
     };
     const handleWithdraw = async () => {
-        if (!user || !existingRegistration) return;
+        if (!user || !existingRegistration || isWithdrawingRef.current) return;
+        isWithdrawingRef.current = true;
 
         // Note: RegisterDialog usually handles Single Player mode. 
         // If your app allows Team players to open this dialog, you might need to fetch the teamId here too.
@@ -214,52 +236,54 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
             });
         } catch {
             showToast("Failed to withdraw.", "error");
+        } finally {
+            isWithdrawingRef.current = false;
         }
     };
     const isProcessing = loading || withdrawLoading;
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                {trigger || <Button>Register</Button>}
+                {trigger || <Button>{t("Register")}</Button>}
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>{isRegistered ? "Manage Registration" : `Register for ${event.eventName}`}</DialogTitle>
+                    <DialogTitle>{isRegistered ? t("Manage Registration") : `${t("Register for")} ${event.eventName}`}</DialogTitle>
                     <DialogDescription>
                         {isRegistered
-                            ? "You are currently registered for this event."
+                            ? t("You are currently registered for this event.")
                             : event.pricePerPlayer > 0
-                                ? `The price for this event is ${event.pricePerPlayer} AED.`
-                                : "This event is free to join."}
+                                ? `${t("The price for this event is")} ${event.pricePerPlayer} AED.`
+                                : t("This event is free to join.")}
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="py-4">
                     <p className="text-sm text-gray-600">
-                        Date: {event.dateTime.toDate().toLocaleDateString()} <br />
-                        Time: {event.dateTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} <br />
-                        Location: {event.locationName}
+                        {t("Date:")} {event.dateTime.toDate().toLocaleDateString()} <br />
+                        {t("Time:")} {event.dateTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} <br />
+                        {t("Location:")} {event.locationName}
                     </p>
                     {isRegistered && (
                         <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-800 text-sm">
-                            Status: <strong>{existingRegistration?.status}</strong>
+                            {t("Status:")} <strong>{existingRegistration?.status}</strong>
                         </div>
                     )}
                 </div>
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setOpen && setOpen(false)} disabled={loading}>
-                        Close
+                        {t("Close")}
                     </Button>
                     {isRegistered ? (
                         <Button onClick={handleWithdraw} disabled={isProcessing} variant="destructive">
                             {loading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Withdrawing...
+                                    {t("Withdrawing...")}
                                 </>
                             ) : (
-                                "Withdraw"
+                                t("Withdraw")
                             )}
                         </Button>
                     ) : (
@@ -267,10 +291,10 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                             {loading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Registering...
+                                    {t("Registering...")}
                                 </>
                             ) : (
-                                "Confirm Registration"
+                                t("Confirm Registration")
                             )}
                         </Button>
                     )}
