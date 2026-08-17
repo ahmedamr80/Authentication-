@@ -2,16 +2,22 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
-    }
-
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true) ||
+        (request.auth.token.keys().hasAny(['role']) && request.auth.token.role == 'admin') ||
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+         (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin' ||
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true))
+      );
+    }
+
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isImage() {
@@ -22,34 +28,50 @@ service firebase.storage {
       return request.resource.size < 5 * 1024 * 1024;
     }
 
-    // Relaxed rule: allow admins read/write access to everything,
-    // and allow everyone to read any image, allowing root listing.
+    // Default: authenticated users can read, only admins can write
     match /{allPaths=**} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
+    // Public assets that should remain accessible without auth
+    match /public/{allPaths=**} {
+      allow read: if true;
+    }
+
+    // Event and club images are shown on public-facing pages
     match /events/{allPaths=**} {
+      allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
 
     match /club-pictures/{allPaths=**} {
+      allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
 
+    match /profile-pictures/{userId} {
+      allow read: if true;
+      allow write: if (isAdmin() || isOwner(userId)) && isImage() && isSmallEnough();
+    }
+
     match /profile-pictures/{userId}/{allPaths=**} {
-      allow write: if isAdmin() || (isOwner(userId) && isImage() && isSmallEnough());
+      allow read: if true;
+      allow write: if (isAdmin() || isOwner(userId)) && isImage() && isSmallEnough();
     }
 
     match /users/{userId}/avatar/{fileName} {
-      allow write: if isAdmin() || (isOwner(userId) && isImage() && isSmallEnough());
+      allow read: if true;
+      allow write: if (isAdmin() || isOwner(userId)) && isImage() && isSmallEnough();
     }
 
     match /user-uploads/{userId}/{allPaths=**} {
-      allow write: if isAdmin() || (isOwner(userId) && isImage() && isSmallEnough());
+      allow read: if true;
+      allow write: if (isAdmin() || isOwner(userId)) && isImage() && isSmallEnough();
     }
 
     match /media/{allPaths=**} {
+      allow read: if true;
       allow write: if isAdmin() && isImage() && isSmallEnough();
     }
   }

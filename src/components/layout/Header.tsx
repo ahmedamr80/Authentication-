@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { auth } from "@/lib/firebase";
 import { User } from "firebase/auth";
+import { SettingsDialog } from "@/components/SettingsDialog";
 
 interface HeaderProps {
     user: User | null;
@@ -20,6 +21,7 @@ interface HeaderProps {
 export function Header({ user, showBack = false, onBack }: HeaderProps) {
     const router = useRouter();
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const [profile, setProfile] = useState<{ displayName?: string, photoURL?: string } | null>(null);
 
@@ -84,7 +86,7 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
     const photoURL = profile?.photoURL || user?.photoURL;
 
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800 px-4 py-3">
+        <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800 px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-3">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     {showBack && (
@@ -108,7 +110,7 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
                             className="w-8 h-8"
                             style={{ width: 'auto' }}
                         />
-                        <h1 className="text-xl font-bold bg-linear-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent">
+                        <h1 className="text-lg sm:text-xl font-bold bg-linear-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent truncate max-w-[120px] sm:max-w-none">
                             EveryWherePadel
                         </h1>
                     </div>
@@ -154,19 +156,28 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
                                             </div>
                                             <div className="p-1">
                                                 <button
-                                                    onClick={() => router.push("/player")}
-                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+                                                    onClick={() => {
+                                                        setIsUserMenuOpen(false);
+                                                        router.push("/player");
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
                                                 >
                                                     <UserIcon className="h-4 w-4" /> Profile
                                                 </button>
-                                                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                <button
+                                                    onClick={() => {
+                                                        setIsUserMenuOpen(false);
+                                                        setIsSettingsOpen(true);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                                                >
                                                     <Settings className="h-4 w-4" /> Settings
                                                 </button>
                                             </div>
                                             <div className="p-1 border-t border-gray-800">
                                                 <button
                                                     onClick={handleSignOut}
-                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
                                                 >
                                                     <LogOut className="h-4 w-4" /> Sign Out
                                                 </button>
@@ -183,6 +194,9 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
                     )}
                 </div>
             </div>
+
+            {/* Settings Dialog */}
+            <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
         </header>
     );
 }

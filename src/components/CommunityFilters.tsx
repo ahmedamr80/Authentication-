@@ -46,93 +46,103 @@ export function CommunityFilters({
                 )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
                 {/* Skill Level */}
-                <Select
-                    value={filters.skillLevel}
-                    onValueChange={(value) => onFilterChange("skillLevel", value)}
-                >
-                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
-                        <SelectValue placeholder="Skill Level" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
-                        <SelectItem value="all">All Levels</SelectItem>
-                        <SelectItem value="beginner">Beginner</SelectItem>
-                        <SelectItem value="intermediate">Intermediate</SelectItem>
-                        <SelectItem value="advanced">Advanced</SelectItem>
-                        <SelectItem value="expert">Expert</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="col-span-1">
+                    <Select
+                        value={filters.skillLevel}
+                        onValueChange={(value) => onFilterChange("skillLevel", value)}
+                    >
+                        <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300 text-xs sm:text-sm h-9 sm:h-10">
+                            <SelectValue placeholder="Skill" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
+                            <SelectItem value="all">All Levels</SelectItem>
+                            <SelectItem value="beginner">Beginner</SelectItem>
+                            <SelectItem value="intermediate">Intermediate</SelectItem>
+                            <SelectItem value="advanced">Advanced</SelectItem>
+                            <SelectItem value="expert">Expert</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {/* Hand */}
-                <Select
-                    value={filters.hand}
-                    onValueChange={(value) => onFilterChange("hand", value)}
-                >
-                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
-                        <SelectValue placeholder="Hand" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
-                        <SelectItem value="all">Any Hand</SelectItem>
-                        <SelectItem value="right">Right</SelectItem>
-                        <SelectItem value="left">Left</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="col-span-1">
+                    <Select
+                        value={filters.hand}
+                        onValueChange={(value) => onFilterChange("hand", value)}
+                    >
+                        <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300 text-xs sm:text-sm h-9 sm:h-10">
+                            <SelectValue placeholder="Hand" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
+                            <SelectItem value="all">Any Hand</SelectItem>
+                            <SelectItem value="right">Right</SelectItem>
+                            <SelectItem value="left">Left</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {/* Position */}
-                <Select
-                    value={filters.position}
-                    onValueChange={(value) => onFilterChange("position", value)}
-                >
-                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
-                        <SelectValue placeholder="Position" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
-                        <SelectItem value="all">Any Position</SelectItem>
-                        <SelectItem value="left">Left Side</SelectItem>
-                        <SelectItem value="right">Right Side</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="col-span-1">
+                    <Select
+                        value={filters.position}
+                        onValueChange={(value) => onFilterChange("position", value)}
+                    >
+                        <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300 text-xs sm:text-sm h-9 sm:h-10">
+                            <SelectValue placeholder="Position" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
+                            <SelectItem value="all">Any Position</SelectItem>
+                            <SelectItem value="left">Left Side</SelectItem>
+                            <SelectItem value="right">Right Side</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {/* Gender */}
-                <Select
-                    value={filters.gender}
-                    onValueChange={(value) => onFilterChange("gender", value)}
-                >
-                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
-                        <SelectValue placeholder="Gender" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
-                        <SelectItem value="all">Any Gender</SelectItem>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="col-span-1">
+                    <Select
+                        value={filters.gender}
+                        onValueChange={(value) => onFilterChange("gender", value)}
+                    >
+                        <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300 text-xs sm:text-sm h-9 sm:h-10">
+                            <SelectValue placeholder="Gender" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
+                            <SelectItem value="all">Any Gender</SelectItem>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 {/* Registration Month */}
-                <Select
-                    value={filters.registrationMonth}
-                    onValueChange={(value) => onFilterChange("registrationMonth", value)}
-                >
-                    <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300">
-                        <SelectValue placeholder="Joined In" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
-                        <SelectItem value="all">Any Time</SelectItem>
-                        <SelectItem value="0">January</SelectItem>
-                        <SelectItem value="1">February</SelectItem>
-                        <SelectItem value="2">March</SelectItem>
-                        <SelectItem value="3">April</SelectItem>
-                        <SelectItem value="4">May</SelectItem>
-                        <SelectItem value="5">June</SelectItem>
-                        <SelectItem value="6">July</SelectItem>
-                        <SelectItem value="7">August</SelectItem>
-                        <SelectItem value="8">September</SelectItem>
-                        <SelectItem value="9">October</SelectItem>
-                        <SelectItem value="10">November</SelectItem>
-                        <SelectItem value="11">December</SelectItem>
-                    </SelectContent>
-                </Select>
+                <div className="col-span-2 lg:col-span-1">
+                    <Select
+                        value={filters.registrationMonth}
+                        onValueChange={(value) => onFilterChange("registrationMonth", value)}
+                    >
+                        <SelectTrigger className="bg-gray-950 border-gray-800 text-gray-300 text-xs sm:text-sm h-9 sm:h-10">
+                            <SelectValue placeholder="Joined In" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-gray-300">
+                            <SelectItem value="all">Any Time</SelectItem>
+                            <SelectItem value="0">January</SelectItem>
+                            <SelectItem value="1">February</SelectItem>
+                            <SelectItem value="2">March</SelectItem>
+                            <SelectItem value="3">April</SelectItem>
+                            <SelectItem value="4">May</SelectItem>
+                            <SelectItem value="5">June</SelectItem>
+                            <SelectItem value="6">July</SelectItem>
+                            <SelectItem value="7">August</SelectItem>
+                            <SelectItem value="8">September</SelectItem>
+                            <SelectItem value="9">October</SelectItem>
+                            <SelectItem value="10">November</SelectItem>
+                            <SelectItem value="11">December</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
         </div>
     );

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Bell, UserPlus, UserCheck, AlertCircle, Check } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, getDoc, getDocs, Timestamp } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, getDoc, getDocs } from "firebase/firestore";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import { PartnerResponseDialog } from "@/components/PartnerResponseDialog";
@@ -15,6 +15,7 @@ import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 
 import { Notification } from "@/types";
+import { parseFirebaseDate } from "@/lib/date-utils";
 
 
 export default function NotificationsPage() {
@@ -133,9 +134,10 @@ export default function NotificationsPage() {
         }
     };
 
-    const formatTime = (timestamp: Timestamp) => {
-        if (!timestamp) return "";
-        const date = timestamp.toDate();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const formatTime = (timestamp: any) => {
+        const date = parseFirebaseDate(timestamp);
+        if (!date) return "";
         const now = new Date();
         const diff = (now.getTime() - date.getTime()) / 1000; // seconds
 
@@ -220,9 +222,12 @@ export default function NotificationsPage() {
                                                 <span className="font-medium text-orange-400">{notification.eventName}</span>
                                                 <span>•</span>
                                                 <span>
-                                                    {notification.eventDate.toDate().toLocaleDateString(undefined, {
-                                                        weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-                                                    })}
+                                                    {(() => {
+                                                        const parsedDate = parseFirebaseDate(notification.eventDate);
+                                                        return parsedDate ? parsedDate.toLocaleDateString(undefined, {
+                                                            weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                                                        }) : "TBD";
+                                                    })()}
                                                 </span>
                                             </div>
                                         )}

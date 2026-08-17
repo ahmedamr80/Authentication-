@@ -2,14 +2,7 @@ import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 
-/**
- * Lazily initializes the Firebase Admin SDK. Safe to call multiple times.
- */
-function ensureAdminInitialized() {
-    if (admin.apps.length === 0) {
-        admin.initializeApp();
-    }
-}
+import { ensureAdminInitialized } from "./adminInit";
 
 /**
  * Cloud Function triggered when a new notification document is created.

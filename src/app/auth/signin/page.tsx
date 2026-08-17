@@ -7,8 +7,10 @@ import * as z from "zod";
 import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    updateProfile,
     sendEmailVerification,
     GoogleAuthProvider,
+    OAuthProvider,
     signInWithPopup,
     UserCredential,
     setPersistence,
@@ -36,7 +38,7 @@ import {
 // 📧 EMAIL VERIFICATION SWITCH 📧
 // "on" = Enforce verification and send emails.
 // "off" = Skip verification entirely (allows unverified users to login).
-export const EMAIL_VERIFICATION_ON: string = "off";
+export const EMAIL_VERIFICATION_ON: string = "on";
 // Note: I exported this so other components can theoretically import it, 
 // but you likely need to apply this logic in your Layout file too.
 // ------------------------------------------------------------------
@@ -52,38 +54,10 @@ const authSchema = z.object({
 }).superRefine((data, ctx) => {
     if (data.mode === "signup") {
         const password = data.password;
-        if (password.length < 8) {
+        if (password.length < 12) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Password must be at least 8 characters",
-                path: ["password"],
-            });
-        }
-        if (!/[A-Z]/.test(password)) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Password must contain at least one uppercase letter",
-                path: ["password"],
-            });
-        }
-        if (!/[a-z]/.test(password)) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Password must contain at least one lowercase letter",
-                path: ["password"],
-            });
-        }
-        if (!/[0-9]/.test(password)) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Password must contain at least one number",
-                path: ["password"],
-            });
-        }
-        if (!/[!@#$%^&*]/.test(password)) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Password must contain at least one special character (!@#$%^&*)",
+                message: "Password must be at least 12 characters",
                 path: ["password"],
             });
         }
@@ -152,43 +126,51 @@ function SignInContent() {
         }
     }, [form, isSignUp]);
 
+    const handleSuccess = async (userCred: UserCredential, isNewSignUp = false) => {
+        const uid = userCred.user.uid;
+        let hasPhone = false;
 
-
-    const handleSuccess = (user: UserCredential | { user: { emailVerified: boolean } }) => {
-        // ------------------------------------------------------------------
-        // [MODIFIED LOGIC] Check Config First
-        // ------------------------------------------------------------------
-        if (EMAIL_VERIFICATION_ON === "on") {
-            // Only enforce verification if the switch is explicitly "on"
-            const isVerified = user.user.emailVerified;
-
-            // Logic: If on signup, strict check. If existing user, we usually enforce it too 
-            // depending on your app rules. Here we enforce it for newly signed up users mainly.
-            if (isSignUp && !isVerified) {
-                showToast("Account created! Please verify your email to continue.", "warning");
-                return; // BLOCK access
+        try {
+            const userDocSnap = await getDoc(doc(db, "users", uid));
+            if (userDocSnap.exists()) {
+                const data = userDocSnap.data();
+                hasPhone = !!(data?.phone && data.phone.trim().length >= 8);
             }
-        } else {
-            console.log("Email verification skipped due to configuration.");
+        } catch (err) {
+            console.warn("Could not check user phone status:", err);
         }
 
-        showToast(isSignUp ? "Account created successfully!" : "Signed in successfully!", "success");
+        if (isNewSignUp || !hasPhone) {
+            showToast("Please enter your phone number to complete your profile.", "info");
+            router.replace("/player?completeProfile=true");
+            return;
+        }
+
+        showToast("Signed in successfully!", "success");
         const returnTo = searchParams.get("returnTo") || "/dashboard";
         router.replace(returnTo);
     };
 
     const handleError = (error: unknown) => {
         const err = error as { code?: string; message?: string };
-        // Silently ignore popup-closed — not a real error
-        if (err.code === "auth/popup-closed-by-user") return;
+        // Silently ignore popup-closed / cancelled
+        if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") return;
 
-        let message = "An error occurred.";
+        let message = "An error occurred during authentication.";
         if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
             message = "Invalid email or password.";
         } else if (err.code === "auth/email-already-in-use") {
-            message = "Email is already in use. Please sign in.";
+            message = "An account with this email address already exists. Please sign in instead.";
         } else if (err.code === "auth/account-exists-with-different-credential") {
-            message = "An account already exists with the same email address but different sign-in credentials.";
+            message = "An account already exists with this email using a different sign-in method.";
+        } else if (err.code === "auth/unauthorized-domain") {
+            message = "This domain/hostname is not authorized in Firebase Console Authentication settings.";
+        } else if (err.code === "auth/operation-not-allowed") {
+            message = "Google Sign-In is not enabled in your Firebase Authentication Console.";
+        } else if (err.code === "auth/popup-blocked") {
+            message = "The sign-in popup was blocked by your browser. Please enable popups for this site.";
+        } else if (err.code === "auth/network-request-failed") {
+            message = "Network error connecting to Firebase. Please check your internet connection.";
         } else {
             console.error("Auth Error:", error);
             message = err.message || message;
@@ -202,75 +184,69 @@ function SignInContent() {
             await setPersistence(auth, browserLocalPersistence);
             let userCred: UserCredential | undefined;
             if (isSignUp) {
+                // 1. Firebase standard user creation
                 userCred = await createUserWithEmailAndPassword(auth, data.email, data.password);
 
-                const user = userCred.user;
-                const userDocRef = doc(db, "users", user.uid);
+                // 2. Update display name
+                if (data.fullName) {
+                    try {
+                        await updateProfile(userCred.user, { displayName: data.fullName });
+                    } catch (profErr) {
+                        console.warn("Profile name update error:", profErr);
+                    }
+                }
 
-                // Check for Shadow Profile
+                // 3. Send official Firebase Email Verification
+                try {
+                    await sendEmailVerification(userCred.user);
+                } catch (verErr) {
+                    console.warn("Verification email send error:", verErr);
+                }
+
+                // 4. Create or Claim Firestore User Document
+                const userDocRef = doc(db, "users", userCred.user.uid);
                 const usersRef = collection(db, "users");
-                const q = query(usersRef, where("email", "==", data.email), where("isShadow", "==", true));
-                const querySnapshot = await getDocs(q);
+                const shadowQ = query(usersRef, where("email", "==", data.email.toLowerCase()), where("isShadow", "==", true));
+                const shadowSnap = await getDocs(shadowQ);
 
-                if (!querySnapshot.empty) {
-                    // --- MERGE SCENARIO ---
-                    const shadowDoc = querySnapshot.docs[0];
+                if (!shadowSnap.empty) {
+                    const shadowDoc = shadowSnap.docs[0];
                     const shadowData = shadowDoc.data();
                     const shadowUid = shadowDoc.id;
 
                     const batch = writeBatch(db);
-
                     batch.set(userDocRef, {
                         ...shadowData,
-                        uid: user.uid,
-                        email: data.email,
+                        uid: userCred.user.uid,
+                        email: data.email.toLowerCase(),
                         fullName: data.fullName || shadowData.fullName || "",
-                        registrationStatus: "active",
                         isShadow: false,
                         isAdmin: false,
                         role: "player",
+                        registrationStatus: "active",
                         createdAt: shadowData.createdAt || serverTimestamp(),
                         claimedAt: serverTimestamp(),
-                        previousUid: shadowUid
+                        previousUid: shadowUid,
                     });
-
                     batch.delete(doc(db, "users", shadowUid));
                     await batch.commit();
-                    showToast("Account reclaimed successfully!", "success");
-
-                    if (data.rememberMe) {
-                        localStorage.setItem("rememberedEmail", data.email);
-                    } else {
-                        localStorage.removeItem("rememberedEmail");
-                    }
                 } else {
-                    // --- NEW USER ---
                     await setDoc(userDocRef, {
-                        uid: user.uid,
-                        email: data.email,
+                        uid: userCred.user.uid,
+                        email: data.email.toLowerCase(),
                         fullName: data.fullName || "",
-                        registrationStatus: "active",
-                        createdBy: user.uid,
+                        role: "player",
                         isShadow: false,
                         isAdmin: false,
-                        role: "player",
+                        registrationStatus: "active",
+                        createdBy: userCred.user.uid,
                         createdAt: serverTimestamp(),
                     });
                 }
 
-                // [FIX] Only send Verification Email if ON
-                if (EMAIL_VERIFICATION_ON === "on") {
-                    try {
-                        await sendEmailVerification(userCred.user);
-                    } catch (emailError) {
-                        console.error("Failed to send verification email:", emailError);
-                        showToast("Account created, but failed to send verification email.", "info");
-                    }
-                }
-
-                showToast("Account created!" + (EMAIL_VERIFICATION_ON === "on" ? " Please verify email." : ""), "success");
-                handleSuccess(userCred);
-
+                showToast("Account created! Verification email sent. Please add your phone number to complete your profile.", "success");
+                router.replace("/player?completeProfile=true");
+                return;
             } else {
                 userCred = await signInWithEmailAndPassword(auth, data.email, data.password);
                 if (!userCred) throw new Error("Failed to sign in");
@@ -304,7 +280,7 @@ function SignInContent() {
                     localStorage.removeItem("rememberedEmail");
                 }
 
-                handleSuccess(userCred);
+                await handleSuccess(userCred);
             }
 
         } catch (error) {
@@ -317,6 +293,7 @@ function SignInContent() {
     const handleGoogleSignIn = async () => {
         setIsLoading(true);
         const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
 
         try {
             await setPersistence(auth, browserLocalPersistence);
@@ -371,21 +348,24 @@ function SignInContent() {
                     });
                 }
             } else {
-                if (user.photoURL && userDocSnap.data().photoUrl !== user.photoURL) {
-                    await updateDoc(userDocRef, { photoUrl: user.photoURL });
+                const updatePayload: Record<string, unknown> = {};
+                if (user.photoURL && userDocSnap.data()?.photoUrl !== user.photoURL) {
+                    updatePayload.photoUrl = user.photoURL;
                 }
-                if (userDocSnap.data().registrationStatus !== "active") {
-                    await updateDoc(userDocRef, { registrationStatus: "active" });
+                if (userDocSnap.data()?.registrationStatus !== "active") {
+                    updatePayload.registrationStatus = "active";
+                }
+                if (Object.keys(updatePayload).length > 0) {
+                    await updateDoc(userDocRef, updatePayload);
                 }
             }
-            handleSuccess(result);
+            await handleSuccess(result);
         } catch (error: unknown) {
             const err = error as { code?: string; customData?: { email?: string }; message?: string };
-            if (err.code === "auth/popup-closed-by-user") {
-                // User closed the popup — not a real error, just silently ignore
+            if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") {
                 return;
             }
-            console.error("Sign-in failed:", error);
+            console.error("Google Sign-in failed:", error);
             if (err.code === "auth/account-exists-with-different-credential") {
                 const email = err.customData?.email;
                 if (email) {
@@ -400,8 +380,50 @@ function SignInContent() {
         }
     };
 
-    const handleAppleSignIn = () => {
-        showToast("Apple Sign-In is not configured (requires Developer Account).", "info");
+    const handleAppleSignIn = async () => {
+        setIsLoading(true);
+        try {
+            await setPersistence(auth, browserLocalPersistence);
+            const provider = new OAuthProvider("apple.com");
+            provider.addScope("email");
+            provider.addScope("name");
+
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            // Send payload to backend social login processor (sub claim mapping + first-time name preservation)
+            const idToken = await user.getIdToken();
+            const res = await fetch("/api/auth/oauth/callback", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    provider: "apple",
+                    idToken,
+                    userPayload: {
+                        sub: user.uid,
+                        email: user.email || "",
+                        fullName: user.displayName || "",
+                        photoUrl: user.photoURL || "",
+                    },
+                }),
+            });
+
+            const callbackData = await res.json();
+            if (!res.ok || !callbackData.success) {
+                showToast(callbackData.error || "Apple Sign-In process failed.", "error");
+                setIsLoading(false);
+                return;
+            }
+
+            await handleSuccess(result);
+        } catch (error: unknown) {
+            const err = error as { code?: string; message?: string };
+            if (err.code === "auth/popup-closed-by-user") return;
+            console.error("Apple Sign-In Error:", error);
+            handleError(error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const toggleMode = () => {
@@ -428,23 +450,13 @@ function SignInContent() {
         setIsResetLoading(true);
         try {
             await sendPasswordResetEmail(auth, resetEmail);
-            showToast("Password reset email sent! Check your inbox.", "success");
+        } catch (error: unknown) {
+            // Log error internally, but do NOT leak email existence to client
+            console.log("Password reset internal trace:", error);
+        } finally {
+            showToast("If an account exists with this email, a reset link has been sent to your inbox.", "success");
             setForgotPasswordOpen(false);
             setResetEmail("");
-        } catch (error: unknown) {
-            console.error("Reset Password Error:", error);
-            const err = error as { code?: string; message?: string };
-            if (err.code === "auth/user-not-found") {
-                // For security, we might want to show success even if user not found, 
-                // but for UX in this app context, helpful errors are okay.
-                // However, standard practice is confusing logic. 
-                // Let's stick to helpful for now as per user persona requested "pro developer" usually balances UX/Security.
-                // Actually, "user-not-found" often happens. 
-                showToast("No account found with this email.", "error");
-            } else {
-                showToast("Failed to send reset email. Try again.", "error");
-            }
-        } finally {
             setIsResetLoading(false);
         }
     };

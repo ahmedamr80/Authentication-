@@ -9,7 +9,7 @@ import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy, Pencil, Loader2 } from "lucide-react";
 import { TeamsList, Team } from "@/components/TeamsList";
 import { SinglePlayersList, SinglePlayer } from "@/components/SinglePlayersList";
 import { RegisterDialog } from "@/components/RegisterDialog";
@@ -23,6 +23,9 @@ import { format } from "date-fns";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { EventTermsSection } from "@/components/EventTermsSection";
+import { EligibilityGateDialog } from "@/components/EligibilityGateDialog";
+import { checkPlayerEligibility } from "@/lib/authRequirements";
 
 // Define a legacy interface for teams that might have direct name properties
 // This solves the 'any' casting issue while keeping Type safety
@@ -55,7 +58,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     const router = useRouter();
     const { user, isAdmin } = useAuth();
     const { showToast } = useToast();
-    const { withdraw } = useEventWithdraw();
+    const { withdraw, loading: withdrawLoading } = useEventWithdraw();
     // State
     const [event, setEvent] = useState<EventData | null>(null);
     const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -70,10 +73,38 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     // UI State
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
     const [isTeamRegisterOpen, setIsTeamRegisterOpen] = useState(false);
+    const [isEligibilityGateOpen, setIsEligibilityGateOpen] = useState(false);
+    const [eligibilityState, setEligibilityState] = useState<{ isEmailVerified: boolean; hasPhone: boolean }>({
+        isEmailVerified: true,
+        hasPhone: true,
+    });
     const [inviteDialogData, setInviteDialogData] = useState<{
         teamId: string;
         requester: { uid: string; displayName?: string };
     } | null>(null);
+
+    const handleOpenRegistration = async (isTeam: boolean) => {
+        if (!user) {
+            router.push(`/auth/signin?returnTo=/events/${eventId}`);
+            return;
+        }
+
+        const eligibility = await checkPlayerEligibility(user, userProfiles[user.uid]);
+        if (!eligibility.eligible) {
+            setEligibilityState({
+                isEmailVerified: eligibility.isEmailVerified,
+                hasPhone: eligibility.hasPhone,
+            });
+            setIsEligibilityGateOpen(true);
+            return;
+        }
+
+        if (isTeam) {
+            setIsTeamRegisterOpen(true);
+        } else {
+            setIsRegisterOpen(true);
+        }
+    };
 
     const searchParams = useSearchParams();
     const inviteTeamId = searchParams.get('teamId');
@@ -110,7 +141,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         if (!eventId) return;
         const q = query(collection(db, "registrations"), where("eventId", "==", eventId));
         const unsub = onSnapshot(q, (snapshot) => {
-            const regs = snapshot.docs.map(d => ({ registrationId: d.id, ...d.data() } as Registration));
+            const regs = snapshot.docs.map(d => ({ ...d.data(), id: d.id, registrationId: d.id } as unknown as Registration));
             setRegistrations(regs);
         });
         return () => unsub();
@@ -233,7 +264,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         if (!user) return undefined;
 
         // Check for solo registration (Players mode or looking for partner in Teams mode)
-        const soloReg = registrations.find(r => r.playerId === user.uid && r.status !== "CANCELLED");
+        const soloReg = registrations.find(r => 
+            (r.playerId === user.uid || r.player2Id === user.uid) && r.status !== "CANCELLED"
+        );
         if (soloReg) return soloReg;
 
         // Check if user is part of a team (Teams mode)
@@ -329,7 +362,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown Player",
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown Player",
                     // Prioritize LIVE profile photo -> registration snapshot -> fallback
                     photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: r.lookingForPartner || false,
@@ -356,7 +389,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown",
                     photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: false, // In singles mode, you are just "in", not looking
                     playerHand: profile?.hand,
@@ -381,7 +414,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown",
                     photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
@@ -403,7 +436,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: r.playerDisplayName || profile?.displayName || profile?.fullName || profile?.fullname || "Unknown",
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown",
                     photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
@@ -415,8 +448,98 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
     // Handlers
     const handleShare = () => {
-        navigator.clipboard.writeText(window.location.href);
-        showToast("Link copied to clipboard!", "success");
+        if (!event) {
+            navigator.clipboard.writeText(window.location.href);
+            showToast("Event link copied to clipboard!", "success");
+            return;
+        }
+
+        // 1. Format Date & Time & Links
+        const eventTimestamp = event.eventDate || event.dateTime;
+        const dateStr = eventTimestamp ? format(eventTimestamp.toDate(), "EEEE, dd MMM yyyy") : "TBD";
+        const timeStr = eventTimestamp ? format(eventTimestamp.toDate(), "hh:mm a") : "TBD";
+        const durationStr = event.duration ? ` (${event.duration} mins)` : "";
+        const locationStr = event.location || event.locationName || "TBD";
+        const priceValue = event.price !== undefined ? event.price : event.pricePerPlayer;
+        const priceStr = priceValue ? `${priceValue} AED` : "Free";
+
+        const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+        const eventUrl = isLocal
+            ? `https://ewpuae.com/events/${event.eventId}`
+            : (typeof window !== "undefined" ? window.location.href : `https://ewpuae.com/events/${event.eventId}`);
+
+        const mapsUrl = clubCoordinates
+            ? `https://maps.google.com/?q=${clubCoordinates.lat},${clubCoordinates.lng}`
+            : `https://maps.google.com/?q=${encodeURIComponent(locationStr)}`;
+
+        // 2. Build WhatsApp Formatted String
+        let message = `🎾 *${event.eventName.toUpperCase()}*\n`;
+        message += `🔗 *Register / Details:*\n${eventUrl}\n`;
+        message += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        message += `📅 *Date:* ${dateStr}\n`;
+        message += `⏰ *Time:* ${timeStr}${durationStr}\n`;
+        message += `📍 *Location:* ${locationStr}\n`;
+        message += `🗺️ *Google Maps:*\n${mapsUrl}\n`;
+        message += `💰 *Price:* ${priceStr} / player\n`;
+
+        if (event.unitType === "Players") {
+            const max = event.maxPlayers || event.slotsAvailable || 0;
+            message += `👥 *Spots:* ${confirmedPlayers.length}/${max} Players\n\n`;
+
+            message += `📋 *CONFIRMED PLAYERS (${confirmedPlayers.length}):*\n`;
+            if (confirmedPlayers.length > 0) {
+                confirmedPlayers.forEach((p, idx) => {
+                    message += `${idx + 1}. ${p.displayName}\n`;
+                });
+            } else {
+                message += `_No confirmed players yet_\n`;
+            }
+
+            if (waitlistPlayers.length > 0) {
+                message += `\n⏳ *WAITLIST (${waitlistPlayers.length}):*\n`;
+                waitlistPlayers.forEach((p, idx) => {
+                    message += `${idx + 1}. ${p.displayName}\n`;
+                });
+            }
+        } else {
+            // Teams mode
+            const confirmedTeams = teamsWithPlayers.filter(t => t.status === "CONFIRMED");
+            const waitlistTeams = teamsWithPlayers.filter(t => t.status === "WAITLIST");
+            const totalTeams = event.slotsAvailable || 0;
+
+            message += `👥 *Spots:* ${confirmedTeams.length}/${totalTeams} Teams\n\n`;
+
+            message += `📋 *CONFIRMED TEAMS (${confirmedTeams.length}):*\n`;
+            if (confirmedTeams.length > 0) {
+                confirmedTeams.forEach((t, idx) => {
+                    const p1 = t.player1?.displayName || "Player 1";
+                    const p2 = t.player2?.displayName || "Player 2";
+                    message += `${idx + 1}. ${p1} & ${p2}\n`;
+                });
+            } else {
+                message += `_No confirmed teams yet_\n`;
+            }
+
+            if (singlePlayers.length > 0) {
+                message += `\n🔍 *LOOKING FOR PARTNER (${singlePlayers.length}):*\n`;
+                singlePlayers.forEach((p, idx) => {
+                    message += `${idx + 1}. ${p.displayName}\n`;
+                });
+            }
+
+            if (waitlistTeams.length > 0) {
+                message += `\n⏳ *WAITLIST TEAMS (${waitlistTeams.length}):*\n`;
+                waitlistTeams.forEach((t, idx) => {
+                    const p1 = t.player1?.displayName || "Player 1";
+                    const p2 = t.player2?.displayName || "Player 2";
+                    message += `${idx + 1}. ${p1} & ${p2}\n`;
+                });
+            }
+        }
+
+        // 3. Copy to Clipboard
+        navigator.clipboard.writeText(message);
+        showToast("Event details copied for WhatsApp!", "success");
     };
 
     const handleManageInvite = (team: Team) => {
@@ -431,23 +554,64 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     };
 
     const handleWithdraw = async () => {
-        if (!user || !userRegistration) return;
-        if (!confirm("Are you sure you want to withdraw from this event?")) return;
+        console.log("[DEBUG handleWithdraw Triggered]", {
+            userUid: user?.uid,
+            userEmail: user?.email,
+            userRegistration,
+            eventId: event?.eventId,
+            eventUnitType: event?.unitType,
+            totalRegistrationsCount: registrations.length,
+            registrationsList: registrations.map(r => ({ id: r.registrationId || (r as unknown as { id?: string }).id, playerId: r.playerId, status: r.status })),
+            teamsCount: teams.length,
+        });
+
+        if (!user) {
+            console.error("[DEBUG handleWithdraw] No user logged in!");
+            showToast("Debug: You must be logged in to withdraw", "error");
+            return;
+        }
+
+        if (!event) {
+            console.error("[DEBUG handleWithdraw] Event data not loaded!");
+            showToast("Debug: Event data is missing", "error");
+            return;
+        }
+
+        // Find active registration if userRegistration memo was not populated
+        let effectiveReg = userRegistration;
+        if (!effectiveReg) {
+            console.warn("[DEBUG handleWithdraw] userRegistration was undefined in state. Searching registrations array directly...");
+            const directMatch = registrations.find(r => 
+                (r.playerId === user.uid || r.player2Id === user.uid) && r.status !== "CANCELLED"
+            );
+            if (directMatch) {
+                console.log("[DEBUG handleWithdraw] Found direct match in registrations:", directMatch);
+                effectiveReg = directMatch;
+            }
+        }
+        
+        console.log("[DEBUG handleWithdraw] Proceeding with withdrawal execution...");
 
         try {
-            // Determine Team ID if applicable
+            showToast("Processing withdrawal...", "info");
             const userTeam = teams.find(t => t.player1Id === user.uid || t.player2Id === user.uid);
-            const teamId = userTeam ? userTeam.teamId : null;
+            const teamId = userTeam ? userTeam.teamId : (effectiveReg?.teamId || null);
 
-            await withdraw(user, event!, userRegistration as Registration, teamId, () => {
-                showToast("Successfully withdrawn from event", "success");
-                // Optional: refresh logic if needed, though real-time listeners usually handle it
-                window.location.reload();
+            console.log("[DEBUG handleWithdraw] Calling withdraw hook with:", {
+                userId: user.uid,
+                eventId: event.eventId,
+                registrationId: effectiveReg?.registrationId || (effectiveReg as unknown as { id?: string })?.id,
+                teamId
+            });
+
+            await withdraw(user, event, effectiveReg as Registration || null, teamId, () => {
+                console.log("[DEBUG handleWithdraw] withdraw onSuccess callback fired!");
+                showToast("Successfully withdrawn from event!", "success");
             });
 
         } catch (error: unknown) {
-            console.error(error);
-            showToast("Failed to withdraw", "error");
+            console.error("[DEBUG handleWithdraw] Error caught during withdraw:", error);
+            showToast(error instanceof Error ? `Withdraw Error: ${error.message}` : "Failed to withdraw", "error");
         }
     };
     if (loading) {
@@ -508,8 +672,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     {/* Background Glow */}
                     <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
 
-                    {/* Top Bar: Back & Share */}
-                    <div className="flex justify-between items-center mb-6">
+                    {/* Top Bar: Back, Badges, & Actions */}
+                    <div className="flex flex-wrap sm:flex-nowrap justify-between items-center gap-2 mb-6">
                         <Button
                             variant="ghost"
                             size="sm"
@@ -527,24 +691,30 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             </Badge>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                             {isAdmin && (
                                 <>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="hidden md:flex text-blue-500 border-blue-500 hover:bg-blue-500 hover:text-white"
+                                        className="h-9 px-2.5 sm:px-3 text-blue-400 border-blue-500/40 hover:bg-blue-500/20 hover:text-blue-300 hover:border-blue-500 transition-all flex items-center gap-1.5"
                                         onClick={() => router.push(`/events/create?cloneFrom=${eventId}`)}
+                                        title="Clone Event"
+                                        aria-label="Clone Event"
                                     >
-                                        <Copy className="w-4 h-4 mr-1" /> Clone
+                                        <Copy className="w-4 h-4 shrink-0" />
+                                        <span className="hidden sm:inline font-medium">Clone</span>
                                     </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="hidden md:flex text-orange-500 border-orange-500 hover:bg-orange-500 hover:text-white"
+                                        className="h-9 px-2.5 sm:px-3 text-orange-400 border-orange-500/40 hover:bg-orange-500/20 hover:text-orange-300 hover:border-orange-500 transition-all flex items-center gap-1.5"
                                         onClick={() => router.push(`/events/${eventId}/edit`)}
+                                        title="Edit Event"
+                                        aria-label="Edit Event"
                                     >
-                                        Edit
+                                        <Pencil className="w-4 h-4 shrink-0" />
+                                        <span className="hidden sm:inline font-medium">Edit</span>
                                     </Button>
                                 </>
                             )}
@@ -583,45 +753,45 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             </h1>
 
                             {/* Info Grid */}
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div className="bg-gray-950/50 p-4 rounded-xl border border-gray-800">
-                                    <div className="flex items-center gap-2 text-gray-500 mb-1 text-xs uppercase tracking-wider">
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                                <div className="bg-gray-950/50 p-3 sm:p-4 rounded-xl border border-gray-800">
+                                    <div className="flex items-center gap-2 text-gray-500 mb-1 text-[10px] sm:text-xs uppercase tracking-wider">
                                         <Calendar className="h-3 w-3" /> Date
                                     </div>
-                                    <div className="font-semibold text-white">
+                                    <div className="text-sm sm:text-base font-semibold text-white">
                                         {event.eventDate ? format(event.eventDate.toDate(), "MMM d, yyyy") : "TBD"}
                                     </div>
                                 </div>
-                                <div className="bg-gray-950/50 p-4 rounded-xl border border-gray-800">
-                                    <div className="flex items-center gap-2 text-gray-500 mb-1 text-xs uppercase tracking-wider">
+                                <div className="bg-gray-950/50 p-3 sm:p-4 rounded-xl border border-gray-800">
+                                    <div className="flex items-center gap-2 text-gray-500 mb-1 text-[10px] sm:text-xs uppercase tracking-wider">
                                         <Clock className="h-3 w-3" /> Time
                                     </div>
-                                    <div className="font-semibold text-white">
+                                    <div className="text-sm sm:text-base font-semibold text-white">
                                         {event.eventDate ? format(event.eventDate.toDate(), "h:mm a") : "TBD"}
-                                        {event.duration && <span className="text-gray-500 text-xs ml-1">({event.duration} min)</span>}
+                                        {event.duration && <span className="text-gray-500 text-[10px] sm:text-xs ml-1">({event.duration}m)</span>}
                                     </div>
                                 </div>
-                                <div className="text-center p-3 bg-gray-900/50 rounded-xl border border-gray-800 flex flex-col justify-center">
-                                    <p className="text-sm text-gray-400 mb-1">
+                                <div className="text-center p-3 sm:p-4 bg-gray-900/50 rounded-xl border border-gray-800 flex flex-col justify-center">
+                                    <p className="text-xs sm:text-sm text-gray-400 mb-1">
                                         {event.unitType === "Teams" ? "Teams Left" : "Spots Left"}
                                     </p>
-                                    <p className="text-2xl font-bold text-white">
+                                    <p className="text-xl sm:text-2xl font-bold text-white">
                                         {event.unitType === "Teams"
                                             ? Math.floor(spotsLeft)
                                             : spotsLeft}
                                     </p>
-                                    <p className="text-xs text-orange-400 mt-1">
+                                    <p className="text-[10px] sm:text-xs text-orange-400 mt-1">
                                         {event.unitType === "Teams"
-                                            ? `${teams.filter(t => t.status === 'CONFIRMED').length} / ${event.slotsAvailable ? event.slotsAvailable : 0} Total Teams`
-                                            : `${confirmedPlayers.length} / ${event.maxPlayers || event.slotsAvailable} Total Spots`
+                                            ? `${teams.filter(t => t.status === 'CONFIRMED').length}/${event.slotsAvailable || 0} Teams`
+                                            : `${confirmedPlayers.length}/${event.maxPlayers || event.slotsAvailable} Players`
                                         }
                                     </p>
                                 </div>
-                                <div className="bg-gray-950/50 p-4 rounded-xl border border-gray-800">
-                                    <div className="flex items-center gap-2 text-gray-500 mb-1 text-xs uppercase tracking-wider">
+                                <div className="bg-gray-950/50 p-3 sm:p-4 rounded-xl border border-gray-800">
+                                    <div className="flex items-center gap-2 text-gray-500 mb-1 text-[10px] sm:text-xs uppercase tracking-wider">
                                         <Trophy className="h-3 w-3" /> Level
                                     </div>
-                                    <div className="font-semibold text-white">
+                                    <div className="text-sm sm:text-base font-semibold text-white">
                                         {event.level || "Open"}
                                     </div>
                                 </div>
@@ -629,16 +799,16 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                         </div>
 
                         {/* Price & Location Side */}
-                        <div className="flex flex-col justify-between items-end min-w-[200px]">
-                            <div className="text-right">
-                                <div className="text-3xl font-bold text-green-400">
+                        <div className="flex flex-col sm:flex-row md:flex-col justify-between items-start sm:items-center md:items-end gap-4 min-w-[200px]">
+                            <div className="text-left sm:text-center md:text-right">
+                                <div className="text-2xl sm:text-3xl font-bold text-green-400">
                                     {event.price ? `${event.price} AED` : "Free"}
                                 </div>
-                                <div className="text-sm text-gray-500">per player</div>
+                                <div className="text-xs sm:text-sm text-gray-500">per player</div>
                             </div>
 
-                            <div className="mt-4 flex items-center gap-2 text-gray-400 bg-gray-950/50 px-3 py-2 rounded-lg border border-gray-800">
-                                <MapPin className="h-4 w-4 text-orange-500" />
+                            <div className="flex items-center gap-2 text-gray-400 bg-gray-950/50 px-3 py-2 rounded-lg border border-gray-800 w-full sm:w-auto">
+                                <MapPin className="h-4 w-4 text-orange-500 shrink-0" />
                                 <a
                                     href={clubCoordinates
                                         ? `https://www.google.com/maps/search/?api=1&query=${clubCoordinates.lat},${clubCoordinates.lng}`
@@ -646,7 +816,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     }
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="hover:text-orange-400 hover:underline transition-colors text-sm"
+                                    className="hover:text-orange-400 hover:underline transition-colors text-xs sm:text-sm truncate"
                                 >
                                     {event.location || "TBD"}
                                 </a>
@@ -705,10 +875,21 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                 <div className="flex gap-3 w-full md:w-auto justify-center">
                                     {userRegistration ? (
                                         <Button
-                                            className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-bold"
-                                            onClick={handleWithdraw}
+                                            className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-2 cursor-pointer"
+                                            onClick={() => {
+                                                console.log("[DEBUG Withdraw Button Clicked in DOM]");
+                                                handleWithdraw();
+                                            }}
+                                            disabled={withdrawLoading}
                                         >
-                                            Withdraw
+                                            {withdrawLoading ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Withdrawing...
+                                                </>
+                                            ) : (
+                                                "Withdraw"
+                                            )}
                                         </Button>
                                     ) : (
                                         <>
@@ -716,13 +897,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                             {event.unitType === "Players" && (
                                                 <Button
                                                     className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
-                                                    onClick={() => {
-                                                        if (!user) {
-                                                            router.push(`/auth/signin?returnTo=/events/${eventId}`);
-                                                            return;
-                                                        }
-                                                        setIsRegisterOpen(true);
-                                                    }}
+                                                    onClick={() => handleOpenRegistration(false)}
                                                 >
                                                     {spotsLeft <= 0 ? "Join Waitlist" : "Register to Event"}
                                                 </Button>
@@ -731,13 +906,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                             {event.unitType === "Teams" && (
                                                 <Button
                                                     className="md:w-auto bg-orange-500 hover:bg-orange-600 text-white font-bold"
-                                                    onClick={() => {
-                                                        if (!user) {
-                                                            router.push(`/auth/signin?returnTo=/events/${eventId}`);
-                                                            return;
-                                                        }
-                                                        setIsTeamRegisterOpen(true);
-                                                    }}
+                                                    onClick={() => handleOpenRegistration(true)}
                                                 >
                                                     {spotsLeft === 0 ? "Register Team to Waitlist" : "Register Team"}
                                                 </Button>
@@ -748,6 +917,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             </div>
                         )
                     )}
+
+                    {/* Event Terms & Conditions Section */}
+                    <EventTermsSection event={event} />
+
                     {/* Tabs */}
                     {showTeams ? (
                         <Tabs defaultValue="teams" className="w-full">
@@ -901,6 +1074,20 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     }}
                 />
             )}
+
+            <EligibilityGateDialog
+                open={isEligibilityGateOpen}
+                onOpenChange={setIsEligibilityGateOpen}
+                user={user}
+                isEmailVerified={eligibilityState.isEmailVerified}
+                hasPhone={eligibilityState.hasPhone}
+                onVerifiedRefresh={() => {
+                    setIsEligibilityGateOpen(false);
+                    if (event) {
+                        handleOpenRegistration(event.unitType === "Teams");
+                    }
+                }}
+            />
         </div>
     );
 }

@@ -12,6 +12,8 @@ import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
 import { useTeamInvite } from "@/hooks/useTeamInvite";
 import { t } from "@/lib/i18n";
+import { EventTermsModal } from "@/components/EventTermsModal";
+import { checkPlayerEligibility } from "@/lib/authRequirements";
 
 interface TeamRegisterDialogProps {
     event: EventData;
@@ -49,9 +51,13 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
     
     const isSubmittingRef = useRef(false);
 
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [termsModalOpen, setTermsModalOpen] = useState(false);
+
     // Reset state when dialog opens
     useEffect(() => {
         if (open) {
+            setAgreedToTerms(false);
             setMode("SELECT");
             setSearchQuery("");
             setSearchResults([]);
@@ -173,6 +179,15 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
         // Capture the synced profile to ensure we send the latest name/photo
         const syncedProfile = await ensureProfileSynced();
 
+        // Check eligibility (email verification & phone number)
+        const eligibility = await checkPlayerEligibility(user, syncedProfile);
+        if (!eligibility.eligible) {
+            showToast(eligibility.message, "error");
+            isSubmittingRef.current = false;
+            if (setOpen) setOpen(false);
+            return;
+        }
+
         try {
             await sendInvite(
                 user,
@@ -204,6 +219,16 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
             // 1. Sync Profile First
             const profile = await ensureProfileSynced();
 
+            // Check eligibility (email verification & phone number)
+            const eligibility = await checkPlayerEligibility(user, profile);
+            if (!eligibility.eligible) {
+                showToast(eligibility.message, "error");
+                setLoading(false);
+                isSubmittingRef.current = false;
+                if (setOpen) setOpen(false);
+                return;
+            }
+
             await runTransaction(db, async (transaction) => {
                 // Register as Single (Scenario 12)
                 // In Team events, solo players (Free Agents) are always CONFIRMED 
@@ -221,7 +246,6 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     lookingForPartner: true,
                     isPrimary: true,
                     fullNameP1: profile?.displayName || profile?.fullName || user.displayName || "Unknown Player",
-                    playerPhotoURL: profile?.photoUrl || profile?.photoURL || user.photoURL || "",
                     _debugSource: "TeamRegisterDialog.tsx - handleRegisterSingle"
                 });
 
@@ -273,8 +297,9 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     <div className="grid gap-4 py-4">
                         <Button
                             variant="outline"
-                            className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-blue-50 hover:border-blue-200 transition-all"
+                            className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-blue-50 hover:border-blue-200 transition-all disabled:opacity-50"
                             onClick={() => setMode("PARTNER")}
+                            disabled={!agreedToTerms}
                         >
                             <UserPlus className="h-8 w-8 text-blue-600" />
                             <span className="font-semibold">{t("I have a partner")}</span>
@@ -282,9 +307,9 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                         </Button>
                         <Button
                             variant="outline"
-                            className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-green-50 hover:border-green-200 transition-all"
+                            className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-green-50 hover:border-green-200 transition-all disabled:opacity-50"
                             onClick={() => handleRegisterSingle()}
-                            disabled={loading}
+                            disabled={loading || !agreedToTerms}
                         >
                             {loading ? <Loader2 className="h-8 w-8 animate-spin" /> : <UserIcon className="h-8 w-8 text-green-600" />}
                             <span className="font-semibold">{t("Find me a partner")}</span>
@@ -314,7 +339,7 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                                         <span className="font-medium">{result.displayName || "Unknown User"}</span>
                                         <span className="text-xs text-gray-500">{result.email}</span>
                                     </div>
-                                    <Button size="sm" onClick={() => handleInvitePartner(result)} disabled={inviteLoading}>
+                                    <Button size="sm" onClick={() => handleInvitePartner(result)} disabled={inviteLoading || !agreedToTerms}>
                                         {inviteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Invite")}
                                     </Button>
                                 </div>
@@ -329,6 +354,34 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                         </Button>
                     </div>
                 )}
+
+                {/* T&C Checkbox */}
+                <div className="pt-3 border-t border-gray-100 flex items-start gap-2.5">
+                    <input
+                        type="checkbox"
+                        id="agree-terms-team"
+                        checked={agreedToTerms}
+                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                    />
+                    <label htmlFor="agree-terms-team" className="text-xs text-gray-600 leading-normal cursor-pointer select-none">
+                        I have read and agree to the{" "}
+                        <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); setTermsModalOpen(true); }}
+                            className="text-orange-600 font-semibold underline hover:text-orange-700"
+                        >
+                            Event Terms & Conditions
+                        </button>{" "}
+                        and cancellation policy.
+                    </label>
+                </div>
+
+                <EventTermsModal
+                    event={event}
+                    open={termsModalOpen}
+                    onOpenChange={setTermsModalOpen}
+                />
             </DialogContent>
         </Dialog>
     );

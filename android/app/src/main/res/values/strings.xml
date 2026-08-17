@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EveryWherePadel</string>
+    <string name="title_activity_main">EveryWherePadel</string>
+    <string name="package_name">com.ewpuae.app</string>
+    <string name="custom_url_scheme">com.ewpuae.app</string>
+</resources>

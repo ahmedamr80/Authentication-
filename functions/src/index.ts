@@ -27,14 +27,7 @@ import * as admin from "firebase-admin";
 // this will be the maximum concurrent request count.
 setGlobalOptions({ maxInstances: 10 });
 
-/**
- * Lazily initializes the Firebase Admin SDK. Safe to call multiple times.
- */
-function ensureAdminInitialized() {
-    if (admin.apps.length === 0) {
-        admin.initializeApp();
-    }
-}
+import { ensureAdminInitialized } from "./adminInit";
 
 export const onUserUpdate = onDocumentWritten("users/{userId}", async (event) => {
     ensureAdminInitialized();

@@ -197,10 +197,10 @@ export const useTeamAccept = () => {
 
                 if (isP1) {
                     teamUpdates.player1Confirmed = true; teamUpdates.fullNameP1 = accepterName;
-                    regUpdate.fullNameP1 = accepterName; regUpdate.playerPhotoURL = currentUser.photoURL || null;
+                    regUpdate.fullNameP1 = accepterName;
                 } else {
                     teamUpdates.player2Confirmed = true; teamUpdates.fullNameP2 = accepterName;
-                    regUpdate.fullNameP2 = accepterName; regUpdate.player2PhotoURL = currentUser.photoURL || null;
+                    regUpdate.fullNameP2 = accepterName;
                 }
 
                 transaction.update(teamRef, teamUpdates);
@@ -243,13 +243,16 @@ export const useTeamAccept = () => {
                         year: '2-digit'
                     }).replace(/\//g, '-') || 'dd-mm-yy';
 
+                    const isWaitlist = finalStatus === STATUS.WAITLIST;
                     const replyRef = doc(collection(db, "notifications"));
                     transaction.set(replyRef, {
                         notificationId: replyRef.id,
                         userId: otherUserId,
                         type: NOTIFICATION_TYPE.PARTNER_ACCEPTED,
-                        title: "Team Confirmed!",
-                        message: `${accepterName} has accepted your invitation for ${eventData.eventName} on ${eventDateFormatted}, you now a team`,
+                        title: isWaitlist ? "Added to Waitlist" : "Team Confirmed!",
+                        message: isWaitlist
+                            ? `${accepterName} has accepted your invitation for ${eventData.eventName} on ${eventDateFormatted}, your team is now on the waitlist`
+                            : `${accepterName} has accepted your invitation for ${eventData.eventName} on ${eventDateFormatted}, you now a team`,
                         fromUserId: currentUser.uid,
                         eventId: teamData.eventId,
                         teamId: teamId,

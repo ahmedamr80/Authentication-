@@ -49,6 +49,8 @@ export interface Registration {
     teamId?: string;
     partnerStatus?: "CONFIRMED" | "PENDING" | "NONE" | "DENIED";
     waitlistPosition?: number;
+    fullNameP1?: string;
+    fullNameP2?: string;
     playerDisplayName?: string;
     playerPhotoURL?: string;
     playerLevel?: string;

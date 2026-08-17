@@ -37,9 +37,17 @@ interface TeamsListProps {
     onManageInvite?: (team: Team) => void;
 }
 
-export function TeamsList({ currentUser, teams, onManageInvite }: TeamsListProps) {
+export function TeamsList({ currentUser, teams, loading, onManageInvite }: TeamsListProps) {
     const { showToast } = useToast();
     const { dissolveTeam, loading: dissolveLoading } = useTeamDissolve();
+
+    if (loading) {
+        return (
+            <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-orange-500"></div>
+            </div>
+        );
+    }
 
     const handleLeaveTeam = async (teamId: string) => {
         if (!currentUser) return;

@@ -174,16 +174,19 @@ export const useTeamDissolve = () => {
             }
 
             // 5. Waitlist Logic (for filling the hole)
-            // ... (Same as before)
+            // Query without orderBy to avoid requiring composite indexes in Firestore
             const waitlistQuery = query(
                 collection(db, "teams"),
                 where("eventId", "==", eventId),
-                where("status", "==", STATUS.WAITLIST),
-                orderBy("createdAt", "asc"),
-                limit(1)
+                where("status", "==", STATUS.WAITLIST)
             );
             const waitlistSnap = await getDocs(waitlistQuery);
-            const candidateTeamDoc = !waitlistSnap.empty ? waitlistSnap.docs[0] : null;
+            const sortedTeamDocs = [...waitlistSnap.docs].sort((a, b) => {
+                const aTime = a.data().createdAt?.toMillis ? a.data().createdAt.toMillis() : 0;
+                const bTime = b.data().createdAt?.toMillis ? b.data().createdAt.toMillis() : 0;
+                return aTime - bTime;
+            });
+            const candidateTeamDoc = sortedTeamDocs.length > 0 ? sortedTeamDocs[0] : null;
             let candidateRegDoc = null;
             if (candidateTeamDoc) {
                 const candRegQuery = query(collection(db, "registrations"), where("teamId", "==", candidateTeamDoc.id));
@@ -217,22 +220,17 @@ export const useTeamDissolve = () => {
                 if (regSnap && regSnap.exists() && regRef) {
                     if (strategy === "PROMOTE_SURVIVOR" && survivorId) {
                         // "Promote" the survivor into this seat
-                        // We need survivor details. If it's P2, fetch from teamData or profile.
                         let sName = "Unknown";
-                        //  let sPhoto = null;
 
                         if (survivorId === p1Id) {
-                            sName = teamData.fullNameP1 || currentRegData?.fullNameP1;
-                            //     sPhoto = currentRegData?.playerPhotoURL || null;
+                            sName = teamData.fullNameP1 || currentRegData?.fullNameP1 || "";
                         } else {
-                            sName = teamData.fullNameP2 || currentRegData?.fullNameP2;
-                            //     sPhoto = teamData.player2?.photoURL || currentRegData?.player2PhotoURL || null;
+                            sName = teamData.fullNameP2 || currentRegData?.fullNameP2 || "";
                         }
 
                         transaction.update(regRef, {
                             playerId: survivorId,
                             fullNameP1: sName,
-                            //   playerPhotoURL: sPhoto,
                             isPrimary: true,
                             teamId: null,
                             lookingForPartner: true,
@@ -241,7 +239,6 @@ export const useTeamDissolve = () => {
                             player2Id: null,
                             fullNameP2: null,
                             player2Confirmed: false,
-                            player2PhotoURL: null,
                             invite: null,
                             _debugSource: "useTeamDissolve - PROMOTE",
                             _lastUpdated: serverTimestamp()

@@ -4,5 +4,8 @@
     "Codegeex.CandidateNum": "2 (medium)",
     "Codegeex.SidebarUI.LanguagePreference": "English",
     "Codegeex.Comment.LanguagePreference": "English",
-    "Codegeex.Chat.LanguagePreference": "English"
+    "Codegeex.Chat.LanguagePreference": "English",
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.import.gradle.java.home": "C:/Program Files/Android/Android Studio/jbr",
+    "java.jdt.ls.java.home": "C:/Program Files/Android/Android Studio/jbr"
 }

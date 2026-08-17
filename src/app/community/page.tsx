@@ -148,7 +148,6 @@ export default function CommunityPage() {
         }
 
         if (filters.gender && filters.gender !== "all") {
-            // @ts-expect-error: Filters might be undefined in the library type definition
             result = result.filter(member => member.gender?.toLowerCase() === filters.gender);
         }
 
@@ -156,18 +155,30 @@ export default function CommunityPage() {
             const month = parseInt(filters.registrationMonth);
             result = result.filter(member => {
                 if (!member.createdAt) return false;
-                const date = member.createdAt.toDate();
+                // Handle both Firestore Timestamp and plain object fallback
+                const ts = member.createdAt as unknown as { toDate?: () => Date; seconds?: number };
+                const date = typeof ts.toDate === 'function'
+                    ? ts.toDate()
+                    : new Date((ts.seconds || 0) * 1000);
                 return date.getMonth() === month;
             });
         }
 
         // B. Sorting
         result.sort((a, b) => {
+            const getMillis = (ts: unknown) => {
+                if (!ts) return 0;
+                const t = ts as { toMillis?: () => number; seconds?: number };
+                if (typeof t.toMillis === 'function') return t.toMillis();
+                if (t.seconds) return t.seconds * 1000;
+                return 0;
+            };
+
             switch (sortBy) {
                 case "newest":
-                    return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
+                    return getMillis(b.createdAt) - getMillis(a.createdAt);
                 case "oldest":
-                    return (a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0);
+                    return getMillis(a.createdAt) - getMillis(b.createdAt);
                 case "name":
                     return (a.fullName || "").localeCompare(b.fullName || "");
                 case "skill":

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, User as UserIcon, Camera } from "lucide-react";
+import { Loader2, User as UserIcon, Camera, Mail, Phone, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/layout/Header";
@@ -112,17 +112,17 @@ export default function PlayerProfilePage() {
 
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                // Reload user to get the latest 'emailVerified' status
-                await currentUser.reload();
+                try {
+                    await currentUser.reload();
+                } catch {
+                    // Ignore
+                }
                 setUser(currentUser);
 
                 const isEmailVerified = currentUser.emailVerified || EMAIL_VERIFICATION_ON === "off";
                 setIsVerified(isEmailVerified);
 
-                // Only fetch profile if verified (or if verification is disabled)
-                if (isEmailVerified) {
-                    await fetchProfile(currentUser.uid);
-                }
+                await fetchProfile(currentUser.uid);
             } else {
                 router.push("/auth/signin?returnTo=/player");
             }
@@ -135,38 +135,59 @@ export default function PlayerProfilePage() {
         const file = e.target.files?.[0];
         if (!file || !user) return;
 
-        // Basic validation
         if (!file.type.startsWith("image/")) {
             showToast("Please upload an image file", "error");
             return;
         }
-        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        if (file.size > 5 * 1024 * 1024) { 
             showToast("Image size should be less than 5MB", "error");
             return;
         }
 
         setUploadingPhoto(true);
         try {
-            // Compress image (using canvas for simplicity)
             const compressedFile = await compressImage(file);
+            let downloadURL: string | null = null;
 
-            const storageRef = ref(storage, `profile-pictures/${user.uid}`);
-            await uploadBytes(storageRef, compressedFile);
-            const downloadURL = await getDownloadURL(storageRef);
+            try {
+                const storageRef = ref(storage, `profile-pictures/${user.uid}`);
+                await uploadBytes(storageRef, compressedFile);
+                downloadURL = await getDownloadURL(storageRef);
+                await updateDoc(doc(db, "users", user.uid), { photoUrl: downloadURL });
+            } catch (clientErr) {
+                console.warn("Client storage upload failed, falling back to server API...", clientErr);
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("targetUid", user.uid);
 
-            setPhotoUrl(downloadURL);
+                const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : "";
+                const res = await fetch("/api/users/upload-photo", {
+                    method: "POST",
+                    headers: {
+                        ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {})
+                    },
+                    body: formData
+                });
 
-            // Update Firestore immediately with new photo URL
-            await updateDoc(doc(db, "users", user.uid), {
-                photoUrl: downloadURL
-            });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || "Failed to upload image via server");
+                }
+                downloadURL = data.photoUrl;
+            }
 
-            showToast("Profile picture updated!", "success");
+            if (downloadURL) {
+                setPhotoUrl(downloadURL);
+                showToast("Profile picture updated!", "success");
+            }
         } catch (error) {
             console.error("Error uploading image:", error);
-            showToast("Failed to upload image", "error");
+            showToast(error instanceof Error ? error.message : "Failed to upload image", "error");
         } finally {
             setUploadingPhoto(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     };
 
@@ -184,7 +205,6 @@ export default function PlayerProfilePage() {
                         return;
                     }
 
-                    // Max dimensions
                     const MAX_WIDTH = 800;
                     const MAX_HEIGHT = 800;
                     let width = img.width;
@@ -210,9 +230,9 @@ export default function PlayerProfilePage() {
                         if (blob) {
                             resolve(blob);
                         } else {
-                            reject(new Error("Canvas to Blob failed"));
+                            reject(new Error("Canvas to Blob conversion failed"));
                         }
-                    }, "image/jpeg", 0.7); // 0.7 quality
+                    }, "image/jpeg", 0.8);
                 };
             };
             reader.onerror = reject;
@@ -221,14 +241,13 @@ export default function PlayerProfilePage() {
     };
 
     const handleResendVerification = async () => {
-        if (user) {
-            try {
-                await sendEmailVerification(user);
-                showToast("Verification email resent! Check your inbox.", "success");
-            } catch (error) {
-                console.error("Error sending verification email:", error);
-                showToast("Error sending email. Try again later.", "error");
-            }
+        if (!user) return;
+        try {
+            await sendEmailVerification(user);
+            showToast("Verification email sent! Please check your inbox.", "success");
+        } catch (error) {
+            console.error("Error sending verification email:", error);
+            showToast("Failed to send verification email.", "error");
         }
     };
 
@@ -236,10 +255,7 @@ export default function PlayerProfilePage() {
         if (!user) return;
         setSaving(true);
         try {
-            // Filter out restricted fields if not admin
-            // This prevents triggering Firestore security rules that forbid non-admins from touching these fields
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const updatePayload: any = { ...data };
+            const updatePayload: Record<string, unknown> = { ...data };
 
             if (!isAdmin) {
                 delete updatePayload.role;
@@ -250,11 +266,18 @@ export default function PlayerProfilePage() {
 
             await updateDoc(doc(db, "users", user.uid), {
                 ...updatePayload,
-                photoUrl: photoUrl, // Ensure photoUrl is saved
-                dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null, // Convert string to Date (Timestamp)
+                photoUrl: photoUrl,
+                dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
                 updatedAt: new Date(),
             });
             showToast("Profile updated successfully!", "success");
+
+            if (typeof window !== "undefined") {
+                const sp = new URLSearchParams(window.location.search);
+                if (sp.get("completeProfile") === "true" || sp.get("new") === "true") {
+                    router.push("/dashboard");
+                }
+            }
         } catch (error) {
             console.error("Error updating profile:", error);
             showToast("Failed to update profile", "error");
@@ -262,8 +285,6 @@ export default function PlayerProfilePage() {
             setSaving(false);
         }
     };
-
-
 
     if (loading) {
         return (
@@ -273,39 +294,67 @@ export default function PlayerProfilePage() {
         );
     }
 
-    if (!loading && user && !isVerified) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center space-y-6 bg-gray-950 p-4 text-white">
-                <div className="flex justify-center mb-4">
-                    <Image src="/logo.svg" alt="App Logo" width={80} height={80} priority />
-                </div>
-                <div className="text-center space-y-2 max-w-md">
-                    <h1 className="text-2xl font-bold text-red-500">Email Not Verified</h1>
-                    <p className="text-gray-400">
-                        Please check your email <strong>{user.email}</strong> to verify your account.
-                        You must verify your email to access your profile.
-                    </p>
-                </div>
-                <div className="flex gap-4">
-                    <Button onClick={handleResendVerification} variant="outline" className="border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white">
-                        Resend Verification Email
-                    </Button>
-                    <Button
-                        onClick={() => window.location.reload()}
-                        className="bg-blue-600 text-white hover:bg-blue-700"
-                    >
-                        I have verified, Refresh Page
-                    </Button>
-                </div>
-            </div>
-        );
-    }
+    const isMissingPhone = !form.watch("phone") || form.watch("phone").trim().length < 8;
 
     return (
         <div className="min-h-screen bg-gray-950 text-white pb-24">
             <Header user={user} showBack={true} onBack={() => router.push("/dashboard")} />
 
-            <main className="pt-24 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-8">
+            <main className="pt-24 px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-6">
+                <div className="flex items-center justify-between">
+                    <Button
+                        variant="ghost"
+                        onClick={() => router.push("/dashboard")}
+                        className="text-gray-400 hover:text-white flex items-center gap-2 pl-0 hover:bg-transparent -ml-2"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Back to Dashboard
+                    </Button>
+                </div>
+
+                {!isVerified && user && (
+                    <div className="p-4 bg-blue-950/40 border border-blue-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-blue-300 animate-in fade-in duration-200">
+                        <div className="flex items-center gap-3">
+                            <Mail className="w-5 h-5 text-blue-400 shrink-0" />
+                            <div>
+                                <h4 className="font-semibold text-sm text-white">Please Verify Your Email</h4>
+                                <p className="text-xs text-gray-300">
+                                    A verification link was sent to <strong>{user.email}</strong>.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleResendVerification}
+                                className="text-xs h-8 border-blue-500/40 text-blue-300 hover:bg-blue-500/20"
+                            >
+                                Resend Email
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={() => window.location.reload()}
+                                className="text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                I Verified
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {isMissingPhone && (
+                    <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl flex items-center gap-3 text-orange-400 animate-in fade-in duration-200">
+                        <Phone className="w-5 h-5 text-orange-500 shrink-0" />
+                        <div>
+                            <h4 className="font-semibold text-sm text-white">Action Required: Add Phone Number</h4>
+                            <p className="text-xs text-orange-300/80">
+                                Please enter your contact phone number below to complete your player profile and register for events.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="bg-gray-900 shadow-md rounded-xl p-6 sm:p-8 border border-gray-800">
                     <div className="border-b border-gray-800 pb-6 mb-6 text-center">
                         <h1 className="text-2xl font-bold text-white">Player Profile</h1>
@@ -351,7 +400,6 @@ export default function PlayerProfilePage() {
                     </div>
 
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                        {/* Read-only Fields */}
                         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-400">User ID</label>
@@ -377,8 +425,18 @@ export default function PlayerProfilePage() {
                                 <Input {...form.register("nickname")} placeholder="Enter nickname" className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">Phone</label>
-                                <Input {...form.register("phone")} placeholder="Enter phone number" className="bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500" />
+                                <label className="text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                                    Phone Number <span className="text-orange-500 font-bold">*</span>
+                                </label>
+                                <Input
+                                    {...form.register("phone")}
+                                    placeholder="e.g. +971 50 123 4567"
+                                    className={`bg-gray-950 text-white placeholder:text-gray-600 focus:border-orange-500 ${
+                                        isMissingPhone
+                                            ? "border-orange-500/60 ring-1 ring-orange-500/40"
+                                            : "border-gray-800"
+                                    }`}
+                                />
                                 {form.formState.errors.phone && (
                                     <p className="text-sm text-red-400">{form.formState.errors.phone.message}</p>
                                 )}

@@ -120,7 +120,6 @@ Two types:**
 | **partnerStatus**     | null                                                                                                                            |
 | **player2Id**         | null                                                                                                                            |
 | **playerId**          | user iD which registered - auto populated by the code via the login data                                                        |
-| **playerPhotoURL**    | lookup field from the users' collection by matching the playerId and fetching the user photoUrl url from the respective record  |
 | **registeredAt**      | timestamp of when the player registered to the event                                                                            |
 | **registrationId**    | Auto populated by the code - should be "Regxxxxx" where xxxx are numbers                                                        |
 | **status**            | string that takes "CONFIRMED" or "Cancelled" if the player later decided to withdraw from the event                             |
@@ -141,7 +140,6 @@ Two types:**
 | **partnerStatus**                        | Pending if the player didn't respond yet, confirmed if the player accepts the invitation and denied of the player declined the invitation                                                                                                    |
 | **player2Id**                            | auto- captures the playerId which accepted the invitation to be a partner                                                                                                                                                                    |
 | **playerId**                             | user iD which registered - auto populated by the code via the login data                                                                                                                                                                     |
-| **playerPhotoURL**                       | lookup field from the users' collection by matching the playerId and fetching the user photoUrl URL from the respective record                                                                                                               |
 | **registeredAt**                         | timestamp of when the player registered to the event                                                                                                                                                                                         |
 | **registrationId**                       | Auto populated by the code - should be "Regxxxxx" where xxxx are numbers                                                                                                                                                                     |
 | **status**                               | string that takes "CONFIRMED" or "Cancelled" if the player later decided to withdraw from the event                                                                                                                                          |

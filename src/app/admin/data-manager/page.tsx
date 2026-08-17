@@ -36,6 +36,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
+import { SettingsDialog } from "@/components/SettingsDialog";
 
 const COLLECTIONS = ["users", "events", "registrations", "clubs", "teams", "notifications"];
 
@@ -57,6 +58,7 @@ function DataManagerPage() {
     const router = useRouter();
     const { user } = useAuth();
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isCleaningUp, setIsCleaningUp] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
 
@@ -71,10 +73,8 @@ function DataManagerPage() {
     useEffect(() => {
         if (needsEventFilter) {
             fetchEventsList();
-            // Clear data until an event is picked
-            setData([]);
-            setColumns([]);
-            setSelectedEventId("");
+            setSelectedEventId("ALL");
+            fetchData(selectedCollection, "ALL");
         } else {
             setAvailableEvents([]);
             setSelectedEventId("");
@@ -94,16 +94,26 @@ function DataManagerPage() {
     const fetchEventsList = async () => {
         setLoadingEvents(true);
         try {
-            const q = query(collection(db, "events"), orderBy("date", "desc"), limit(50));
-            const snap = await getDocs(q);
-            const events = snap.docs.map((d) => ({
-                id: d.id,
-                title: (d.data().title as string) || d.id,
-            }));
-            setAvailableEvents(events);
+            const snap = await getDocs(collection(db, "events"));
+            const events = snap.docs.map((d) => {
+                const data = d.data();
+                const name = (data.eventName as string) || (data.title as string) || d.id;
+                const dt = data.dateTime || data.createdAt;
+                const dateStr = dt?.toDate ? format(dt.toDate(), "dd-MMM-yyyy") : "";
+                return {
+                    id: d.id,
+                    title: dateStr ? `${name} (${dateStr})` : name,
+                    rawDate: dt?.toMillis ? dt.toMillis() : 0,
+                };
+            });
+
+            // Sort by date descending
+            events.sort((a, b) => b.rawDate - a.rawDate);
+
+            setAvailableEvents(events.map(e => ({ id: e.id, title: e.title })));
         } catch (error) {
             console.error("Error fetching events list:", error);
-            showToast("Failed to fetch events", "error");
+            showToast("Failed to fetch events list", "error");
         } finally {
             setLoadingEvents(false);
         }
@@ -133,7 +143,7 @@ function DataManagerPage() {
         setSelectedIds(new Set());
         try {
             let q;
-            if (eventId && EVENT_FILTERED_COLLECTIONS.includes(collName)) {
+            if (eventId && eventId !== "ALL" && EVENT_FILTERED_COLLECTIONS.includes(collName)) {
                 q = query(collection(db, collName), where("eventId", "==", eventId));
             } else {
                 q = query(collection(db, collName), limit(100));
@@ -508,17 +518,29 @@ function DataManagerPage() {
                                                     <p className="text-xs text-gray-400 truncate">{user.email}</p>
                                                 </div>
                                                 <div className="p-1">
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsUserMenuOpen(false);
+                                                            router.push("/player");
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                                                    >
                                                         <User className="h-4 w-4" /> Profile
                                                     </button>
-                                                    <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsUserMenuOpen(false);
+                                                            setIsSettingsOpen(true);
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                                                    >
                                                         <Settings className="h-4 w-4" /> Settings
                                                     </button>
                                                 </div>
                                                 <div className="p-1 border-t border-gray-800">
                                                     <button
                                                         onClick={handleSignOut}
-                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
                                                     >
                                                         <LogOut className="h-4 w-4" /> Sign Out
                                                     </button>
@@ -629,6 +651,7 @@ function DataManagerPage() {
                                         <SelectValue placeholder={loadingEvents ? "Loading events..." : "Select Event"} />
                                     </SelectTrigger>
                                     <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60">
+                                        <SelectItem value="ALL">All Events</SelectItem>
                                         {availableEvents.map((ev) => (
                                             <SelectItem key={ev.id} value={ev.id}>
                                                 {ev.title}
@@ -789,6 +812,9 @@ function DataManagerPage() {
                     </Link>
                 </div>
             </nav>
+
+            {/* Settings Dialog */}
+            <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
         </div>
     );
 }

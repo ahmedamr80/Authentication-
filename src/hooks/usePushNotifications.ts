@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { getToken, onMessage, Unsubscribe } from 'firebase/messaging';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, getMessagingInstance } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -8,7 +7,7 @@ export function usePushNotifications() {
     const { user } = useAuth();
     const [token, setToken] = useState<string | null>(null);
     const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<NotificationPermission | null>(null);
-    const unsubscribeRef = useRef<Unsubscribe | null>(null);
+    const unsubscribeRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -32,6 +31,8 @@ export function usePushNotifications() {
                 
                 const messaging = await getMessagingInstance();
                 if (!messaging) return;
+
+                const { getToken } = await import('firebase/messaging');
 
                 // Wait for the service worker to be ready so we pass it explicitly to getToken.
                 // This prevents the SDK from trying to implicitly register '/firebase-messaging-sw.js'
@@ -68,9 +69,14 @@ export function usePushNotifications() {
 
     // Listen for foreground messages
     useEffect(() => {
+        let cancelled = false;
+
         const setupMessaging = async () => {
             const messaging = await getMessagingInstance();
-            if (!messaging) return;
+            if (!messaging || cancelled) return;
+
+            const { onMessage } = await import('firebase/messaging');
+            if (cancelled) return;
 
             unsubscribeRef.current = onMessage(messaging, (payload) => {
                 console.log('[Foreground] Message received. ', payload);
@@ -93,6 +99,7 @@ export function usePushNotifications() {
         setupMessaging();
 
         return () => {
+            cancelled = true;
             if (unsubscribeRef.current) {
                 unsubscribeRef.current();
             }

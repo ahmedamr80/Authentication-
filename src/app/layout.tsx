@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ToastProvider } from "@/context/ToastContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,8 +36,8 @@ export const metadata: Metadata = {
   // the correct tags with cache-busting hashes automatically.
 
   openGraph: {
-    title: "EveryWherePadel", // Fixed Typo (removed extra 'P')
-    description: "Join Padel EveryWherePadel events.",
+    title: "EveryWherePadel",
+    description: "Join EveryWherePadel Event",
     url: "https://ewpuae.com",
     siteName: "EveryWherePadel",
     locale: "en_US",
@@ -44,9 +45,16 @@ export const metadata: Metadata = {
   },
 
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/logo.png",
+  },
   appleWebApp: {
     title: "EveryWherePadel",
     statusBarStyle: "black-translucent",
+    startupImage: [
+      "/logo.png",
+    ],
     capable: true,
   },
 };
@@ -60,11 +68,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
       >
         <AuthProvider>
           <ToastProvider>
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </ToastProvider>
         </AuthProvider>
         <script

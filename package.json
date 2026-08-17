@@ -6,9 +6,13 @@
     "dev": "next dev --port 5000 --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --port 5000 --hostname 0.0.0.0",
-    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=true eslint ."
+    "lint": "next lint"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^7.6.6",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",

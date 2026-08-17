@@ -3,6 +3,8 @@ import * as logger from "firebase-functions/logger";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 
+import { ensureAdminInitialized } from "./adminInit";
+
 // Admin will be initialized lazily inside functions to prevent deployment timeouts on module load.
 
 
@@ -11,9 +13,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
  * and update their status to "past".
  */
 async function updatePastEvents() {
-    if (admin.apps.length === 0) {
-        admin.initializeApp();
-    }
+    ensureAdminInitialized();
     const db = admin.firestore();
     const now = admin.firestore.Timestamp.now();
 
@@ -74,10 +74,9 @@ export const scheduledEventCleanup = onSchedule("every sunday 00:00", async (eve
  * Callable function to be triggered manually from the frontend.
  */
 export const manualEventCleanup = onCall({ cors: true }, async (request) => {
-    // Optional: Add admin check here if you pass auth context
-    // if (!request.auth || !request.auth.token.admin) {
-    //     throw new HttpsError('permission-denied', 'Must be an admin to call this function.');
-    // }
+    if (!request.auth || !request.auth.token.admin) {
+        throw new HttpsError('permission-denied', 'Must be an admin to call this function.');
+    }
 
     try {
         const count = await updatePastEvents();
@@ -99,9 +98,10 @@ export const recalculateEventCounts = onCall({
     timeoutSeconds: 300,
     memory: "512MiB"
 }, async (request) => {
-    if (admin.apps.length === 0) {
-        admin.initializeApp();
+    if (!request.auth || !request.auth.token.admin) {
+        throw new HttpsError('permission-denied', 'Must be an admin to call this function.');
     }
+    ensureAdminInitialized();
     const db = admin.firestore();
     logger.info("Starting recalculateEventCounts...");
     try {

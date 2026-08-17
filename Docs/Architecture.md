@@ -157,6 +157,7 @@ interface User {
   photoUrl?: string              // Profile photo URL
   role: "player" | "admin"       // User role
   isShadow: boolean             // Shadow account flag
+  isRedFlagged: boolean
   registrationStatus: "active" | "inactive"
   createdAt: Timestamp          // Account creation time
   createdBy: string             // Admin who created account

@@ -27,7 +27,6 @@ service cloud.firestore {
       
       // 2. Creation: You can create your own, or an admin can create for you
       // RESTRICTION: Regular users cannot set 'role', 'isAdmin', or 'isShadow' on creation
-      // We check if the NEW data contains any of these forbidden keys
       allow create: if isAdmin() || (
         isOwner(uid) && 
         request.resource.data.get('role', 'player') == 'player' &&
@@ -35,25 +34,38 @@ service cloud.firestore {
         request.resource.data.get('isShadow', false) == false
       );
       
-      // 3. Updating: 
-      // - Must be Owner OR Admin
-      // - AND: If you are the Owner (not Admin), you CANNOT change the 'role' or 'isAdmin' fields.
+      // 3. Updating: Must be Owner OR Admin
+      // If Owner (not Admin), CANNOT change 'role' or 'isAdmin' fields
       allow update: if isAdmin() || (
         isOwner(uid) && 
-        // Ensure the 'role' field is NOT being changed
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'isShadow']))
       );
                         
       // 4. Deletion: Admin only, or special "Claim Shadow" logic
       allow delete: if isAdmin() || (resource.data.isShadow == true && resource.data.email == request.auth.token.email);
     }
+
+    // --- SERVER-ONLY COLLECTIONS (Session Families, JTI Revocation, Audit Logs) ---
+    match /refresh_token_families/{familyId} {
+      allow read, write: if false; // Server-only (Firebase Admin SDK)
+    }
+
+    match /revoked_jtis/{jtiId} {
+      allow read, write: if false; // Server-only (Firebase Admin SDK)
+    }
+
+    match /brute_force_attempts/{attemptId} {
+      allow read, write: if false; // Server-only (Firebase Admin SDK)
+    }
+
+    match /auth_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only audit logger writes
+    }
     
     // --- EVENTS ---
     match /events/{eventId} {
-      // 1. Read: Publicly readable (good for sharing links)
       allow read: if true;
-      
-      // 2. Write: STRICTLY Admin only, with EXCEPTIONS for Client-Side Counters
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || (
         isSignedIn() && 
@@ -64,19 +76,13 @@ service cloud.firestore {
     // --- REGISTRATIONS ---
     match /registrations/{registrationId} {
       allow read: if isSignedIn();
-      
-      // Allow create if self OR if creating for a team (presence of teamId in new data)
       allow create: if isSignedIn() && (request.resource.data.playerId == request.auth.uid || request.resource.data.teamId != null || isAdmin());
-      
-      // Allow update if self (P1 OR P2) OR if updating for a team
       allow update: if isSignedIn() && (
         resource.data.playerId == request.auth.uid || 
         resource.data.player2Id == request.auth.uid || 
-        // Allow waitlist promotion: any signed-in user can promote a WAITLIST player to CONFIRMED
         (resource.data.status == "WAITLIST" && request.resource.data.status == "CONFIRMED") ||
         isAdmin()
       );
-      
       allow delete: if isSignedIn() && (
         resource.data.playerId == request.auth.uid || 
         resource.data.player2Id == request.auth.uid || 
@@ -87,10 +93,7 @@ service cloud.firestore {
     // --- TEAMS ---
     match /teams/{teamId} {
       allow read: if isSignedIn();
-      // Tighten write access: Only the creator (player1) can create a team where they are the leader
       allow create: if isSignedIn() && request.resource.data.player1Id == request.auth.uid;
-      
-      // Allow update/delete if you are a member of the team
       allow update, delete: if isSignedIn() && (
         resource.data.player1Id == request.auth.uid || 
         resource.data.player2Id == request.auth.uid ||
@@ -115,6 +118,7 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
     }
+
     // --- COUNTERS ---
     match /counters/{counterId} {
       allow read, update, create: if isSignedIn();

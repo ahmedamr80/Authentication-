@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { collection, doc, runTransaction, Timestamp, query, orderBy, getDocs, getDoc } from "firebase/firestore";
-import { auth, db, storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth, db } from "@/lib/firebase";
 import { Loader2, Save, Camera, MapPin, Calendar } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { uploadImageWithFallback } from "@/lib/upload-helper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -177,16 +177,17 @@ export default function CreateEventPage() {
 
         setUploadingPhoto(true);
         try {
-            const tempId = `temp-${Date.now()}`;
-            const storageRef = ref(storage, `events/${tempId}`);
-            await uploadBytes(storageRef, file);
-            const downloadURL = await getDownloadURL(storageRef);
+            const url = await uploadImageWithFallback({
+                file,
+                folder: "events",
+                customId: `event-${Date.now()}`
+            });
 
-            handleInputChange("logoUrl", downloadURL);
+            handleInputChange("logoUrl", url);
             showToast("Logo uploaded successfully!", "success");
         } catch (error) {
             console.error("Error uploading image:", error);
-            showToast("Failed to upload image", "error");
+            showToast(error instanceof Error ? error.message : "Failed to upload image", "error");
         } finally {
             setUploadingPhoto(false);
         }

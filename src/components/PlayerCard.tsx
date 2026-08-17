@@ -13,6 +13,7 @@ export interface PlayerData {
     createdAt?: Timestamp;
     skillLevel?: string;
     createdBy?: string;
+    gender?: string;
 }
 
 interface PlayerCardProps {

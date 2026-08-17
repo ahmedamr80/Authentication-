@@ -6,10 +6,10 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { uploadImageWithFallback } from "@/lib/upload-helper";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -71,29 +71,24 @@ export default function CreateClubPage() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (!file.type.startsWith("image/")) {
-            showToast("Please upload an image file", "error");
-            return;
-        }
-        if (file.size > 5 * 1024 * 1024) {
-            showToast("Image size should be less than 5MB", "error");
-            return;
-        }
-
         setUploadingPhoto(true);
         try {
-            const tempId = `club-${Date.now()}`;
-            const storageRef = ref(storage, `club-pictures/${tempId}`);
-            await uploadBytes(storageRef, file);
-            const downloadURL = await getDownloadURL(storageRef);
+            const url = await uploadImageWithFallback({
+                file,
+                folder: "club-pictures",
+                customId: `club-${Date.now()}`
+            });
 
-            setPictureUrl(downloadURL);
-            showToast("Club image uploaded!", "success");
+            setPictureUrl(url);
+            showToast("Club image uploaded successfully!", "success");
         } catch (error) {
             console.error("Upload error:", error);
-            showToast("Failed to upload image", "error");
+            showToast(error instanceof Error ? error.message : "Failed to upload image", "error");
         } finally {
             setUploadingPhoto(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     };
 

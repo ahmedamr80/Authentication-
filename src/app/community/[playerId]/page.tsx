@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 
 // UI Components
@@ -86,19 +86,61 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
         const file = e.target.files?.[0];
         if (!file) return;
 
+        if (!file.type.startsWith("image/")) {
+            showToast("Please upload an image file", "error");
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            showToast("Image size should be less than 5MB", "error");
+            return;
+        }
+
         setUploadingPhoto(true);
         try {
-            const storageRef = ref(storage, `profile-pictures/${playerId}`);
-            await uploadBytes(storageRef, file);
-            const downloadURL = await getDownloadURL(storageRef);
-            setPhotoUrl(downloadURL);
-            await updateDoc(doc(db, "users", playerId), { photoUrl: downloadURL });
-            showToast("Photo updated", "success");
+            let downloadURL: string | null = null;
+
+            // 1. Try direct Firebase client upload
+            try {
+                const storageRef = ref(storage, `profile-pictures/${playerId}`);
+                await uploadBytes(storageRef, file);
+                downloadURL = await getDownloadURL(storageRef);
+                await updateDoc(doc(db, "users", playerId), { photoUrl: downloadURL });
+            } catch (clientErr) {
+                console.warn("Client storage upload failed, falling back to server API...", clientErr);
+
+                // 2. Fallback to server-side admin upload API
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("targetUid", playerId);
+
+                const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : "";
+                const res = await fetch("/api/users/upload-photo", {
+                    method: "POST",
+                    headers: {
+                        ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {})
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || "Failed to upload image via server");
+                }
+                downloadURL = data.photoUrl;
+            }
+
+            if (downloadURL) {
+                setPhotoUrl(downloadURL);
+                showToast("Photo updated successfully!", "success");
+            }
         } catch (error) {
-            console.error(error);
-            showToast("Failed to upload image", "error");
+            console.error("Image upload failed:", error);
+            showToast(error instanceof Error ? error.message : "Failed to upload image", "error");
         } finally {
             setUploadingPhoto(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     };
 

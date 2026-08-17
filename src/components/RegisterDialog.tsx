@@ -13,6 +13,8 @@ import { EventData } from "./EventCard";
 import { Registration } from "@/lib/types";
 import { useEventWithdraw } from "@/hooks/useEventWithdraw";
 import { t } from "@/lib/i18n";
+import { EventTermsModal } from "@/components/EventTermsModal";
+import { checkPlayerEligibility } from "@/lib/authRequirements";
 
 interface RegisterDialogProps {
     event: EventData;
@@ -48,17 +50,23 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
             setIsRegistered(true);
-            setExistingRegistration({ registrationId: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Registration);
+            setExistingRegistration({ ...snapshot.docs[0].data(), id: snapshot.docs[0].id, registrationId: snapshot.docs[0].id } as unknown as Registration);
         } else {
             setIsRegistered(false);
             setExistingRegistration(null);
         }
     }, [user, event.eventId]);
 
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [termsModalOpen, setTermsModalOpen] = useState(false);
+
     // Check registration status on open
     useEffect(() => {
-        if (open && user) {
-            checkRegistration();
+        if (open) {
+            setAgreedToTerms(false);
+            if (user) {
+                checkRegistration();
+            }
         }
     }, [open, user, checkRegistration]);
 
@@ -81,6 +89,16 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                 userProfile = docSnap.data();
             } else {
                 userProfile = { uid: user.uid, email: user.email, createdAt: Timestamp.now() };
+            }
+
+            // Check eligibility (email verification & phone number)
+            const eligibility = await checkPlayerEligibility(user, userProfile);
+            if (!eligibility.eligible) {
+                showToast(eligibility.message, "error");
+                setLoading(false);
+                isRegisteringRef.current = false;
+                if (setOpen) setOpen(false);
+                return;
             }
 
             // ... (Your existing profile update logic remains here) ...
@@ -129,10 +147,6 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
 
                     // Profile Data
                     fullNameP1: userProfile.displayName || userProfile.fullName || user.displayName || "Unknown Player",
-                    playerPhotoURL: userProfile.photoUrl || userProfile.photoURL || user.photoURL || "",
-                    playerSkillLevel: userProfile.skillLevel || "Beginner",
-                    playerHand: userProfile.hand || "Right",
-                    playerPosition: userProfile.position || "Both",
                     fullNameP2: null, // Single player has no partner
 
                     // CRITICAL: If Teams mode, flag them as looking
@@ -185,13 +199,19 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                     year: '2-digit'
                 }).replace(/\//g, '-');
 
+                const isWaitlist = status === "WAITLIST";
+                const notificationTitle = isWaitlist ? "Registered in the Waitlist" : "Registration Confirmed";
+                const notificationMessage = isWaitlist
+                    ? `${commonData.fullNameP1}, you are registered in the waitlist for event ${event.eventName} on ${eventDateFormatted}`
+                    : `${commonData.fullNameP1}, you are registered for event ${event.eventName} on ${eventDateFormatted}`;
+
                 const notifRef = doc(collection(db, "notifications"));
                 transaction.set(notifRef, {
                     notificationId: notifRef.id,
                     userId: user.uid,
                     type: "system",
-                    title: "Registration Confirmed",
-                    message: `${commonData.fullNameP1}, you are registered for event ${event.eventName} on ${eventDateFormatted}`,
+                    title: notificationTitle,
+                    message: notificationMessage,
                     eventId: event.eventId,
                     eventName: event.eventName,
                     eventDate: event.dateTime,
@@ -264,9 +284,30 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                         {t("Time:")} {event.dateTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} <br />
                         {t("Location:")} {event.locationName}
                     </p>
-                    {isRegistered && (
+                    {isRegistered ? (
                         <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded text-green-800 text-sm">
                             {t("Status:")} <strong>{existingRegistration?.status}</strong>
+                        </div>
+                    ) : (
+                        <div className="mt-4 pt-3 border-t border-gray-100 flex items-start gap-2.5">
+                            <input
+                                type="checkbox"
+                                id="agree-terms-single"
+                                checked={agreedToTerms}
+                                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                            />
+                            <label htmlFor="agree-terms-single" className="text-xs text-gray-600 leading-normal cursor-pointer select-none">
+                                I have read and agree to the{" "}
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.preventDefault(); setTermsModalOpen(true); }}
+                                    className="text-orange-600 font-semibold underline hover:text-orange-700"
+                                >
+                                    Event Terms & Conditions
+                                </button>{" "}
+                                and cancellation policy.
+                            </label>
                         </div>
                     )}
                 </div>
@@ -287,7 +328,7 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                             )}
                         </Button>
                     ) : (
-                        <Button onClick={handleRegister} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                        <Button onClick={handleRegister} disabled={loading || !agreedToTerms} className="bg-orange-500 hover:bg-orange-600 text-white font-medium">
                             {loading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -299,6 +340,12 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                         </Button>
                     )}
                 </DialogFooter>
+
+                <EventTermsModal
+                    event={event}
+                    open={termsModalOpen}
+                    onOpenChange={setTermsModalOpen}
+                />
             </DialogContent>
         </Dialog>
     );
