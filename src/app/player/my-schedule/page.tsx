@@ -18,12 +18,12 @@ import { format, addMinutes } from "date-fns";
 
 interface EventData {
     eventId: string;
-    eventName: string;       // CHANGED: title -> eventName
-    dateTime: Timestamp;     // CHANGED: date -> dateTime
-    locationName: string;    // CHANGED: location -> locationName
-    duration: number;        // ADDED: duration (to calculate end time)
-    logoUrl?: string;        // CHANGED: imageUrl -> logoUrl
-    pricePerPlayer?: number; // CHANGED: priceMember -> pricePerPlayer
+    eventName: string;
+    dateTime: Timestamp;
+    locationName: string;
+    duration: number;
+    logoUrl?: string;
+    pricePerPlayer?: number;
 }
 
 interface ScheduleItem {
@@ -132,7 +132,6 @@ export default function MySchedulePage() {
                         const eventSnap = await getDoc(eventDocRef);
                         if (eventSnap.exists()) {
                             const data = eventSnap.data();
-                            // FIX: Mapping the database fields correctly here
                             item.event = {
                                 eventId: eventSnap.id,
                                 eventName: data.eventName,
@@ -148,10 +147,8 @@ export default function MySchedulePage() {
 
                     const resolvedItems = await Promise.all(eventPromises);
 
-                    // FIX: Filter by eventName, not title
                     const validItems = resolvedItems.filter(i => i.event && i.event.eventName);
 
-                    // FIX: Sort using dateTime
                     validItems.sort((a, b) => {
                         const dateA = a.event.dateTime?.toMillis() || 0;
                         const dateB = b.event.dateTime?.toMillis() || 0;
@@ -173,7 +170,6 @@ export default function MySchedulePage() {
         fetchSchedule();
     }, [user]);
 
-    // FIX: Update Derived State to use dateTime
     const now = new Date();
     const upcomingEvents = scheduleItems.filter(item => item.event.dateTime?.toDate() >= now).reverse();
     const pastEvents = scheduleItems.filter(item => item.event.dateTime?.toDate() < now);
@@ -273,7 +269,6 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function ScheduleCard({ item }: { item: ScheduleItem }) {
-    // FIX: Use dateTime and calculate end time based on duration
     const eventDate = item.event.dateTime.toDate();
     const endDate = addMinutes(eventDate, item.event.duration);
 
@@ -304,7 +299,6 @@ function ScheduleCard({ item }: { item: ScheduleItem }) {
 
             {/* Middle: Details */}
             <div className="flex-1 p-4 flex flex-col justify-center gap-1.5 min-w-0">
-                {/* FIX: Use eventName */}
                 <h3 className="font-bold text-white text-lg truncate pr-2">{item.event.eventName}</h3>
 
                 <div className="flex items-center gap-4 text-sm text-gray-400">
@@ -315,7 +309,6 @@ function ScheduleCard({ item }: { item: ScheduleItem }) {
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-gray-400 min-w-0">
                     <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                    {/* FIX: Use locationName */}
                     <span className="truncate">{item.event.locationName}</span>
                 </div>
 
@@ -333,7 +326,6 @@ function ScheduleCard({ item }: { item: ScheduleItem }) {
                     {item.status}
                 </Badge>
 
-                {/* FIX: Link to eventId */}
                 <Link href={`/events/${item.event.eventId}`} className="w-full">
                     <Button variant="ghost" size="sm" className="w-full h-8 text-xs bg-gray-800 hover:bg-gray-700 hover:text-white mt-2">
                         View
