@@ -87,11 +87,29 @@ export function usePushNotifications() {
                 // The browser usually doesn't show standard push notifications when app is in foreground
                 if (Notification.permission === 'granted') {
                     const notificationTitle = payload.notification?.title || 'New Notification';
-                    const notificationOptions = {
+                    const link = payload.fcmOptions?.link || (payload.data as Record<string, string> | undefined)?.link || '/dashboard';
+                    const notificationOptions: NotificationOptions = {
                         body: payload.notification?.body,
-                        icon: '/logo.png', // Fallback icon
+                        icon: payload.notification?.icon || '/logo.png',
+                        badge: '/logo.png',
+                        vibrate: [200, 100, 200, 100, 200],
+                        data: { link },
                     };
-                    new Notification(notificationTitle, notificationOptions);
+                    const notif = new Notification(notificationTitle, notificationOptions);
+                    notif.onclick = () => {
+                        window.focus();
+                        if (link) window.location.href = link;
+                    };
+
+                    // Play custom notification audio chime
+                    try {
+                        const audio = new Audio('/sounds/notification.wav');
+                        audio.play().catch((err) => {
+                            console.warn('Foreground notification audio playback blocked:', err);
+                        });
+                    } catch (err) {
+                        console.warn('Notification audio instantiation failed:', err);
+                    }
                 }
             });
         };

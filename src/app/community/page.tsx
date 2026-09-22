@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PlayerCard, PlayerData } from "@/components/PlayerCard";
+import { parseFirebaseDate } from "@/lib/date-utils";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Users, ArrowLeft, Search } from "lucide-react";
@@ -154,12 +155,8 @@ export default function CommunityPage() {
         if (filters.registrationMonth && filters.registrationMonth !== "all") {
             const month = parseInt(filters.registrationMonth);
             result = result.filter(member => {
-                if (!member.createdAt) return false;
-                // Handle both Firestore Timestamp and plain object fallback
-                const ts = member.createdAt as unknown as { toDate?: () => Date; seconds?: number };
-                const date = typeof ts.toDate === 'function'
-                    ? ts.toDate()
-                    : new Date((ts.seconds || 0) * 1000);
+                const date = parseFirebaseDate(member.createdAt);
+                if (!date) return false;
                 return date.getMonth() === month;
             });
         }
@@ -167,11 +164,8 @@ export default function CommunityPage() {
         // B. Sorting
         result.sort((a, b) => {
             const getMillis = (ts: unknown) => {
-                if (!ts) return 0;
-                const t = ts as { toMillis?: () => number; seconds?: number };
-                if (typeof t.toMillis === 'function') return t.toMillis();
-                if (t.seconds) return t.seconds * 1000;
-                return 0;
+                const date = parseFirebaseDate(ts);
+                return date ? date.getTime() : 0;
             };
 
             switch (sortBy) {

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import Image from "next/image";
 import Link from "next/link";
 import { Timestamp } from "firebase/firestore";
+import { parseFirebaseDate } from "@/lib/date-utils";
 
 export interface PlayerData {
     uid: string;
@@ -10,7 +11,7 @@ export interface PlayerData {
     fullName: string;
     position?: string;
     hand?: string;
-    createdAt?: Timestamp;
+    createdAt?: Timestamp | { seconds: number; nanoseconds?: number } | string | number | Date | null;
     skillLevel?: string;
     createdBy?: string;
     gender?: string;
@@ -21,8 +22,9 @@ interface PlayerCardProps {
 }
 
 export function PlayerCard({ player }: PlayerCardProps) {
-    const formattedDate = player.createdAt
-        ? player.createdAt.toDate().toLocaleDateString('en-US', {
+    const parsedDate = parseFirebaseDate(player.createdAt);
+    const formattedDate = parsedDate
+        ? parsedDate.toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
             day: 'numeric'

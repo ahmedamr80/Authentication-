@@ -11,20 +11,23 @@ export default function Home() {
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    // 2.5s fallback timeout to prevent hanging on loading screen if Auth initialization is slow/blocked
+    // Fallback timeout to prevent hanging on loading screen if Auth initialization is slow/blocked
     const timer = setTimeout(() => {
       setTimedOut(true);
-    }, 2500);
+    }, 3000);
     return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
+    // If a user is authenticated, always redirect to dashboard
+    if (user) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    // Only redirect to signin once auth loading finishes with no user, or fallback timeout triggers
     if (!loading || timedOut) {
-      if (user && !timedOut) {
-        router.replace("/dashboard");
-      } else {
-        router.replace("/auth/signin");
-      }
+      router.replace("/auth/signin");
     }
   }, [user, loading, timedOut, router]);
 

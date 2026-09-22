@@ -67,8 +67,45 @@ export const sendPushNotification = onDocumentCreated(
                     body,
                 },
                 webpush: {
+                    notification: {
+                        title,
+                        body,
+                        icon: "/logo.png",
+                        badge: "/logo.png",
+                        vibrate: [200, 100, 200, 100, 200],
+                        sound: "/sounds/notification.wav",
+                        tag: `padel-notif-${event.params.notificationId}`,
+                        renotify: true,
+                        requireInteraction: false,
+                    },
+                    data: {
+                        sound: "/sounds/notification.wav",
+                        vibrate: "200,100,200,100,200",
+                        badge: "/logo.png",
+                        icon: "/logo.png",
+                        link: notificationData.link || "/dashboard",
+                    },
                     fcmOptions: {
                         link: notificationData.link || "/dashboard",
+                    },
+                    headers: {
+                        Urgency: "high",
+                    },
+                },
+                android: {
+                    notification: {
+                        sound: "default",
+                        notificationCount: 1,
+                        channelId: "default",
+                        color: "#f97316",
+                    },
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            sound: "default",
+                            badge: 1,
+                        },
                     },
                 },
             })

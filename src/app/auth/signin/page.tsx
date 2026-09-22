@@ -15,10 +15,12 @@ import {
     UserCredential,
     setPersistence,
     browserLocalPersistence,
+    browserSessionPersistence,
     sendPasswordResetEmail
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp, runTransaction, collection, query, where, getDocs, writeBatch, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -91,10 +93,19 @@ function SignInContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { showToast } = useToast();
+    const { user: authUser, loading: authLoading } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isSignUp, setIsSignUp] = useState(false);
+
+    // Auto-redirect already authenticated users to dashboard or returnTo
+    useEffect(() => {
+        if (!authLoading && authUser) {
+            const returnTo = searchParams.get("returnTo") || "/dashboard";
+            router.replace(returnTo);
+        }
+    }, [authUser, authLoading, router, searchParams]);
 
     // Account Linking State
     const [showLinkAccountModal, setShowLinkAccountModal] = useState(false);
@@ -117,12 +128,17 @@ function SignInContent() {
         },
     });
 
-    // Load saved email
+    // Load saved email and rememberMe preference
     useEffect(() => {
         const savedEmail = localStorage.getItem("rememberedEmail");
-        if (savedEmail && !isSignUp) {
-            form.setValue("email", savedEmail);
-            form.setValue("rememberMe", true);
+        const savedRememberMe = localStorage.getItem("rememberMe") === "true";
+        if (!isSignUp) {
+            if (savedEmail) {
+                form.setValue("email", savedEmail);
+            }
+            if (savedRememberMe || savedEmail) {
+                form.setValue("rememberMe", true);
+            }
         }
     }, [form, isSignUp]);
 
@@ -181,7 +197,8 @@ function SignInContent() {
     const onSubmit = async (data: AuthFormValues) => {
         setIsLoading(true);
         try {
-            await setPersistence(auth, browserLocalPersistence);
+            const persistence = data.rememberMe ? browserLocalPersistence : browserSessionPersistence;
+            await setPersistence(auth, persistence);
             let userCred: UserCredential | undefined;
             if (isSignUp) {
                 // 1. Firebase standard user creation
@@ -276,8 +293,10 @@ function SignInContent() {
 
                 if (data.rememberMe) {
                     localStorage.setItem("rememberedEmail", data.email);
+                    localStorage.setItem("rememberMe", "true");
                 } else {
                     localStorage.removeItem("rememberedEmail");
+                    localStorage.removeItem("rememberMe");
                 }
 
                 await handleSuccess(userCred);
@@ -296,7 +315,14 @@ function SignInContent() {
         provider.setCustomParameters({ prompt: "select_account" });
 
         try {
-            await setPersistence(auth, browserLocalPersistence);
+            const rememberMe = form.getValues("rememberMe");
+            const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+            await setPersistence(auth, persistence);
+            if (rememberMe) {
+                localStorage.setItem("rememberMe", "true");
+            } else {
+                localStorage.removeItem("rememberMe");
+            }
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
             const userDocRef = doc(db, "users", user.uid);
@@ -383,7 +409,14 @@ function SignInContent() {
     const handleAppleSignIn = async () => {
         setIsLoading(true);
         try {
-            await setPersistence(auth, browserLocalPersistence);
+            const rememberMe = form.getValues("rememberMe");
+            const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+            await setPersistence(auth, persistence);
+            if (rememberMe) {
+                localStorage.setItem("rememberMe", "true");
+            } else {
+                localStorage.removeItem("rememberMe");
+            }
             const provider = new OAuthProvider("apple.com");
             provider.addScope("email");
             provider.addScope("name");
@@ -437,7 +470,7 @@ function SignInContent() {
             password: "",
             confirmPassword: "",
             fullName: "",
-            rememberMe: false
+            rememberMe: !newMode && (localStorage.getItem("rememberMe") === "true" || !!localStorage.getItem("rememberedEmail"))
         });
     };
 
@@ -460,6 +493,17 @@ function SignInContent() {
             setIsResetLoading(false);
         }
     };
+
+    if (authLoading || authUser) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4">
+                <div className="flex flex-col items-center gap-4">
+                    <Image src="/logo.svg" alt="EveryWherePadel Logo" width={80} height={80} priority className="w-20 h-20 animate-pulse" />
+                    <div className="text-gray-400">Loading your session...</div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-950 p-4">

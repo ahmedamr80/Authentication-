@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, User as UserIcon, Camera, Mail, Phone, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Loader2, User as UserIcon, Camera, Mail, Phone, AlertCircle, CheckCircle2, ArrowLeft, Link as LinkIcon, Check, X, Image as ImageIcon } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/layout/Header";
@@ -53,6 +53,7 @@ export default function PlayerProfilePage() {
     const [saving, setSaving] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string | null>(null);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [savingPhotoUrl, setSavingPhotoUrl] = useState(false);
     const [isVerified, setIsVerified] = useState(false); // Added state
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { isAdmin } = useAuth(); // <--- Get the global admin flag
@@ -178,16 +179,35 @@ export default function PlayerProfilePage() {
 
             if (downloadURL) {
                 setPhotoUrl(downloadURL);
-                showToast("Profile picture updated!", "success");
+                showToast("Profile photo updated!", "success");
             }
         } catch (error) {
-            console.error("Error uploading image:", error);
+            console.error("Image upload failed:", error);
             showToast(error instanceof Error ? error.message : "Failed to upload image", "error");
         } finally {
             setUploadingPhoto(false);
             if (fileInputRef.current) {
                 fileInputRef.current.value = "";
             }
+        }
+    };
+
+    const handleSavePhotoUrl = async () => {
+        if (!user || savingPhotoUrl) return;
+        setSavingPhotoUrl(true);
+        try {
+            const cleanUrl = photoUrl?.trim() || null;
+            await updateDoc(doc(db, "users", user.uid), {
+                photoUrl: cleanUrl,
+                updatedAt: new Date(),
+            });
+            setPhotoUrl(cleanUrl);
+            showToast("Photo URL updated successfully!", "success");
+        } catch (error) {
+            console.error("Failed to update photo URL:", error);
+            showToast("Failed to update photo URL", "error");
+        } finally {
+            setSavingPhotoUrl(false);
         }
     };
 
@@ -255,6 +275,7 @@ export default function PlayerProfilePage() {
         if (!user) return;
         setSaving(true);
         try {
+            const userRef = doc(db, "users", user.uid);
             const updatePayload: Record<string, unknown> = { ...data };
 
             if (!isAdmin) {
@@ -264,9 +285,9 @@ export default function PlayerProfilePage() {
                 delete updatePayload.registrationStatus;
             }
 
-            await updateDoc(doc(db, "users", user.uid), {
+            await updateDoc(userRef, {
                 ...updatePayload,
-                photoUrl: photoUrl,
+                photoUrl: photoUrl?.trim() || null,
                 dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
                 updatedAt: new Date(),
             });
@@ -364,7 +385,7 @@ export default function PlayerProfilePage() {
                     </div>
 
                     <div className="flex flex-col items-center mb-8">
-                        <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                        <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Click to upload photo">
                             <div className="h-32 w-32 rounded-full overflow-hidden border-4 border-gray-800 shadow-lg bg-gray-800 relative">
                                 {photoUrl ? (
                                     <Image
@@ -396,7 +417,64 @@ export default function PlayerProfilePage() {
                                 onChange={handleImageUpload}
                             />
                         </div>
-                        <p className="mt-2 text-sm text-gray-500">Click to upload photo</p>
+
+                        {/* Editable Photo URL input under the avatar */}
+                        <div className="w-full max-w-md mt-4 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <ImageIcon className="w-3.5 h-3.5 text-orange-500" />
+                                    Photo URL
+                                </label>
+                                {photoUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setPhotoUrl("")}
+                                        className="text-xs text-gray-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+                                        title="Clear photo URL"
+                                    >
+                                        <X className="w-3 h-3" />
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Input
+                                        type="url"
+                                        value={photoUrl || ""}
+                                        onChange={(e) => setPhotoUrl(e.target.value)}
+                                        placeholder="https://example.com/avatar.jpg"
+                                        className="bg-gray-950 border-gray-800 text-white text-xs sm:text-sm pl-8 focus:border-orange-500"
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleSavePhotoUrl();
+                                            }
+                                        }}
+                                    />
+                                    <LinkIcon className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                </div>
+                                <Button
+                                    type="button"
+                                    onClick={handleSavePhotoUrl}
+                                    disabled={savingPhotoUrl}
+                                    size="sm"
+                                    className="bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 hover:border-orange-500 transition-all text-xs px-3"
+                                >
+                                    {savingPhotoUrl ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Check className="w-3.5 h-3.5 mr-1 text-green-400" />
+                                            Save URL
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                            <p className="text-[11px] text-gray-500 text-center">
+                                Paste an image URL directly or click the avatar above to upload.
+                            </p>
+                        </div>
                     </div>
 
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

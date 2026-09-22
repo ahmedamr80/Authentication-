@@ -9,6 +9,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { parseFirebaseDate } from "@/lib/date-utils";
 
 // UI Components
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { useToast } from "@/context/ToastContext";
 
 // Icons
-import { MapPin, Activity, Loader2, Camera, ArrowLeft, Save } from "lucide-react";
+import { MapPin, Activity, Loader2, Camera, ArrowLeft, Save, Link as LinkIcon, Check, X, Image as ImageIcon } from "lucide-react";
 
 // ----------------------------------------------------------------------
 // 1. SHARED TYPES & SCHEMA
@@ -58,6 +59,7 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
     const [saving, setSaving] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string | null>(initialData.photoUrl || initialData.photoURL || null);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
+    const [savingPhotoUrl, setSavingPhotoUrl] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<ProfileFormValues>({
@@ -144,12 +146,31 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
         }
     };
 
+    const handleSavePhotoUrl = async () => {
+        if (savingPhotoUrl) return;
+        setSavingPhotoUrl(true);
+        try {
+            const cleanUrl = photoUrl?.trim() || null;
+            await updateDoc(doc(db, "users", playerId), {
+                photoUrl: cleanUrl,
+                updatedAt: new Date(),
+            });
+            setPhotoUrl(cleanUrl);
+            showToast("Photo URL updated successfully!", "success");
+        } catch (error) {
+            console.error("Failed to update photo URL:", error);
+            showToast("Failed to update photo URL", "error");
+        } finally {
+            setSavingPhotoUrl(false);
+        }
+    };
+
     const onSubmit: SubmitHandler<ProfileFormValues> = async (data) => {
         setSaving(true);
         try {
             await updateDoc(doc(db, "users", playerId), {
                 ...data,
-                photoUrl: photoUrl,
+                photoUrl: photoUrl?.trim() || null,
                 dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
                 updatedAt: new Date(),
             });
@@ -171,10 +192,12 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
                 </div>
 
                 <div className="flex flex-col items-center mb-8">
-                    <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                    <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Click to upload new photo">
                         <Avatar className="h-32 w-32 border-4 border-gray-800 shadow-lg">
-                            <AvatarImage src={photoUrl || undefined} />
-                            <AvatarFallback className="bg-gray-800 text-3xl">{initialData.displayName?.charAt(0)}</AvatarFallback>
+                            <AvatarImage src={photoUrl || undefined} alt={initialData.displayName || initialData.fullName || "Player"} />
+                            <AvatarFallback className="bg-gray-800 text-3xl font-bold text-orange-500">
+                                {(initialData.displayName || initialData.fullName || "?").charAt(0).toUpperCase()}
+                            </AvatarFallback>
                         </Avatar>
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center rounded-full">
                             <Camera className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -182,6 +205,64 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
                     </div>
                     {uploadingPhoto && <Loader2 className="h-6 w-6 animate-spin text-orange-500 mt-2" />}
+
+                    {/* Editable Photo URL input under the avatar */}
+                    <div className="w-full max-w-md mt-4 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <ImageIcon className="w-3.5 h-3.5 text-orange-500" />
+                                Photo URL
+                            </label>
+                            {photoUrl && (
+                                <button
+                                    type="button"
+                                    onClick={() => setPhotoUrl("")}
+                                    className="text-xs text-gray-500 hover:text-red-400 flex items-center gap-1 transition-colors"
+                                    title="Clear photo URL"
+                                >
+                                    <X className="w-3 h-3" />
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Input
+                                    type="url"
+                                    value={photoUrl || ""}
+                                    onChange={(e) => setPhotoUrl(e.target.value)}
+                                    placeholder="https://example.com/avatar.jpg"
+                                    className="bg-gray-950 border-gray-800 text-white text-xs sm:text-sm pl-8 focus:border-orange-500"
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleSavePhotoUrl();
+                                        }
+                                    }}
+                                />
+                                <LinkIcon className="w-3.5 h-3.5 text-gray-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            </div>
+                            <Button
+                                type="button"
+                                onClick={handleSavePhotoUrl}
+                                disabled={savingPhotoUrl}
+                                size="sm"
+                                className="bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 hover:border-orange-500 transition-all text-xs px-3"
+                            >
+                                {savingPhotoUrl ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                    <>
+                                        <Check className="w-3.5 h-3.5 mr-1 text-green-400" />
+                                        Save URL
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 text-center">
+                            Paste an image URL directly or click the avatar above to upload.
+                        </p>
+                    </div>
                 </div>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -311,8 +392,9 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
 
 function PublicPlayerView({ profile }: { profile: UserProfile }) {
     // Format Joined Date
-    const joinedDate = profile?.createdAt
-        ? new Date(profile.createdAt.seconds * 1000).toLocaleDateString('en-US', {
+    const parsedJoinedDate = parseFirebaseDate(profile?.createdAt);
+    const joinedDate = parsedJoinedDate
+        ? parsedJoinedDate.toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
             day: 'numeric'
@@ -321,8 +403,8 @@ function PublicPlayerView({ profile }: { profile: UserProfile }) {
 
     // Calculate Age
     let age = "N/A";
-    if (profile?.dateOfBirth) {
-        const birthDate = new Date(profile.dateOfBirth.seconds * 1000);
+    const birthDate = parseFirebaseDate(profile?.dateOfBirth);
+    if (birthDate) {
         const today = new Date();
         let calculatedAge = today.getFullYear() - birthDate.getFullYear();
         const m = today.getMonth() - birthDate.getMonth();
@@ -422,7 +504,7 @@ export default function PublicProfilePage() {
     const playerId = params.playerId as string;
 
     // Get Admin status from AuthContext
-    const { user, isAdmin } = useAuth();
+    const { user, isAdmin, loading: authLoading } = useAuth();
 
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
@@ -450,7 +532,7 @@ export default function PublicProfilePage() {
         }
     }, [playerId]);
 
-    if (loading) {
+    if (loading || authLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-950">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
