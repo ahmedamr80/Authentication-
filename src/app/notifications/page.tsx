@@ -189,7 +189,7 @@ export default function NotificationsPage() {
                             </p>
                             <Button 
                                 onClick={() => router.push("/events")}
-                                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02]"
+                                className="bg-linear-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02]"
                             >
                                 Browse Upcoming Events
                             </Button>
