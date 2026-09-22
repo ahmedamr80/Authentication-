@@ -92,7 +92,6 @@ export function usePushNotifications() {
                         body: payload.notification?.body,
                         icon: payload.notification?.icon || '/logo.png',
                         badge: '/logo.png',
-                        vibrate: [200, 100, 200, 100, 200],
                         data: { link },
                     };
                     const notif = new Notification(notificationTitle, notificationOptions);
@@ -100,6 +99,15 @@ export function usePushNotifications() {
                         window.focus();
                         if (link) window.location.href = link;
                     };
+
+                    // Trigger vibration on supported devices
+                    try {
+                        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                            navigator.vibrate([200, 100, 200, 100, 200]);
+                        }
+                    } catch (err) {
+                        console.warn('Vibration API error:', err);
+                    }
 
                     // Play custom notification audio chime
                     try {
