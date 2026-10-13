@@ -35,9 +35,15 @@ export function usePushNotifications() {
                 const { getToken } = await import('firebase/messaging');
 
                 // Wait for the service worker to be ready so we pass it explicitly to getToken.
-                // This prevents the SDK from trying to implicitly register '/firebase-messaging-sw.js'
-                // without our custom URL query parameters.
-                const registration = await navigator.serviceWorker.ready;
+                let registration: ServiceWorkerRegistration | undefined;
+                try {
+                    registration = await Promise.race([
+                        navigator.serviceWorker.ready,
+                        new Promise<undefined>((_, reject) => setTimeout(() => reject(new Error('Service worker ready timeout')), 6000))
+                    ]);
+                } catch {
+                    registration = (await navigator.serviceWorker.getRegistration()) || undefined;
+                }
 
                 // Get registration token. Initially this makes a network call, once retrieved
                 // subsequent calls to getToken will return from cache.
@@ -51,11 +57,14 @@ export function usePushNotifications() {
                     console.log('FCM Token:', currentToken);
                     
                     // Save token to Firestore user document
-                    const userRef = doc(db, 'users', user.uid);
-                    await updateDoc(userRef, {
-                        fcmTokens: arrayUnion(currentToken)
-                    });
-                    
+                    try {
+                        const userRef = doc(db, 'users', user.uid);
+                        await updateDoc(userRef, {
+                            fcmTokens: arrayUnion(currentToken)
+                        });
+                    } catch (saveErr) {
+                        console.warn('Could not save FCM token to user profile:', saveErr);
+                    }
                 } else {
                     console.log('No registration token available. Request permission to generate one.');
                 }

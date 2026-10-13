@@ -8,12 +8,15 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      // Check if user has 'admin' custom claim OR 'admin' role in 'users' collection
-      // SAFELY access the role field using .get() to prevent errors if field is missing
+      // Check if user has admin custom claim OR admin role / isAdmin in users collection
       return isSignedIn() && 
-        ((request.auth.token.keys().hasAny(['admin']) && request.auth.token.admin == true) || 
+        (request.auth.token.get('admin', false) == true || 
+         request.auth.token.get('isAdmin', false) == true || 
+         request.auth.token.get('role', '') == 'admin' ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin'));
+          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['admin', 'Admin'] ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', '') in ['True', 'true'])));
     }
 
     function isOwner(uid) {
@@ -62,12 +65,24 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false; // Server-only audit logger writes
     }
+
+    // --- APPLICATION AUDIT LOGS ---
+    match /auditLogs/{logId} {
+      allow read: if isAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.get('adminId', '') == request.auth.uid
+      );
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Append-only audit log
+    }
     
     // --- EVENTS ---
     match /events/{eventId} {
       allow read: if true;
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (
+      allow create: if isSignedIn();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.get('adminId', '') == request.auth.uid);
+      allow update: if isAdmin() || (isSignedIn() && resource.data.get('adminId', '') == request.auth.uid) || (
         isSignedIn() && 
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registrationsCount', 'waitlistCount'])
       );
@@ -81,23 +96,29 @@ service cloud.firestore {
         resource.data.playerId == request.auth.uid || 
         resource.data.player2Id == request.auth.uid || 
         (resource.data.status == "WAITLIST" && request.resource.data.status == "CONFIRMED") ||
-        isAdmin()
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/events/$(resource.data.eventId)) && 
+         get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.get('adminId', '') == request.auth.uid)
       );
       allow delete: if isSignedIn() && (
         resource.data.playerId == request.auth.uid || 
         resource.data.player2Id == request.auth.uid || 
-        isAdmin()
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/events/$(resource.data.eventId)) && 
+         get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.get('adminId', '') == request.auth.uid)
       );
     }
     
     // --- TEAMS ---
     match /teams/{teamId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.player1Id == request.auth.uid;
+      allow create: if isSignedIn() && (request.resource.data.player1Id == request.auth.uid || isAdmin());
       allow update, delete: if isSignedIn() && (
         resource.data.player1Id == request.auth.uid || 
         resource.data.player2Id == request.auth.uid ||
-        isAdmin()
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/events/$(resource.data.eventId)) && 
+         get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.get('adminId', '') == request.auth.uid)
       );
     }
     

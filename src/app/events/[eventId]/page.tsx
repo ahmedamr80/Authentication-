@@ -9,7 +9,7 @@ import { EventData, Registration, User as FirestoreUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy, Pencil, Loader2 } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Trophy, ArrowLeft, Share2, AlertCircle, Bell, Copy, Pencil, Loader2, Activity } from "lucide-react";
 import { TeamsList, Team } from "@/components/TeamsList";
 import { SinglePlayersList, SinglePlayer } from "@/components/SinglePlayersList";
 import { RegisterDialog } from "@/components/RegisterDialog";
@@ -26,6 +26,9 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { EventTermsSection } from "@/components/EventTermsSection";
 import { EligibilityGateDialog } from "@/components/EligibilityGateDialog";
 import { checkPlayerEligibility } from "@/lib/authRequirements";
+import { getTimestampMillis } from "@/lib/date-utils";
+
+import { LateWithdrawalWarningDialog } from "@/components/LateWithdrawalWarningDialog";
 
 // Define a legacy interface for teams that might have direct name properties
 // This solves the 'any' casting issue while keeping Type safety
@@ -38,19 +41,92 @@ interface TeamWithLegacyData extends Team {
     player2PhotoURL?: string;
 }
 
-// Helper to calculate spots left
-const calculateSpotsLeft = (event: EventData, registrations: Registration[], teams: Team[]) => {
-    const totalSpots = event.maxPlayers || 0;
+// Resolve player photo:
+// 1. First check if the player has an uploaded/custom picture on his user account
+// 2. If not, check the Google photo associated with his account (from Google Auth or user profile)
+// 3. Fallback to registration snapshots
+const resolvePlayerPhoto = (profile: any, r?: any, isCurrentUser: boolean = false, authUser?: any): string | undefined => {
+    // 1. User account custom/uploaded picture
+    const customPhoto = profile?.customPhotoUrl || profile?.avatarUrl || profile?.avatar;
+    if (typeof customPhoto === "string") {
+        const trimmed = customPhoto.trim();
+        if (trimmed && trimmed !== "null" && trimmed !== "undefined") {
+            return trimmed;
+        }
+    }
+    // Also check if profile.photoUrl is a custom uploaded photo (e.g. Firebase storage) and not a Google photo
+    if (typeof profile?.photoUrl === "string") {
+        const trimmed = profile.photoUrl.trim();
+        if (trimmed && !trimmed.includes("googleusercontent.com") && trimmed !== "null" && trimmed !== "undefined") {
+            return trimmed;
+        }
+    }
 
-    // Updated Logic: Count occupied spots strictly based on CONFIRMED status
+    // 2. Google photo associated with Google account
+    const googlePhotoCandidates = [
+        (typeof profile?.photoUrl === "string" && profile.photoUrl.includes("googleusercontent.com")) ? profile.photoUrl : null,
+        profile?.photoURL,
+        profile?.googlePhotoUrl,
+        profile?.googlePhotoURL,
+        isCurrentUser ? authUser?.photoURL : null,
+        isCurrentUser ? authUser?.providerData?.find((p: any) => p?.providerId === "google.com" || p?.photoURL?.includes("googleusercontent.com"))?.photoURL : null,
+    ];
+
+    for (const candidate of googlePhotoCandidates) {
+        if (typeof candidate === "string") {
+            const trimmed = candidate.trim();
+            if (trimmed && trimmed !== "null" && trimmed !== "undefined") {
+                return trimmed;
+            }
+        }
+    }
+
+    // 3. Fallback: Any photoUrl or photoURL on profile
+    const anyProfilePhoto = profile?.photoUrl || profile?.photoURL;
+    if (typeof anyProfilePhoto === "string") {
+        const trimmed = anyProfilePhoto.trim();
+        if (trimmed && trimmed !== "null" && trimmed !== "undefined") {
+            return trimmed;
+        }
+    }
+
+    // 4. Registration snapshot fallbacks
+    const regPhotoCandidates = [
+        r?.playerPhotoURL,
+        r?.playerPhotoUrl,
+        r?.photoURL,
+        r?.photoUrl,
+    ];
+    for (const candidate of regPhotoCandidates) {
+        if (typeof candidate === "string") {
+            const trimmed = candidate.trim();
+            if (trimmed && trimmed !== "null" && trimmed !== "undefined") {
+                return trimmed;
+            }
+        }
+    }
+
+    return undefined;
+};
+
+// Helper to calculate spots left
+const calculateSpotsLeft = (event: EventData, registrations: Registration[], teams: Team[], isLoggedIn: boolean = false) => {
+    const totalSpots = event.slotsAvailable || event.maxPlayers || 0;
+
+    // Spec Rule 4.1: Count occupied spots for both CONFIRMED and active REPLACEMENT_GRACE teams
     if (event.unitType === "Teams") {
-        const occupiedTeams = teams.filter(t => t.status === 'CONFIRMED');
-        return Math.max(0, totalSpots - occupiedTeams.length);
+        const occupiedTeams = teams.filter(t => 
+            t.status === 'CONFIRMED' || 
+            (t.status === 'REPLACEMENT_GRACE' && !!(t.player1Id || t.player2Id) && (!t.replacementDeadlineAt || getTimestampMillis(t.replacementDeadlineAt) > Date.now()))
+        );
+        const count = isLoggedIn ? occupiedTeams.length : (event.confirmedTeamsCount ?? occupiedTeams.length);
+        return Math.max(0, totalSpots - count);
     }
 
     // Player Mode
     const occupiedPlayers = registrations.filter(r => r.status === 'CONFIRMED');
-    return Math.max(0, totalSpots - occupiedPlayers.length);
+    const count = isLoggedIn ? occupiedPlayers.length : (event.registrationsCount || 0);
+    return Math.max(0, totalSpots - count);
 };
 
 export default function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -74,10 +150,17 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
     const [isTeamRegisterOpen, setIsTeamRegisterOpen] = useState(false);
     const [isEligibilityGateOpen, setIsEligibilityGateOpen] = useState(false);
-    const [eligibilityState, setEligibilityState] = useState<{ isEmailVerified: boolean; hasPhone: boolean }>({
+    const [eligibilityState, setEligibilityState] = useState<{
+        isEmailVerified: boolean;
+        hasPhone: boolean;
+        isRedflagged?: boolean;
+        redflagReason?: string;
+    }>({
         isEmailVerified: true,
         hasPhone: true,
     });
+    const [isLateWarningOpen, setIsLateWarningOpen] = useState(false);
+    const [lateWarningMessage, setLateWarningMessage] = useState("");
     const [inviteDialogData, setInviteDialogData] = useState<{
         teamId: string;
         requester: { uid: string; displayName?: string };
@@ -94,6 +177,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
             setEligibilityState({
                 isEmailVerified: eligibility.isEmailVerified,
                 hasPhone: eligibility.hasPhone,
+                isRedflagged: eligibility.isRedflagged,
+                redflagReason: eligibility.redflagReason,
             });
             setIsEligibilityGateOpen(true);
             return;
@@ -139,17 +224,29 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     // 2. Fetch Registrations (Always needed for user check & single players)
     useEffect(() => {
         if (!eventId) return;
+        if (!user) {
+            setRegistrations([]);
+            return;
+        }
         const q = query(collection(db, "registrations"), where("eventId", "==", eventId));
         const unsub = onSnapshot(q, (snapshot) => {
             const regs = snapshot.docs.map(d => ({ ...d.data(), id: d.id, registrationId: d.id } as unknown as Registration));
             setRegistrations(regs);
+        }, (err) => {
+            if (err.code !== "permission-denied") {
+                console.error("Error fetching registrations:", err);
+            }
         });
         return () => unsub();
-    }, [eventId]);
+    }, [eventId, user]);
 
     // 3. Fetch Teams (Conditional Optimization)
     useEffect(() => {
         if (!eventId) return;
+        if (!user) {
+            setTeams([]);
+            return;
+        }
 
         // OPTIMIZATION: Stop here if we know for sure this isn't a team event
         // Note: We check 'event' existence first to avoid errors
@@ -161,9 +258,13 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         const unsub = onSnapshot(q, (snapshot) => {
             const teamsData = snapshot.docs.map(d => ({ teamId: d.id, ...d.data() } as Team));
             setTeams(teamsData);
+        }, (err) => {
+            if (err.code !== "permission-denied") {
+                console.error("Error fetching teams:", err);
+            }
         });
         return () => unsub();
-    }, [eventId, event, event?.unitType, event?.isTeamRegistration]);
+    }, [eventId, event, event?.unitType, event?.isTeamRegistration, user]);
 
     // 4. Fetch User Profiles
     const allPlayerIdsString = useMemo(() => {
@@ -171,25 +272,26 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         registrations.forEach(r => {
             if (r.playerId) ids.add(r.playerId);
             if (r.player2Id) ids.add(r.player2Id);
+            if ((r as any).userId) ids.add((r as any).userId);
+            if ((r as any).uid) ids.add((r as any).uid);
         });
         teams.forEach(t => {
             if (t.player1Id) ids.add(t.player1Id);
             if (t.player2Id) ids.add(t.player2Id);
         });
         if (user) ids.add(user.uid);
-        return Array.from(ids).sort().join(',');
+        return Array.from(ids).filter(Boolean).sort().join(',');
     }, [registrations, teams, user]);
 
     useEffect(() => {
         const fetchProfiles = async () => {
-            if (!allPlayerIdsString) return;
+            if (!allPlayerIdsString || !user) return;
             const playerIds = allPlayerIdsString.split(',');
             const missingIds = playerIds.filter(id =>
                 id && !userProfiles[id] && !fetchedIds.current.has(id)
             );
 
             if (missingIds.length > 0) {
-                missingIds.forEach(id => fetchedIds.current.add(id));
                 const chunks = [];
                 for (let i = 0; i < missingIds.length; i += 10) {
                     chunks.push(missingIds.slice(i, i + 10));
@@ -200,11 +302,24 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                     try {
                         const q = query(collection(db, "users"), where(documentId(), "in", chunk));
                         const snapshot = await getDocs(q);
-                        snapshot.docs.forEach(doc => {
-                            newProfiles[doc.id] = doc.data() as FirestoreUser;
+                        snapshot.docs.forEach(docSnap => {
+                            fetchedIds.current.add(docSnap.id);
+                            newProfiles[docSnap.id] = docSnap.data() as FirestoreUser;
                         });
                     } catch (error: unknown) {
                         console.error("Error fetching chunk:", chunk, error);
+                        // Fallback: try individual getDoc
+                        for (const id of chunk) {
+                            try {
+                                const singleSnap = await getDoc(doc(db, "users", id));
+                                if (singleSnap.exists()) {
+                                    fetchedIds.current.add(id);
+                                    newProfiles[id] = singleSnap.data() as FirestoreUser;
+                                }
+                            } catch {
+                                // Will retry next time
+                            }
+                        }
                     }
                 }
 
@@ -214,7 +329,39 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
             }
         };
         fetchProfiles();
-    }, [allPlayerIdsString, userProfiles]);
+    }, [allPlayerIdsString, userProfiles, user]);
+
+    // Profile listener for the logged-in user to guarantee instant avatar and profile sync
+    useEffect(() => {
+        if (!user) return;
+        const userDocRef = doc(db, "users", user.uid);
+        const unsub = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data() as FirestoreUser;
+                setUserProfiles(prev => ({
+                    ...prev,
+                    [user.uid]: {
+                        ...data,
+                        photoURL: data.photoUrl || data.photoURL || user.photoURL || undefined,
+                        photoUrl: data.photoUrl || data.photoURL || user.photoURL || undefined,
+                    }
+                }));
+            } else if (user.photoURL || user.displayName) {
+                setUserProfiles(prev => ({
+                    ...prev,
+                    [user.uid]: {
+                        uid: user.uid,
+                        displayName: user.displayName || "Me",
+                        photoURL: user.photoURL || undefined,
+                        photoUrl: user.photoURL || undefined,
+                    } as FirestoreUser
+                }));
+            }
+        }, (err) => {
+            if (err.code !== "permission-denied") console.error("Current user profile listener error:", err);
+        });
+        return () => unsub();
+    }, [user]);
 
     // 5. Handle URL Invites
     useEffect(() => {
@@ -259,20 +406,105 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         }
     }, [event?.clubId]);
 
+    // 7. Auto-expiry trigger for teams in REPLACEMENT_GRACE
+    useEffect(() => {
+        if (!eventId || teams.length === 0) return;
+
+        const graceTeams = teams.filter(t => t.status === "REPLACEMENT_GRACE");
+        if (graceTeams.length === 0) return;
+
+        const now = Date.now();
+        let earliestUpcomingDeadline: number | null = null;
+        let hasExpiredGraceTeam = false;
+
+        for (const team of graceTeams) {
+            const deadlineMs = getTimestampMillis(team.replacementDeadlineAt);
+            if (deadlineMs > 0) {
+                if (now >= deadlineMs) {
+                    hasExpiredGraceTeam = true;
+                } else {
+                    if (earliestUpcomingDeadline === null || deadlineMs < earliestUpcomingDeadline) {
+                        earliestUpcomingDeadline = deadlineMs;
+                    }
+                }
+            }
+        }
+
+        const triggerCheckExpiry = async () => {
+            try {
+                await fetch("/api/events/teams/check-expiry", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ eventId }),
+                });
+            } catch (err) {
+                console.error("[check-expiry] Failed to check grace expiry:", err);
+            }
+        };
+
+        if (hasExpiredGraceTeam) {
+            triggerCheckExpiry();
+        }
+
+        if (earliestUpcomingDeadline !== null) {
+            const delay = Math.max(500, earliestUpcomingDeadline - now + 500);
+            const timer = setTimeout(() => {
+                triggerCheckExpiry();
+            }, delay);
+            return () => clearTimeout(timer);
+        }
+    }, [eventId, teams]);
+
     // Derived State
-    const userRegistration = useMemo(() => {
+    const userRegistration = useMemo<Registration | undefined>(() => {
         if (!user) return undefined;
 
         // Check for solo registration (Players mode or looking for partner in Teams mode)
         const soloReg = registrations.find(r => 
             (r.playerId === user.uid || r.player2Id === user.uid) && r.status !== "CANCELLED"
         );
-        if (soloReg) return soloReg;
+        if (soloReg) {
+            if ((soloReg.status === "CONFIRMED" || soloReg.status === "WAITLIST") && event?.unitType === "Players") {
+                return {
+                    ...soloReg,
+                    lookingForPartner: false,
+                };
+            }
+            if (soloReg.teamId) {
+                const targetTeam = teams.find(t => t.teamId === soloReg.teamId);
+                if (!targetTeam || targetTeam.status === "CANCELLED" || targetTeam.status === "EXPIRED") {
+                    return {
+                        ...soloReg,
+                        teamId: null,
+                        lookingForPartner: true,
+                        partnerStatus: undefined,
+                    };
+                }
+            } else if (soloReg.status === "PENDING" || soloReg.lookingForPartner === true) {
+                return {
+                    ...soloReg,
+                    lookingForPartner: true,
+                };
+            }
+            return soloReg;
+        }
 
         // Check if user is part of a team (Teams mode)
-        const userTeam = teams.find(t =>
-            t.player1Id === user.uid || t.player2Id === user.uid
-        );
+        const userTeam = teams.find(t => {
+            if (t.status === "CANCELLED" || t.status === "EXPIRED") return false;
+            if (t.status === "REPLACEMENT_GRACE") {
+                // If the user is the one who withdrew, they have no active registration here
+                if (t.replacementForPlayerId === user.uid) return false;
+                if (t.vacantSlot === "PLAYER1" && t.player1Id === user.uid) return false;
+                if (t.vacantSlot === "PLAYER2" && t.player2Id === user.uid) return false;
+                return t.player1Id === user.uid || t.player2Id === user.uid;
+            }
+            if (t.status === "PENDING") {
+                // An unconfirmed invitee in a pending proposal is not registered yet
+                return t.player1Id === user.uid;
+            }
+            return t.player1Id === user.uid || t.player2Id === user.uid;
+        });
 
         // If user is in a team, create a pseudo-registration object for UI consistency
         if (userTeam) {
@@ -283,8 +515,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 registeredAt: userTeam.createdAt,
                 status: userTeam.status as "CONFIRMED" | "PENDING",
                 isPrimary: true,
-                teamId: userTeam.teamId
-            };
+                teamId: userTeam.teamId,
+                lookingForPartner: false
+            } as Registration;
         }
 
         return undefined;
@@ -297,83 +530,101 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     }, [user, teams]);
 
     const spotsLeft = useMemo(() => {
-        return event ? calculateSpotsLeft(event, registrations, teams) : 0;
-    }, [event, registrations, teams]);
+        return event ? calculateSpotsLeft(event, registrations, teams, !!user) : 0;
+    }, [event, registrations, teams, user]);
 
     // C. Build the Team List (Single Source of Truth: The 'teams' collection)
     const teamsWithPlayers = useMemo(() => {
         return [...teams]
-            .sort((a, b) => (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0))
+            .filter(team => team.status !== "CANCELLED" && team.status !== "EXPIRED")
+            .sort((a, b) => getTimestampMillis(a.createdAt) - getTimestampMillis(b.createdAt))
             .map(team => {
                 const p1 = userProfiles[team.player1Id];
                 const p2 = userProfiles[team.player2Id];
                 const teamLegacy = team as TeamWithLegacyData;
 
+                const p1Photo = resolvePlayerPhoto(p1, null, user?.uid === team.player1Id, user) || teamLegacy.player1PhotoURL || undefined;
+                const p2Photo = resolvePlayerPhoto(p2, null, user?.uid === team.player2Id, user) || teamLegacy.player2PhotoURL || undefined;
+
                 return {
                     ...team,
-                    player1: p1 ? {
+                    player1: (p1 || team.player1Id === user?.uid || teamLegacy.player1Name) ? {
                         uid: team.player1Id,
-                        displayName: p1.fullName || p1.fullname || p1.displayName || teamLegacy.player1Name || teamLegacy.fullNameP1 || "Unknown Player",
-                        // Prioritize LIVE profile photo -> team-stored snapshot -> fallback
-                        photoURL: p1.photoUrl || p1.photoURL || teamLegacy.player1PhotoURL || undefined,
-                        skillLevel: p1.skillLevel || p1.level || undefined
+                        displayName: p1?.fullName || p1?.fullname || p1?.displayName || teamLegacy.player1Name || teamLegacy.fullNameP1 || (user?.uid === team.player1Id ? user.displayName : undefined) || "Unknown Player",
+                        photoURL: p1Photo,
+                        photoUrl: p1Photo,
+                        skillLevel: p1?.skillLevel || p1?.level || undefined
                     } : undefined,
-                    player2: p2 ? {
+                    player2: (p2 || team.player2Id === user?.uid || teamLegacy.player2Name) ? {
                         uid: team.player2Id,
-                        displayName: p2.fullName || p2.fullname || p2.displayName || teamLegacy.player2Name || teamLegacy.fullNameP2 || "Unknown Player",
-                        // Prioritize LIVE profile photo -> team-stored snapshot -> fallback
-                        photoURL: p2.photoUrl || p2.photoURL || teamLegacy.player2PhotoURL || undefined,
-                        skillLevel: p2.skillLevel || p2.level || undefined
+                        displayName: p2?.fullName || p2?.fullname || p2?.displayName || teamLegacy.player2Name || teamLegacy.fullNameP2 || (user?.uid === team.player2Id ? user.displayName : undefined) || "Unknown Player",
+                        photoURL: p2Photo,
+                        photoUrl: p2Photo,
+                        skillLevel: p2?.skillLevel || p2?.level || undefined
                     } : undefined
                 };
             });
-    }, [teams, userProfiles]);
+    }, [teams, userProfiles, user]);
+
+    const confirmedTeams = useMemo(() => {
+        return teamsWithPlayers.filter(t => t.status === "CONFIRMED");
+    }, [teamsWithPlayers]);
 
     // D. Build the Single Players List (Free Agents)
     const singlePlayers = useMemo(() => {
-        // 1. Create a "Block List" of players who are already in a CONFIRMED team
-        // We don't want them showing up in the singles list if they are already booked.
+        // 1. Create a "Block List" of players who are already in a committed team (CONFIRMED, WAITLIST, REPLACEMENT_GRACE)
         const committedPlayerIds = new Set<string>();
         teamsWithPlayers.forEach(t => {
-            if (t.status === 'CONFIRMED') {
-                committedPlayerIds.add(t.player1Id);
+            if (t.status === 'CONFIRMED' || t.status === 'WAITLIST') {
+                if (t.player1Id) committedPlayerIds.add(t.player1Id);
                 if (t.player2Id) committedPlayerIds.add(t.player2Id);
+            } else if (t.status === 'REPLACEMENT_GRACE') {
+                // In REPLACEMENT_GRACE, only the surviving player is committed; the withdrawn player is free
+                const survivingId = t.vacantSlot === 'PLAYER2' ? t.player1Id : t.player2Id;
+                if (survivingId) committedPlayerIds.add(survivingId);
             }
         });
 
-        // 2. Filter Registrations using your specific "Free Agent" rules
+        // 2. Set of active teams (not cancelled or expired)
+        const activeTeamIds = new Set(
+            teams
+                .filter(t => t.status !== 'CANCELLED' && t.status !== 'EXPIRED')
+                .map(t => t.teamId)
+        );
+
+        // 3. Filter Registrations using master spec "Free Agent" rules (Spec Section 2.3)
         return registrations
             .filter(r => {
-                // Safety: If they are already in a confirmed team, hide them.
+                if (r.status === 'CANCELLED') return false;
                 if (committedPlayerIds.has(r.playerId)) return false;
 
-                // YOUR LOGIC: They are a "Single Player" if...
-                const explicitlyLooking = r.lookingForPartner === true;
-                // const wasDenied = r.partnerStatus === 'DENIED'; // Partner said no, back to market
-                //const isOrphan = !r.player2Id; // Registered alone, no invite sent/received
+                const hasActiveTeam = r.teamId ? activeTeamIds.has(r.teamId) : false;
 
-                // If any of these are true, show them in the list
-                return explicitlyLooking //|| wasDenied || isOrphan;
+                // Free Agent: status === PENDING && !hasActiveTeam, or explicitly lookingForPartner
+                const isFreeAgent = (r.status === 'PENDING' && !hasActiveTeam) || r.lookingForPartner === true;
+                return isFreeAgent;
             })
-            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
+            .sort((a, b) => getTimestampMillis(a.registeredAt || a.createdAt) - getTimestampMillis(b.registeredAt || b.createdAt))
             .map(r => {
                 // Enrich with profile data
                 const profile = userProfiles[r.playerId];
+                const photo = resolvePlayerPhoto(profile, r, user?.uid === r.playerId, user);
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown Player",
-                    // Prioritize LIVE profile photo -> registration snapshot -> fallback
-                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
-                    lookingForPartner: r.lookingForPartner || false,
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || (user?.uid === r.playerId ? user.displayName : undefined) || "Unknown Player",
+                    photoURL: photo,
+                    photoUrl: photo,
+                    lookingForPartner: true,
                     playerHand: profile?.hand || r.playerHand,
                     playerPosition: profile?.position || r.playerPosition,
                     playerSkillLevel: profile?.skillLevel || profile?.level || r.playerSkillLevel,
                     status: r.status,
-                    waitlistPosition: r.waitlistPosition
+                    waitlistPosition: r.waitlistPosition,
+                    registeredAt: r.registeredAt || r.createdAt,
                 };
             });
-    }, [registrations, userProfiles, teamsWithPlayers]);
+    }, [registrations, userProfiles, teamsWithPlayers, user]);
 
     // E. Confirmed Players List (Single Player Mode)
     const confirmedPlayers = useMemo(() => {
@@ -383,22 +634,25 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
 
         return registrations
             .filter(r => r.status === "CONFIRMED")
-            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
+            .sort((a, b) => getTimestampMillis(a.registeredAt || a.createdAt) - getTimestampMillis(b.registeredAt || b.createdAt))
             .map(r => {
                 const profile = userProfiles[r.playerId];
+                const photo = resolvePlayerPhoto(profile, r, user?.uid === r.playerId, user);
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown",
-                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || (user?.uid === r.playerId ? user.displayName : undefined) || "Unknown",
+                    photoURL: photo,
+                    photoUrl: photo,
                     lookingForPartner: false, // In singles mode, you are just "in", not looking
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
                     playerSkillLevel: profile?.skillLevel || profile?.level,
                     partnerStatus: r.partnerStatus,
+                    registeredAt: r.registeredAt || r.createdAt,
                 } as SinglePlayer;
             });
-    }, [registrations, userProfiles, event]);
+    }, [registrations, userProfiles, event, user]);
 
     // F. Waitlist Players List (Single Player Mode)
     const waitlistPlayers = useMemo(() => {
@@ -406,45 +660,130 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         // We assume Team events use the "Teams" logic we built earlier
         if (!event || event.unitType !== "Players") return [];
 
+        const seenPlayerIds = new Set<string>();
+
         return registrations
-            .filter(r => r.status === "WAITLIST")
-            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
+            .filter(r => {
+                if (!r.playerId) return false;
+                if (r.status === "CANCELLED") return false;
+                if (r.status === "CONFIRMED") return false;
+
+                // In Single Player mode, both explicit WAITLIST registrations
+                // and Free Agents / PENDING players (looking for a partner or converted from teams mode)
+                // must be included in the waitlist.
+                const isWaitlistOrFreeAgent =
+                    r.status === "WAITLIST" ||
+                    r.status === "PENDING" ||
+                    r.lookingForPartner === true;
+
+                if (!isWaitlistOrFreeAgent) return false;
+                if (seenPlayerIds.has(r.playerId)) return false;
+                seenPlayerIds.add(r.playerId);
+                return true;
+            })
+            .sort((a, b) => {
+                const posA = a.waitlistPosition ?? a.waitlistSequence;
+                const posB = b.waitlistPosition ?? b.waitlistSequence;
+                if (typeof posA === "number" && typeof posB === "number" && posA !== posB) {
+                    return posA - posB;
+                }
+                return getTimestampMillis(a.registeredAt || a.createdAt) - getTimestampMillis(b.registeredAt || b.createdAt);
+            })
             .map(r => {
                 const profile = userProfiles[r.playerId];
+                const photo = resolvePlayerPhoto(profile, r, user?.uid === r.playerId, user);
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown",
-                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || (user?.uid === r.playerId ? user.displayName : undefined) || "Unknown",
+                    photoURL: photo,
+                    photoUrl: photo,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
-                    playerSkillLevel: profile?.skillLevel || profile?.level
+                    playerSkillLevel: profile?.skillLevel || profile?.level,
+                    waitlistPosition: r.waitlistPosition,
+                    waitlistSequence: r.waitlistSequence,
+                    partnerStatus: r.partnerStatus,
+                    status: r.status,
+                    registeredAt: r.registeredAt || r.createdAt,
                 } as SinglePlayer;
             });
-    }, [registrations, userProfiles, event]);
+    }, [registrations, userProfiles, event, user]);
 
     // G. Changed Minds Players List (All Modes)
     const changedMindPlayers = useMemo(() => {
         if (!event) return [];
 
+        // Build a set of all players who currently have an active registration or team commitment
+        const activePlayerIds = new Set<string>();
+        registrations.forEach(r => {
+            if (r.status === "CONFIRMED" || r.status === "WAITLIST" || r.status === "PENDING") {
+                if (r.playerId) activePlayerIds.add(r.playerId);
+                if (r.player2Id) activePlayerIds.add(r.player2Id);
+            }
+        });
+        if (event.unitType === "Teams") {
+            teams.forEach(t => {
+                if (['CONFIRMED', 'WAITLIST', 'PENDING', 'REPLACEMENT_GRACE'].includes(t.status)) {
+                    if (t.player1Id) activePlayerIds.add(t.player1Id);
+                    if (t.player2Id) activePlayerIds.add(t.player2Id);
+                }
+            });
+        }
+
+        const seenPlayerIds = new Set<string>();
+
         return registrations
-            .filter(r => r.status !== "CONFIRMED" && r.status !== "WAITLIST" && r.status !== "PENDING")
-            .sort((a, b) => (a.registeredAt?.toMillis ? a.registeredAt.toMillis() : 0) - (b.registeredAt?.toMillis ? b.registeredAt.toMillis() : 0))
+            .filter(r => {
+                if (!r.playerId) return false;
+                // Exclude any player who currently has an active commitment
+                if (activePlayerIds.has(r.playerId)) return false;
+                // Only consider non-active statuses (e.g. CANCELLED)
+                if (r.status === "CONFIRMED" || r.status === "WAITLIST" || r.status === "PENDING") return false;
+                // Deduplicate by playerId
+                if (seenPlayerIds.has(r.playerId)) return false;
+                seenPlayerIds.add(r.playerId);
+                return true;
+            })
+            .sort((a, b) => {
+                const timeA = getTimestampMillis(a.cancelledAt || a.registeredAt || a.createdAt);
+                const timeB = getTimestampMillis(b.cancelledAt || b.registeredAt || b.createdAt);
+                return timeB - timeA;
+            })
             .map(r => {
                 const profile = userProfiles[r.playerId];
+                const photo = resolvePlayerPhoto(profile, r, user?.uid === r.playerId, user);
                 return {
                     registrationId: r.registrationId,
                     playerId: r.playerId,
-                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || "Unknown",
-                    photoURL: profile?.photoUrl || profile?.photoURL || r.playerPhotoURL || undefined,
+                    displayName: profile?.displayName || profile?.fullName || profile?.fullname || r.fullNameP1 || r.playerDisplayName || (user?.uid === r.playerId ? user.displayName : undefined) || "Unknown",
+                    photoURL: photo,
+                    photoUrl: photo,
                     lookingForPartner: false,
                     playerHand: profile?.hand,
                     playerPosition: profile?.position,
-                    playerSkillLevel: profile?.skillLevel || profile?.level
+                    playerSkillLevel: profile?.skillLevel || profile?.level,
+                    registeredAt: r.cancelledAt || r.registeredAt || r.createdAt,
                 } as SinglePlayer;
             });
-    }, [registrations, userProfiles, event]);
+    }, [registrations, teams, userProfiles, event, user]);
+
+    // Single source of truth for waiting list count and unit
+    const waitlistCount = useMemo(() => {
+        if (!event) return 0;
+        return event.unitType === "Teams"
+            ? teams.filter(t => t.status === "WAITLIST").length
+            : waitlistPlayers.length;
+    }, [event, teams, waitlistPlayers]);
+
+    const waitlistUnit = useMemo(() => {
+        if (!event) return "players";
+        const isTeam = event.unitType === "Teams";
+        return isTeam
+            ? (waitlistCount === 1 ? "team" : "teams")
+            : (waitlistCount === 1 ? "player" : "players");
+    }, [event, waitlistCount]);
 
     // Handlers
     const handleShare = () => {
@@ -502,9 +841,16 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 });
             }
         } else {
-            // Teams mode
-            const confirmedTeams = teamsWithPlayers.filter(t => t.status === "CONFIRMED");
-            const waitlistTeams = teamsWithPlayers.filter(t => t.status === "WAITLIST");
+            const waitlistTeams = teamsWithPlayers
+                .filter(t => t.status === "WAITLIST")
+                .sort((a, b) => {
+                    const seqA = a.waitlistSequence;
+                    const seqB = b.waitlistSequence;
+                    if (typeof seqA === "number" && typeof seqB === "number" && seqA !== seqB) {
+                        return seqA - seqB;
+                    }
+                    return getTimestampMillis(a.createdAt) - getTimestampMillis(b.createdAt);
+                });
             const totalTeams = event.slotsAvailable || 0;
 
             message += `👥 *Spots:* ${confirmedTeams.length}/${totalTeams} Teams\n\n`;
@@ -553,66 +899,59 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         });
     };
 
-    const handleWithdraw = async () => {
-        console.log("[DEBUG handleWithdraw Triggered]", {
-            userUid: user?.uid,
-            userEmail: user?.email,
-            userRegistration,
-            eventId: event?.eventId,
-            eventUnitType: event?.unitType,
-            totalRegistrationsCount: registrations.length,
-            registrationsList: registrations.map(r => ({ id: r.registrationId || (r as unknown as { id?: string }).id, playerId: r.playerId, status: r.status })),
-            teamsCount: teams.length,
-        });
-
+    const executeWithdraw = async (confirmLate: boolean = false) => {
         if (!user) {
-            console.error("[DEBUG handleWithdraw] No user logged in!");
-            showToast("Debug: You must be logged in to withdraw", "error");
+            showToast("You must be logged in to withdraw", "error");
             return;
         }
 
         if (!event) {
-            console.error("[DEBUG handleWithdraw] Event data not loaded!");
-            showToast("Debug: Event data is missing", "error");
+            showToast("Event data is missing", "error");
             return;
         }
 
-        // Find active registration if userRegistration memo was not populated
         let effectiveReg = userRegistration;
         if (!effectiveReg) {
-            console.warn("[DEBUG handleWithdraw] userRegistration was undefined in state. Searching registrations array directly...");
             const directMatch = registrations.find(r => 
                 (r.playerId === user.uid || r.player2Id === user.uid) && r.status !== "CANCELLED"
             );
             if (directMatch) {
-                console.log("[DEBUG handleWithdraw] Found direct match in registrations:", directMatch);
                 effectiveReg = directMatch;
             }
         }
-        
-        console.log("[DEBUG handleWithdraw] Proceeding with withdrawal execution...");
 
         try {
             showToast("Processing withdrawal...", "info");
-            const userTeam = teams.find(t => t.player1Id === user.uid || t.player2Id === user.uid);
+            const userTeam = teams.find(t => {
+                if (t.status === "CANCELLED" || t.status === "EXPIRED") return false;
+                if (t.status === "REPLACEMENT_GRACE") {
+                    if (t.replacementForPlayerId === user.uid) return false;
+                    if (t.vacantSlot === "PLAYER1" && t.player1Id === user.uid) return false;
+                    if (t.vacantSlot === "PLAYER2" && t.player2Id === user.uid) return false;
+                }
+                return t.player1Id === user.uid || t.player2Id === user.uid;
+            });
             const teamId = userTeam ? userTeam.teamId : (effectiveReg?.teamId || null);
 
-            console.log("[DEBUG handleWithdraw] Calling withdraw hook with:", {
-                userId: user.uid,
-                eventId: event.eventId,
-                registrationId: effectiveReg?.registrationId || (effectiveReg as unknown as { id?: string })?.id,
-                teamId
-            });
-
-            await withdraw(user, event, effectiveReg as Registration || null, teamId, () => {
-                console.log("[DEBUG handleWithdraw] withdraw onSuccess callback fired!");
+            const result = await withdraw(user, event, effectiveReg as Registration || null, teamId, () => {
                 showToast("Successfully withdrawn from event!", "success");
-            });
+            }, confirmLate);
 
+            if (result?.requiresConfirmation) {
+                setLateWarningMessage(result.message || "Withdrawing within the late-withdrawal window (18/12 hours before event start) will apply a red flag to your account.");
+                setIsLateWarningOpen(true);
+            }
         } catch (error: unknown) {
-            console.error("[DEBUG handleWithdraw] Error caught during withdraw:", error);
-            showToast(error instanceof Error ? `Withdraw Error: ${error.message}` : "Failed to withdraw", "error");
+            console.error("[handleWithdraw] Error caught during withdraw:", error);
+            showToast(error instanceof Error ? error.message : "Failed to withdraw", "error");
         }
+    };
+
+    const handleWithdraw = () => executeWithdraw(false);
+
+    const handleConfirmLateWithdrawal = async () => {
+        setIsLateWarningOpen(false);
+        await executeWithdraw(true);
     };
     if (loading) {
         return (
@@ -692,8 +1031,19 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-2">
-                            {isAdmin && (
+                            {(isAdmin || (user && event?.adminId === user.uid)) && (
                                 <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9 px-2.5 sm:px-3 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500 transition-all flex items-center gap-1.5"
+                                        onClick={() => router.push(`/events/${eventId}/admin`)}
+                                        title="Activity Feed"
+                                        aria-label="Activity Feed"
+                                    >
+                                        <Activity className="w-4 h-4 shrink-0" />
+                                        <span className="hidden sm:inline font-medium">Activity</span>
+                                    </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -830,8 +1180,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             <span className="text-white font-medium flex items-center gap-2">
                                 <Users className="h-4 w-4" />
                                 {event.unitType === "Teams"
-                                    ? `${teams.filter(t => t.status === 'CONFIRMED').length} / ${event.maxPlayers ? event.maxPlayers : 0} Teams`
-                                    : `${confirmedPlayers.length} / ${event.maxPlayers || 0} Players`
+                                    ? `${teams.filter(t => t.status === 'CONFIRMED').length} / ${event.slotsAvailable || event.maxPlayers || 0} Teams`
+                                    : `${confirmedPlayers.length} / ${event.maxPlayers || event.slotsAvailable || 0} Players`
                                 }
                             </span>
                             <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
@@ -841,7 +1191,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                         <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                             <div
                                 className="h-full bg-linear-to-r from-orange-500 to-red-500 transition-all duration-500"
-                                style={{ width: `${Math.min(100, ((event.maxPlayers! - spotsLeft) / event.maxPlayers!) * 100)}%` }}
+                                style={{ width: `${Math.min(100, Math.max(0, (((event.unitType === "Teams" ? (event.slotsAvailable || event.maxPlayers || 1) : (event.maxPlayers || event.slotsAvailable || 1)) - spotsLeft) / (event.unitType === "Teams" ? (event.slotsAvailable || event.maxPlayers || 1) : (event.maxPlayers || event.slotsAvailable || 1))) * 100))}%` }}
                             />
                         </div>
                         <p className="text-xs text-gray-500 mt-2">
@@ -850,6 +1200,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                 : "This is a single player event. Register to secure your spot."
                             }
                         </p>
+                        <div className={`flex items-center gap-1.5 text-xs font-medium mt-2.5 ${waitlistCount > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+                            <Clock className={`w-3.5 h-3.5 ${waitlistCount > 0 ? 'text-amber-500/80' : 'text-gray-500'}`} />
+                            <span>Waiting list: {waitlistCount} {waitlistUnit}</span>
+                        </div>
                     </div>
 
                     {/* Register Buttons */}
@@ -929,7 +1283,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     value="teams"
                                     className="data-[state=active]:bg-gray-800 data-[state=active]:text-white text-gray-400 rounded-lg transition-all"
                                 >
-                                    Teams ({teamsWithPlayers.length})
+                                    Teams ({confirmedTeams.length})
                                 </TabsTrigger>
                                 <TabsTrigger
                                     value="players"
@@ -1081,12 +1435,21 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                 user={user}
                 isEmailVerified={eligibilityState.isEmailVerified}
                 hasPhone={eligibilityState.hasPhone}
+                isRedflagged={eligibilityState.isRedflagged}
+                redflagReason={eligibilityState.redflagReason}
                 onVerifiedRefresh={() => {
                     setIsEligibilityGateOpen(false);
                     if (event) {
                         handleOpenRegistration(event.unitType === "Teams");
                     }
                 }}
+            />
+
+            <LateWithdrawalWarningDialog
+                open={isLateWarningOpen}
+                onOpenChange={setIsLateWarningOpen}
+                onConfirm={handleConfirmLateWithdrawal}
+                message={lateWarningMessage}
             />
         </div>
     );

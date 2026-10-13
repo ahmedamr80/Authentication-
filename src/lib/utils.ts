@@ -41,3 +41,59 @@ export const fetchPlayerName = async (uid: string, fallbackName?: string | null)
 
     return fallbackName || "Unknown Player";
 };
+
+/**
+ * Safely resolves a player's profile photo URL across multiple Firestore schemas,
+ * registration snapshots, and auth fallbacks. Filters out invalid values like 'null',
+ * 'undefined', or empty strings.
+ */
+export function resolvePlayerPhoto(
+    profile?: Record<string, any> | null,
+    registration?: Record<string, any> | null,
+    authFallback?: Record<string, any> | null
+): string | undefined {
+    const candidates = [
+        profile?.photoUrl,
+        profile?.photoURL,
+        profile?.photo,
+        profile?.avatarUrl,
+        profile?.avatarURL,
+        profile?.avatar,
+        profile?.profileImage,
+        profile?.picture,
+        profile?.image,
+        profile?.imageUrl,
+        registration?.playerPhotoURL,
+        registration?.playerPhotoUrl,
+        registration?.player1PhotoURL,
+        registration?.player1PhotoUrl,
+        registration?.photoURL,
+        registration?.photoUrl,
+        registration?.avatarUrl,
+        registration?.avatar,
+        registration?.image,
+        registration?.photo,
+        authFallback?.photoURL,
+        authFallback?.photoUrl,
+    ];
+
+    for (const cand of candidates) {
+        if (typeof cand === "string") {
+            const trimmed = cand.trim();
+            if (
+                trimmed &&
+                trimmed !== "null" &&
+                trimmed !== "undefined" &&
+                trimmed !== "[object Object]" &&
+                (trimmed.startsWith("http://") ||
+                 trimmed.startsWith("https://") ||
+                 trimmed.startsWith("data:image/") ||
+                 trimmed.startsWith("/"))
+            ) {
+                return trimmed;
+            }
+        }
+    }
+
+    return undefined;
+}

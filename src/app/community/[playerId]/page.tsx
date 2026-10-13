@@ -23,7 +23,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { useToast } from "@/context/ToastContext";
 
 // Icons
-import { MapPin, Activity, Loader2, Camera, ArrowLeft, Save, Link as LinkIcon, Check, X, Image as ImageIcon } from "lucide-react";
+import { MapPin, Activity, Loader2, Camera, ArrowLeft, Save, Link as LinkIcon, Check, X, Image as ImageIcon, Flag, ShieldAlert } from "lucide-react";
 
 // ----------------------------------------------------------------------
 // 1. SHARED TYPES & SCHEMA
@@ -44,6 +44,8 @@ const profileSchema = z.object({
     isAdmin: z.boolean().default(false),
     location: z.string().optional(),
     dateOfBirth: z.string().optional(),
+    redflagged: z.boolean().default(false),
+    redflagReason: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -57,6 +59,7 @@ import { UserProfile } from "@/types";
 function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initialData: UserProfile }) {
     const { showToast } = useToast();
     const [saving, setSaving] = useState(false);
+    const [isTogglingRedFlag, setIsTogglingRedFlag] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string | null>(initialData.photoUrl || initialData.photoURL || null);
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [savingPhotoUrl, setSavingPhotoUrl] = useState(false);
@@ -81,8 +84,38 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
             isAdmin: initialData.isAdmin || false,
             location: initialData.location || "",
             dateOfBirth: initialData.dateOfBirth ? new Date(initialData.dateOfBirth.seconds * 1000).toISOString().split('T')[0] : "",
+            redflagged: initialData.redflagged || false,
+            redflagReason: initialData.redflagReason || "",
         },
     });
+
+    const handleQuickToggleRedFlag = async () => {
+        const currentFlag = !!form.watch("redflagged");
+        const nextFlag = !currentFlag;
+        const currentReason = form.watch("redflagReason") || (nextFlag ? "Bad conduct" : "");
+        setIsTogglingRedFlag(true);
+        try {
+            await updateDoc(doc(db, "users", playerId), {
+                redflagged: nextFlag,
+                redflagReason: nextFlag ? (currentReason.trim() || "Bad conduct") : null,
+                redflaggedAt: nextFlag ? new Date() : null,
+                updatedAt: new Date(),
+            });
+            form.setValue("redflagged", nextFlag);
+            if (nextFlag && !form.getValues("redflagReason")) {
+                form.setValue("redflagReason", currentReason.trim() || "Bad conduct");
+            }
+            showToast(
+                nextFlag ? "Player has been red-flagged for bad conduct." : "Red flag cleared for player.",
+                nextFlag ? "info" : "success"
+            );
+        } catch (err) {
+            console.error("Failed to toggle red flag:", err);
+            showToast("Failed to update red flag status", "error");
+        } finally {
+            setIsTogglingRedFlag(false);
+        }
+    };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -167,9 +200,13 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
 
     const onSubmit: SubmitHandler<ProfileFormValues> = async (data) => {
         setSaving(true);
+        const isFlagged = !!data.redflagged;
         try {
             await updateDoc(doc(db, "users", playerId), {
                 ...data,
+                redflagged: isFlagged,
+                redflagReason: isFlagged ? (data.redflagReason?.trim() || "Bad conduct") : null,
+                redflaggedAt: isFlagged ? (initialData.redflagged ? initialData.redflaggedAt || new Date() : new Date()) : null,
                 photoUrl: photoUrl?.trim() || null,
                 dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
                 updatedAt: new Date(),
@@ -371,6 +408,78 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
                         </div>
                     </div>
 
+                    {/* Disciplinary & Red Flag Management (Admin Only) */}
+                    <div className={`p-5 rounded-2xl border transition-all ${
+                        form.watch("redflagged")
+                            ? "bg-red-950/30 border-red-500/50 shadow-lg shadow-red-950/20"
+                            : "bg-gray-950/60 border-gray-800"
+                    }`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-start sm:items-center gap-3">
+                                <div className={`p-2.5 rounded-xl border ${
+                                    form.watch("redflagged")
+                                        ? "bg-red-500/20 border-red-500/40 text-red-400"
+                                        : "bg-gray-900 border-gray-800 text-gray-500"
+                                }`}>
+                                    <Flag className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-sm font-bold text-white">Disciplinary Red Flag</h3>
+                                        {form.watch("redflagged") ? (
+                                            <Badge variant="destructive" className="bg-red-600 text-white font-bold text-[10px] tracking-wide uppercase">
+                                                RED-FLAGGED
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="text-gray-400 border-gray-700 text-[10px] uppercase">
+                                                CLEAN STATUS
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        Admin control: Red-flagged players cannot register or form teams for tournaments.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={isTogglingRedFlag}
+                                onClick={handleQuickToggleRedFlag}
+                                className={`font-semibold text-xs transition-all cursor-pointer ${
+                                    form.watch("redflagged")
+                                        ? "bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700"
+                                        : "bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-900/30"
+                                }`}
+                            >
+                                {isTogglingRedFlag ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                                ) : (
+                                    <Flag className="w-3.5 h-3.5 mr-1.5" />
+                                )}
+                                {form.watch("redflagged") ? "Clear Red Flag" : "Red Flag Player"}
+                            </Button>
+                        </div>
+
+                        {form.watch("redflagged") && (
+                            <div className="mt-4 pt-4 border-t border-red-900/40 space-y-2">
+                                <label className="text-xs font-semibold text-red-400 uppercase tracking-wider flex items-center justify-between">
+                                    <span>Red Flag Reason (Visible to Player)</span>
+                                    <span className="text-[11px] text-gray-500 font-normal">e.g., Bad conduct during match, late cancellation</span>
+                                </label>
+                                <Textarea
+                                    {...form.register("redflagReason")}
+                                    placeholder="Enter reason for red flagging this player for bad conduct..."
+                                    className="bg-gray-950 border-red-900/60 text-white placeholder:text-gray-600 focus:border-red-500 min-h-[75px] text-sm"
+                                />
+                                <p className="text-[11px] text-gray-500">
+                                    The player can view this disciplinary reason, but only administrators can edit it.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-300">Private Notes (Admin Only)</label>
                         <Textarea {...form.register("notes")} className="h-24 bg-gray-950 border-gray-800 text-white" />
@@ -390,7 +499,7 @@ function AdminPlayerEditor({ playerId, initialData }: { playerId: string, initia
 // 3. PUBLIC VIEW COMPONENT (Read Only)
 // ----------------------------------------------------------------------
 
-function PublicPlayerView({ profile }: { profile: UserProfile }) {
+function PublicPlayerView({ profile, isCurrentUser }: { profile: UserProfile; isCurrentUser?: boolean }) {
     // Format Joined Date
     const parsedJoinedDate = parseFirebaseDate(profile?.createdAt);
     const joinedDate = parsedJoinedDate
@@ -415,14 +524,14 @@ function PublicPlayerView({ profile }: { profile: UserProfile }) {
     }
 
     return (
-        <div className="bg-gray-900 shadow-xl rounded-2xl overflow-hidden border border-gray-800">
+        <div className="bg-gray-900 shadow-xl rounded-2xl border border-gray-800 overflow-hidden">
             {/* Cover Banner */}
             <div className="h-32 bg-linear-to-r from-orange-600 to-orange-400 opacity-20 relative">
                 <div className="absolute inset-0 bg-[url('/noise.png')] opacity-20"></div>
             </div>
 
-            <div className="px-8 pb-8">
-                <div className="relative -mt-16 mb-6 flex justify-between items-end">
+            <div className="px-8 pb-8 space-y-6">
+                <div className="relative -mt-16 flex justify-between items-end">
                     <Avatar className="h-32 w-32 border-4 border-gray-900 shadow-2xl">
                         <AvatarImage src={profile.photoUrl || profile.photoURL} />
                         <AvatarFallback className="bg-orange-500 text-3xl font-bold text-white">
@@ -433,6 +542,30 @@ function PublicPlayerView({ profile }: { profile: UserProfile }) {
                         {profile.role === 'admin' ? 'Admin' : 'Player'}
                     </Badge>
                 </div>
+
+                {/* Disciplinary Red Flag Notice (Visible to the player themselves, Read-Only) */}
+                {isCurrentUser && profile.redflagged && (
+                    <div className="p-4 sm:p-5 rounded-xl border border-red-500/30 bg-red-950/20 text-red-300 space-y-3 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Flag className="w-5 h-5 text-red-500 fill-red-500/20" />
+                                <span className="font-semibold text-red-400 text-sm sm:text-base">Disciplinary Notice: Red Flagged</span>
+                            </div>
+                            <Badge variant="destructive" className="bg-red-600/80 text-white text-xs uppercase font-bold tracking-wider">
+                                Flagged
+                            </Badge>
+                        </div>
+                        <p className="text-xs sm:text-sm text-gray-300">
+                            An administrator has red-flagged your profile for conduct concerns. This status and reason are set by admins and cannot be modified by you.
+                        </p>
+                        <div className="p-3 bg-gray-950/80 rounded-lg border border-red-500/20 text-xs sm:text-sm space-y-1">
+                            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Admin Reason:</span>
+                            <p className="text-red-200 whitespace-pre-wrap font-medium">
+                                {profile.redflagReason || "Bad conduct / conduct policy violation."}
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <div className="space-y-6">
                     <div>
@@ -571,7 +704,7 @@ export default function PublicProfilePage() {
                 {isAdmin ? (
                     <AdminPlayerEditor playerId={playerId} initialData={profile} />
                 ) : (
-                    <PublicPlayerView profile={profile} />
+                    <PublicPlayerView profile={profile} isCurrentUser={user?.uid === playerId} />
                 )}
             </main>
             <BottomNav />

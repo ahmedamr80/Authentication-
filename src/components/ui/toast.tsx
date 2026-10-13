@@ -18,7 +18,7 @@ export const Toast = ({ message, type = "info", onClose }: ToastProps) => {
     return (
         <div
             className={cn(
-                "fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium shadow-lg transition-all animate-in slide-in-from-bottom-5",
+                "fixed bottom-4 right-4 z-9999 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium shadow-lg transition-all animate-in slide-in-from-bottom-5",
                 type === "success" && "bg-green-600 text-white",
                 type === "error" && "bg-red-600 text-white",
                 type === "info" && "bg-gray-800 text-white",

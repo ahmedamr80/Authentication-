@@ -17,6 +17,14 @@
             "name": "Launch Chrome against localhost",
             "url": "http://localhost:5000",
             "webRoot": "${workspaceFolder}"
+        },
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "Launch Chrome for Padel App",
+            "url": "http://localhost:5000",
+            "webRoot": "${workspaceFolder}",
+            "runtimeExecutable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
         }
     ]
 }

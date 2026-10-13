@@ -1,7 +1,8 @@
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'ewp-cache-v3'; // Increment version for updates
+const CACHE_NAME = 'ewp-cache-v5'; // Increment version for updates
+const isLocalhost = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 const STATIC_ASSETS = [
     '/',
     '/manifest.json',
@@ -42,10 +43,17 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Skip non-GET requests and Firebase-specific URLs (Auth/Firestore/FCM)
+    // In local development, bypass SW cache completely for _next/ assets to avoid stale hot-reloads
+    if (isLocalhost && url.pathname.startsWith('/_next/')) {
+        return;
+    }
+
+    // Only intercept same-origin GET requests; skip APIs and third-party origins (Google photos, Firebase, etc.)
     if (request.method !== 'GET' ||
+        url.origin !== self.location.origin ||
         url.origin.includes('firebase') ||
         url.origin.includes('googleapis') ||
+        url.origin.includes('googleusercontent') ||
         url.pathname.startsWith('/api/')) {
         return;
     }
@@ -58,10 +66,13 @@ self.addEventListener('fetch', (event) => {
             caches.match(request).then((cachedResponse) => {
                 if (cachedResponse) return cachedResponse;
                 return fetch(request).then((networkResponse) => {
-                    return caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(request, networkResponse.clone());
-                        return networkResponse;
-                    });
+                    if (networkResponse && networkResponse.status === 200) {
+                        const copy = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(request, copy);
+                        });
+                    }
+                    return networkResponse;
                 });
             })
         );
@@ -69,17 +80,26 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Strategy for Pages (Navigation): Network First, fallback to cache
-    event.respondWith(
-        fetch(request)
-            .then((networkResponse) => {
-                const responseClone = networkResponse.clone();
-                caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(request, responseClone);
-                });
-                return networkResponse;
-            })
-            .catch(() => caches.match(request))
-    );
+    if (request.mode === 'navigate') {
+        event.respondWith(
+            fetch(request)
+                .then((networkResponse) => {
+                    if (networkResponse && networkResponse.status === 200) {
+                        const responseClone = networkResponse.clone();
+                        caches.open(CACHE_NAME).then((cache) => {
+                            cache.put(request, responseClone);
+                        });
+                    }
+                    return networkResponse;
+                })
+                .catch(async () => {
+                    const cached = await caches.match(request);
+                    if (cached) return cached;
+                    const fallback = await caches.match('/');
+                    return fallback || new Response('Offline', { status: 503, statusText: 'Offline' });
+                })
+        );
+    }
 });
 
 // --- FIREBASE MESSAGING ---

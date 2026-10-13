@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Calendar, Users, Image as ImageIcon, User, Building2, Bell, CalendarClock, X, Download, Share } from "lucide-react";
+import { Calendar, Users, Image as ImageIcon, User, Building2, Bell, CalendarClock, X, Download, Share, ShieldCheck, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -16,7 +16,7 @@ const PUSH_PROMPT_DISMISSED_KEY = "ewp_push_prompt_dismissed";
 
 export default function DashboardPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, isAdmin, loading } = useAuth();
     const [unreadCount, setUnreadCount] = useState(0);
     const { notificationPermissionStatus, requestPermission } = usePushNotifications();
     const [pushPromptDismissed, setPushPromptDismissed] = useState(true); // default true to avoid flash
@@ -92,6 +92,19 @@ export default function DashboardPage() {
     }, [user]);
 
     const menuItems = [
+        ...(isAdmin
+            ? [
+                  {
+                      title: "Admin Console",
+                      icon: ShieldCheck,
+                      path: "/admin",
+                      color: "text-amber-400",
+                      bgColor: "bg-amber-500/10",
+                      description: "Manage events, clubs, and flagged players",
+                      badge: "Admin",
+                  },
+              ]
+            : []),
         {
             title: "Events",
             icon: Calendar,
@@ -150,6 +163,14 @@ export default function DashboardPage() {
             description: "Manage your profile and stats"
         }
     ];
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+            </div>
+        );
+    }
 
     if (!user) return null;
 

@@ -81,7 +81,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
+                function registerSW() {
                   var swUrl = '/firebase-messaging-sw.js';
                   var params = new URLSearchParams({
                     apiKey: '${process.env.NEXT_PUBLIC_FIREBASE_API_KEY || ""}',
@@ -91,8 +91,15 @@ export default function RootLayout({
                     messagingSenderId: '${process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || ""}',
                     appId: '${process.env.NEXT_PUBLIC_FIREBASE_APP_ID || ""}'
                   });
-                  navigator.serviceWorker.register(swUrl + '?' + params.toString());
-                });
+                  navigator.serviceWorker.register(swUrl + '?' + params.toString()).catch(function(err) {
+                    console.warn('Service worker registration error:', err);
+                  });
+                }
+                if (document.readyState === 'complete') {
+                  registerSW();
+                } else {
+                  window.addEventListener('load', registerSW);
+                }
               }
             `,
           }}

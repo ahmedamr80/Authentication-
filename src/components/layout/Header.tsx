@@ -5,12 +5,13 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { collection, query, where, onSnapshot, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Bell, User as UserIcon, Settings, LogOut, ArrowLeft } from "lucide-react";
+import { Bell, User as UserIcon, Settings, LogOut, ArrowLeft, ShieldCheck, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { auth } from "@/lib/firebase";
 import { User } from "firebase/auth";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { useAuth } from "@/context/AuthContext";
 
 interface HeaderProps {
     user: User | null;
@@ -20,6 +21,7 @@ interface HeaderProps {
 
 export function Header({ user, showBack = false, onBack }: HeaderProps) {
     const router = useRouter();
+    const { isAdmin } = useAuth();
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -107,8 +109,8 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
                             alt="EveryWherePadel Logo"
                             width={32}
                             height={32}
-                            className="w-8 h-8"
-                            style={{ width: 'auto' }}
+                            className="w-8 h-8 object-contain"
+                            priority
                         />
                         <h1 className="text-lg sm:text-xl font-bold bg-linear-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent truncate max-w-[120px] sm:max-w-none">
                             EveryWherePadel
@@ -164,6 +166,26 @@ export function Header({ user, showBack = false, onBack }: HeaderProps) {
                                                 >
                                                     <UserIcon className="h-4 w-4" /> Profile
                                                 </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setIsUserMenuOpen(false);
+                                                        router.push("/player/my-schedule");
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                                                >
+                                                    <Calendar className="h-4 w-4 text-orange-400" /> My Schedule
+                                                </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsUserMenuOpen(false);
+                                                            router.push("/admin");
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-400 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer font-medium"
+                                                    >
+                                                        <ShieldCheck className="h-4 w-4 text-amber-400" /> Admin Console
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => {
                                                         setIsUserMenuOpen(false);

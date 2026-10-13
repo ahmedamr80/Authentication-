@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, query, orderBy, where, onSnapshot, QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
+import { collection, query, orderBy, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { EventData } from "@/components/EventCard";
 import { EventFilters, EventFilter } from "@/components/EventFilters";
@@ -64,10 +64,16 @@ export default function EventsPage() {
     const [visibleCount, setVisibleCount] = useState(EVENTS_PER_PAGE);
     const { showToast } = useToast();
     const [userRegistrations, setUserRegistrations] = useState<Record<string, "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED">>({});
+    const [userRegisteredEventIds, setUserRegisteredEventIds] = useState<Set<string>>(new Set());
     const { user, isAdmin } = useAuth();
 
-    // Live registration counts (single source of truth)
-    const [liveRegistrationsCounts, setLiveRegistrationsCounts] = useState<Record<string, number>>({});
+    // Live registration counts (separated by unitType to avoid collisions)
+    const [playerConfirmedCounts, setPlayerConfirmedCounts] = useState<Record<string, number>>({});
+    const [teamConfirmedCounts, setTeamConfirmedCounts] = useState<Record<string, number>>({});
+
+    // Live waiting list counts
+    const [playerWaitlistCounts, setPlayerWaitlistCounts] = useState<Record<string, number>>({});
+    const [teamWaitlistCounts, setTeamWaitlistCounts] = useState<Record<string, number>>({});
 
     // Real-time events listener
     useEffect(() => {
@@ -87,7 +93,7 @@ export default function EventsPage() {
                         duration: data.duration || 60,
                         eventId: doc.id,
                         eventName: data.eventName,
-                        isPublic: data.isPublic, //i need to render only public events
+                        isPublic: data.isPublic !== false, // default true unless explicitly false
                         isTeamRegistration: data.isTeamRegistration,
                         locationName: data.locationName || "Unknown Location",
                         logoUrl: data.logoUrl,
@@ -99,6 +105,7 @@ export default function EventsPage() {
                         clubId: data.clubId,
                         coordinates: data.coordinates,
                         registrationsCount: data.registrationsCount || 0,
+                        waitlistCount: data.waitlistCount || 0,
                     };
                     eventData.status = calculateStatus(eventData);
                     eventsList.push(eventData);
@@ -132,7 +139,9 @@ export default function EventsPage() {
                     counts[eid] = (counts[eid] || 0) + 1;
                 }
             });
-            setLiveRegistrationsCounts(prev => ({ ...prev, ...counts }));
+            setPlayerConfirmedCounts(counts);
+        }, (err) => {
+            if (err.code !== "permission-denied") console.error("Confirmed registrations listener error:", err);
         });
 
         // Listen to ALL confirmed teams for Teams-type events
@@ -148,7 +157,9 @@ export default function EventsPage() {
                     teamCounts[eid] = (teamCounts[eid] || 0) + 1;
                 }
             });
-            setLiveRegistrationsCounts(prev => ({ ...prev, ...teamCounts }));
+            setTeamConfirmedCounts(teamCounts);
+        }, (err) => {
+            if (err.code !== "permission-denied") console.error("Confirmed teams listener error:", err);
         });
 
         return () => {
@@ -156,6 +167,85 @@ export default function EventsPage() {
             unsubTeams();
         };
     }, []);
+
+    // Combine player and team confirmed counts based on event unitType
+    const liveRegistrationsCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        events.forEach((event) => {
+            const isTeam = event.unitType === "Teams" || event.isTeamRegistration;
+            const live = isTeam
+                ? teamConfirmedCounts[event.eventId]
+                : playerConfirmedCounts[event.eventId];
+            counts[event.eventId] = live !== undefined ? live : (event.registrationsCount ?? 0);
+        });
+        return counts;
+    }, [events, teamConfirmedCounts, playerConfirmedCounts]);
+
+    // Real-time waiting list counts listener
+    useEffect(() => {
+        // Listen to ALL waitlisted & pending registrations for Players-type events
+        const waitlistRegsRef = collection(db, "registrations");
+        const waitlistRegsQuery = query(waitlistRegsRef, where("status", "in", ["WAITLIST", "PENDING"]));
+
+        const unsubWaitlistRegs = onSnapshot(waitlistRegsQuery, (snapshot) => {
+            const counts: Record<string, number> = {};
+            const seenPlayersPerEvent: Record<string, Set<string>> = {};
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const eid = data.eventId;
+                const pid = data.playerId;
+                // Exclude registrations belonging to teams to prevent double-counting team waitlists
+                if (eid && pid && !data.teamId) {
+                    if (!seenPlayersPerEvent[eid]) seenPlayersPerEvent[eid] = new Set();
+                    if (!seenPlayersPerEvent[eid].has(pid)) {
+                        seenPlayersPerEvent[eid].add(pid);
+                        counts[eid] = (counts[eid] || 0) + 1;
+                    }
+                }
+            });
+            // Replace state completely to ensure counts that decrease or reach zero do not leave stale counts
+            setPlayerWaitlistCounts(counts);
+        }, (error) => {
+            if (error.code !== "permission-denied") console.error("Error listening to waitlist registrations:", error);
+        });
+
+        // Listen to ALL waitlisted teams for Teams-type events
+        const waitlistTeamsRef = collection(db, "teams");
+        const waitlistTeamsQuery = query(waitlistTeamsRef, where("status", "==", "WAITLIST"));
+
+        const unsubWaitlistTeams = onSnapshot(waitlistTeamsQuery, (snapshot) => {
+            const counts: Record<string, number> = {};
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const eid = data.eventId;
+                if (eid) {
+                    counts[eid] = (counts[eid] || 0) + 1;
+                }
+            });
+            // Replace state completely to ensure counts that decrease or reach zero do not leave stale counts
+            setTeamWaitlistCounts(counts);
+        }, (error) => {
+            if (error.code !== "permission-denied") console.error("Error listening to waitlist teams:", error);
+        });
+
+        return () => {
+            unsubWaitlistRegs();
+            unsubWaitlistTeams();
+        };
+    }, []);
+
+    // Combine player and team waitlist counts based on event unitType
+    const liveWaitlistCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        events.forEach((event) => {
+            const isTeam = event.unitType === "Teams" || event.isTeamRegistration;
+            const live = isTeam
+                ? teamWaitlistCounts[event.eventId]
+                : playerWaitlistCounts[event.eventId];
+            counts[event.eventId] = live !== undefined ? live : (event.waitlistCount ?? 0);
+        });
+        return counts;
+    }, [events, teamWaitlistCounts, playerWaitlistCounts]);
 
     const handleRefresh = () => {
         setRefreshing(true);
@@ -165,57 +255,125 @@ export default function EventsPage() {
         }, 1000);
     };
 
-    // Fetch user registrations
+    // Fetch user registrations (both individual and team registrations)
     useEffect(() => {
         if (!user) {
+            queueMicrotask(() => {
+                setUserRegistrations({});
+                setUserRegisteredEventIds(new Set());
+            });
             return;
         }
 
-        const registrationsRef = collection(db, "registrations");
-        // Update query to check BOTH slots
-        // Query 1: Where I am the Primary Player
-        const q1 = query(registrationsRef, where("playerId", "==", user.uid));
-
-        // Query 2: Where I am the Partner
-        const q2 = query(registrationsRef, where("player2Id", "==", user.uid));
-
-        // We use a manual function to fetch and merge because 'onSnapshot'
-        // doesn't easily support multiple queries without 'or()'
-        // Note: For real-time updates without 'or', we attach two listeners.
+        const registeredEventIds = new Set<string>();
         const regs: Record<string, "CONFIRMED" | "WAITLIST" | "PENDING"> = {};
 
-        // Added strict type for the document snapshot
-        const handleUpdate = (doc: QueryDocumentSnapshot<DocumentData>) => {
-            const data = doc.data();
-            let status = data.status;
-            // Partner Logic: If I haven't accepted yet, show PENDING
-            if (data.player2Id === user.uid && data.partnerStatus === "PENDING") {
-                status = "PENDING";
-            }
-
-            regs[data.eventId] = status;
+        const syncUserState = () => {
+            setUserRegistrations({ ...regs });
+            setUserRegisteredEventIds(new Set(registeredEventIds));
         };
-        // Listener 1
+
+        // 1. Individual Registrations (Primary Player)
+        const registrationsRef = collection(db, "registrations");
+        const q1 = query(registrationsRef, where("playerId", "==", user.uid));
         const unsubscribe1 = onSnapshot(q1, (snapshot) => {
-            snapshot.forEach(handleUpdate);
-            // We trigger state update after processing
-            setUserRegistrations(prev => ({ ...prev, ...regs }));
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                if (data.status !== "CANCELLED" && data.eventId) {
+                    registeredEventIds.add(data.eventId);
+                }
+                if (data.eventId) {
+                    regs[data.eventId] = data.status;
+                }
+            });
+            syncUserState();
         });
 
-        // Listener 2
+        // 2. Individual Registrations (Partner)
+        const q2 = query(registrationsRef, where("player2Id", "==", user.uid));
         const unsubscribe2 = onSnapshot(q2, (snapshot) => {
-            snapshot.forEach(handleUpdate);
-            setUserRegistrations(prev => ({ ...prev, ...regs }));
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                if (data.status !== "CANCELLED" && data.eventId) {
+                    registeredEventIds.add(data.eventId);
+                }
+                if (data.eventId) {
+                    let status = data.status;
+                    if (data.partnerStatus === "PENDING") {
+                        status = "PENDING";
+                    }
+                    regs[data.eventId] = status;
+                }
+            });
+            syncUserState();
+        });
+
+        // 3. Teams (Player 1)
+        const teamsRef = collection(db, "teams");
+        const t1 = query(teamsRef, where("player1Id", "==", user.uid));
+        const unsubscribe3 = onSnapshot(t1, (snapshot) => {
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const isWithdrawnFromGrace = data.status === "REPLACEMENT_GRACE" && (
+                    data.replacementForPlayerId === user.uid ||
+                    data.vacantSlot === "PLAYER1"
+                );
+                if (data.status !== "CANCELLED" && data.status !== "EXPIRED" && !isWithdrawnFromGrace && data.eventId) {
+                    registeredEventIds.add(data.eventId);
+                    if (!regs[data.eventId] || regs[data.eventId] === "PENDING") {
+                        regs[data.eventId] = data.status;
+                    }
+                }
+            });
+            syncUserState();
+        });
+
+        // 4. Teams (Player 2)
+        const t2 = query(teamsRef, where("player2Id", "==", user.uid));
+        const unsubscribe4 = onSnapshot(t2, (snapshot) => {
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const isWithdrawnFromGrace = data.status === "REPLACEMENT_GRACE" && (
+                    data.replacementForPlayerId === user.uid ||
+                    data.vacantSlot === "PLAYER2"
+                );
+                if (data.status !== "CANCELLED" && data.status !== "EXPIRED" && !isWithdrawnFromGrace && data.eventId) {
+                    registeredEventIds.add(data.eventId);
+                    if (!regs[data.eventId] || regs[data.eventId] === "PENDING") {
+                        regs[data.eventId] = data.status;
+                    }
+                }
+            });
+            syncUserState();
         });
 
         return () => {
             unsubscribe1();
             unsubscribe2();
+            unsubscribe3();
+            unsubscribe4();
         };
     }, [user]);
 
     const { activeEvents, upcomingEvents, pastEvents } = useMemo(() => {
-        let filtered = events;
+        // Visibility rules:
+        // 1. Public events (isPublic !== false) are shown to everyone
+        // 2. Private events (isPublic === false) are only shown to:
+        //    - Admins
+        //    - The event creator (event.adminId === user?.uid)
+        //    - Users registered individually or within a team
+        let filtered = events.filter((event) => {
+            const isPublic = event.isPublic !== false;
+            if (isPublic) return true;
+
+            // Private event
+            if (!user) return false;
+            if (isAdmin) return true;
+            if (event.adminId && event.adminId === user.uid) return true;
+            if (userRegisteredEventIds.has(event.eventId)) return true;
+
+            return false;
+        });
 
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
@@ -255,7 +413,7 @@ export default function EventsPage() {
         past.sort((a, b) => b.dateTime.toDate().getTime() - a.dateTime.toDate().getTime());
 
         return { activeEvents: active, upcomingEvents: upcoming, pastEvents: past };
-    }, [events, searchQuery]);
+    }, [events, searchQuery, user, isAdmin, userRegisteredEventIds]);
 
     const filteredEvents = useMemo(() => {
         switch (activeFilter) {
@@ -373,7 +531,7 @@ export default function EventsPage() {
                             <Button
                                 onClick={handleRefresh}
                                 disabled={refreshing}
-                                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02]"
+                                className="bg-linear-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-medium px-6 py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all duration-200 hover:scale-[1.02]"
                             >
                                 {refreshing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                 Refresh List
@@ -388,6 +546,7 @@ export default function EventsPage() {
                                 events={filteredEvents.active.slice(0, visibleCount)}
                                 userRegistrations={userRegistrations}
                                 liveRegistrationsCounts={liveRegistrationsCounts}
+                                liveWaitlistCounts={liveWaitlistCounts}
                             />
                         )}
 
@@ -397,6 +556,7 @@ export default function EventsPage() {
                                 events={filteredEvents.upcoming.slice(0, visibleCount)}
                                 userRegistrations={userRegistrations}
                                 liveRegistrationsCounts={liveRegistrationsCounts}
+                                liveWaitlistCounts={liveWaitlistCounts}
                             />
                         )}
 
@@ -406,6 +566,7 @@ export default function EventsPage() {
                                 events={filteredEvents.past.slice(0, visibleCount)}
                                 userRegistrations={userRegistrations}
                                 liveRegistrationsCounts={liveRegistrationsCounts}
+                                liveWaitlistCounts={liveWaitlistCounts}
                             />
                         )}
 

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { format, addMinutes } from "date-fns";
+import { parseFirebaseDate, getTimestampMillis } from "@/lib/date-utils";
 
 // --- 1. UPDATED TYPES (Matching your Firestore Schema) ---
 
@@ -135,12 +136,12 @@ export default function MySchedulePage() {
                             // FIX: Mapping the database fields correctly here
                             item.event = {
                                 eventId: eventSnap.id,
-                                eventName: data.eventName,
+                                eventName: data.eventName || data.name || data.title || "Tournament Event",
                                 dateTime: data.dateTime,
-                                locationName: data.locationName,
+                                locationName: data.locationName || data.location || "Club / Venue",
                                 duration: data.duration || 60, // Default duration
-                                logoUrl: data.logoUrl,
-                                pricePerPlayer: data.pricePerPlayer
+                                logoUrl: data.logoUrl || data.imageUrl,
+                                pricePerPlayer: data.pricePerPlayer || data.price
                             } as EventData;
                         }
                         return item;
@@ -148,13 +149,13 @@ export default function MySchedulePage() {
 
                     const resolvedItems = await Promise.all(eventPromises);
 
-                    // FIX: Filter by eventName, not title
+                    // FIX: Filter by valid events with eventName
                     const validItems = resolvedItems.filter(i => i.event && i.event.eventName);
 
-                    // FIX: Sort using dateTime
+                    // FIX: Sort using getTimestampMillis
                     validItems.sort((a, b) => {
-                        const dateA = a.event.dateTime?.toMillis() || 0;
-                        const dateB = b.event.dateTime?.toMillis() || 0;
+                        const dateA = getTimestampMillis(a.event?.dateTime);
+                        const dateB = getTimestampMillis(b.event?.dateTime);
                         return dateB - dateA;
                     });
 
@@ -273,9 +274,10 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function ScheduleCard({ item }: { item: ScheduleItem }) {
-    // FIX: Use dateTime and calculate end time based on duration
-    const eventDate = item.event.dateTime.toDate();
-    const endDate = addMinutes(eventDate, item.event.duration);
+    // FIX: Safely parse dateTime and calculate end time based on duration
+    const eventDate = parseFirebaseDate(item.event.dateTime) || new Date();
+    const duration = Number(item.event.duration) || 60;
+    const endDate = addMinutes(eventDate, duration);
 
     const dayNumber = format(eventDate, "d");
     const monthName = format(eventDate, "MMM");

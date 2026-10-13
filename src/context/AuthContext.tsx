@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 try {
                     // FAST CHECK: Custom Claims (cached token)
                     const tokenResult = await currentUser.getIdTokenResult(false);
-                    let adminStatus = !!tokenResult.claims.admin;
+                    let adminStatus = !!tokenResult.claims.admin || !!tokenResult.claims.isAdmin || tokenResult.claims.role === "admin";
 
                     // FALLBACK CHECK: Firestore Document
                     if (!adminStatus) {
@@ -49,8 +49,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
                         if (userDocSnap.exists()) {
                             const uData = userDocSnap.data();
-                            if (uData?.isAdmin === true || uData?.role?.toLowerCase?.() === "admin") {
+                            const isAdminVal = uData?.isAdmin;
+                            const isTrue = isAdminVal === true || isAdminVal === "true" || isAdminVal === "True";
+                            const roleIsAdmin = typeof uData?.role === "string" && uData.role.toLowerCase() === "admin";
+                            if (isTrue || roleIsAdmin) {
                                 adminStatus = true;
+                                try {
+                                    await currentUser.getIdToken(true);
+                                } catch (refreshErr) {
+                                    console.warn("Could not force refresh token", refreshErr);
+                                }
                             }
                         }
                     }

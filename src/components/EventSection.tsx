@@ -9,9 +9,10 @@ interface EventSectionProps {
     variant?: "active" | "upcoming" | "past";
     userRegistrations?: Record<string, "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED">;
     liveRegistrationsCounts?: Record<string, number>;
+    liveWaitlistCounts?: Record<string, number>;
 }
 
-export function EventSection({ title, events, userRegistrations, liveRegistrationsCounts }: EventSectionProps) {
+export function EventSection({ title, events, userRegistrations, liveRegistrationsCounts, liveWaitlistCounts }: EventSectionProps) {
     if (events.length === 0) {
         return null;
     }
@@ -26,6 +27,7 @@ export function EventSection({ title, events, userRegistrations, liveRegistratio
                         event={event}
                         userRegistrationStatus={userRegistrations?.[event.eventId]}
                         liveRegistrationsCount={liveRegistrationsCounts?.[event.eventId]}
+                        liveWaitlistCount={liveWaitlistCounts?.[event.eventId]}
                     />
                 ))}
             </div>

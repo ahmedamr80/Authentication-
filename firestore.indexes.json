@@ -414,6 +414,159 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waitlistedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "confirmedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waitlistedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "confirmedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waitlistedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "teams",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "waitlistSequence",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "teams",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "acceptedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "registrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "playerId",
           "order": "ASCENDING"
         },

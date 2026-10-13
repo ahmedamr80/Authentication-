@@ -514,7 +514,22 @@ export default function CreateEventPage() {
                                     <Label htmlFor="unitType" className="text-gray-300">Unit Type</Label>
                                     <Select
                                         value={formData.unitType}
-                                        onValueChange={(value) => handleInputChange("unitType", value)}
+                                        onValueChange={(value: "Players" | "Teams") => {
+                                            if (value !== formData.unitType) {
+                                                let newSlots = formData.slotsAvailable;
+                                                if (value === "Players" && formData.unitType === "Teams") {
+                                                    newSlots = (formData.slotsAvailable || 0) * 2;
+                                                } else if (value === "Teams" && formData.unitType === "Players") {
+                                                    newSlots = Math.max(1, Math.floor((formData.slotsAvailable || 0) / 2));
+                                                }
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    unitType: value,
+                                                    isTeamRegistration: value === "Teams",
+                                                    slotsAvailable: newSlots,
+                                                }));
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger className="bg-gray-950/50 border-gray-800 text-white">
                                             <SelectValue placeholder="Select unit type" />

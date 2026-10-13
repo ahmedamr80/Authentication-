@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { db } from "@/lib/firebase";
-import { doc, runTransaction, Timestamp, collection, query, where, getDocs, DocumentData, limit, deleteField } from "firebase/firestore";
+import { doc, setDoc, runTransaction, Timestamp, collection, query, where, getDocs, DocumentData, limit, deleteField } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
 import { Registration } from "@/lib/types";
@@ -15,6 +15,7 @@ import { useEventWithdraw } from "@/hooks/useEventWithdraw";
 import { t } from "@/lib/i18n";
 import { EventTermsModal } from "@/components/EventTermsModal";
 import { checkPlayerEligibility } from "@/lib/authRequirements";
+import { LateWithdrawalWarningDialog } from "@/components/LateWithdrawalWarningDialog";
 
 interface RegisterDialogProps {
     event: EventData;
@@ -35,6 +36,8 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
     const { showToast } = useToast();
     const [isRegistered, setIsRegistered] = useState(false);
     const [existingRegistration, setExistingRegistration] = useState<Registration | null>(null);
+    const [isLateWarningOpen, setIsLateWarningOpen] = useState(false);
+    const [lateWarningMessage, setLateWarningMessage] = useState("");
 
     const isRegisteringRef = useRef(false);
     const isWithdrawingRef = useRef(false);
@@ -101,125 +104,31 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                 return;
             }
 
-            // ... (Your existing profile update logic remains here) ...
-
-            // 2. CHECK FOR RECYCLE (Find existing registration)
-            const recycleQuery = query(
-                collection(db, "registrations"),
-                where("eventId", "==", event.eventId),
-                where("playerId", "==", user.uid),
-                limit(1)
-            );
-            const recycleSnapshot = await getDocs(recycleQuery);
-            const recycledDoc = !recycleSnapshot.empty ? recycleSnapshot.docs[0] : null;
-
-            await runTransaction(db, async (transaction) => {
-                const eventRef = doc(db, "events", event.eventId);
-                const eventDoc = await transaction.get(eventRef);
-
-                if (!eventDoc.exists()) throw new Error("Event does not exist!");
-
-                const currentEventData = eventDoc.data();
-                // Use internal data to prevent race conditions
-                const currentCount = currentEventData.registrationsCount || 0;
-                const currentWaitlist = currentEventData.waitlistCount || 0;
-                const slotsAvailable = currentEventData.slotsAvailable || 0;
-
-                // LOGIC: Only check capacity if it's a "Players" event
-                // If "Teams" event, a single player is just a "Free Agent" (doesn't take a slot yet)
-                let isFull = false;
-                if (event.unitType === "Players") {
-                    isFull = currentCount >= slotsAvailable;
+            // Sync verified email to user profile doc if needed
+            if (user.emailVerified && !userProfile.emailVerified && !userProfile.is_email_verified) {
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    await setDoc(userDocRef, { emailVerified: true }, { merge: true });
+                } catch (e) {
+                    console.warn("Could not sync emailVerified to user doc:", e);
                 }
+            }
 
-                // Determine Status
-                // If Teams mode, they are CONFIRMED as a "Free Agent" but looking for partner
-                const status = isFull ? "WAITLIST" : "CONFIRMED";
-
-                const commonData = {
-                    eventId: event.eventId,
-                    playerId: user.uid,
-                    registeredAt: Timestamp.now(),
-                    status: status,
-                    isPrimary: true,
-                    // Only assign waitlist position if it's a Player event that is full
-                    waitlistPosition: isFull ? currentWaitlist + 1 : 0,
-
-                    // Profile Data
-                    fullNameP1: userProfile.displayName || userProfile.fullName || user.displayName || "Unknown Player",
-                    fullNameP2: null, // Single player has no partner
-
-                    // CRITICAL: If Teams mode, flag them as looking
-                    lookingForPartner: event.unitType === "Teams",
-                    partnerStatus: event.unitType === "Teams" ? "NONE" : null
-                };
-
-                if (recycledDoc) {
-                    // RECYCLE - check current state inside transaction to prevent race conditions
-                    const regRef = doc(db, "registrations", recycledDoc.id);
-                    const regSnap = await transaction.get(regRef);
-                    if (regSnap.exists()) {
-                        const currentReg = regSnap.data();
-                        if (currentReg.status === "CONFIRMED" || currentReg.status === "WAITLIST") {
-                            throw new Error("ALREADY_REGISTERED");
-                        }
-                    }
-                    transaction.update(regRef, {
-                        ...commonData,
-                        cancelledAt: deleteField(),
-                        _debugSource: "RegisterDialog Component - Recycled"
-                    });
-                } else {
-                    // CREATE NEW
-                    const newRegRef = doc(collection(db, "registrations"));
-                    transaction.set(newRegRef, {
-                        registrationId: newRegRef.id,
-                        ...commonData,
-                        _debugSource: "RegisterDialog Component"
-                    });
-                }
-
-                // 3. UPDATE COUNTS (The Logic You Requested)
-                // Only increment if this is a "Players" event
-                if (event.unitType === "Players") {
-                    if (isFull) {
-                        transaction.update(eventRef, {
-                            waitlistCount: currentWaitlist + 1
-                        });
-                    } else {
-                        transaction.update(eventRef, {
-                            registrationsCount: currentCount + 1
-                        });
-                    }
-                }
-                // 4. Notification (Scenario 12)
-                const eventDateFormatted = event.dateTime.toDate().toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: '2-digit'
-                }).replace(/\//g, '-');
-
-                const isWaitlist = status === "WAITLIST";
-                const notificationTitle = isWaitlist ? "Registered in the Waitlist" : "Registration Confirmed";
-                const notificationMessage = isWaitlist
-                    ? `${commonData.fullNameP1}, you are registered in the waitlist for event ${event.eventName} on ${eventDateFormatted}`
-                    : `${commonData.fullNameP1}, you are registered for event ${event.eventName} on ${eventDateFormatted}`;
-
-                const notifRef = doc(collection(db, "notifications"));
-                transaction.set(notifRef, {
-                    notificationId: notifRef.id,
-                    userId: user.uid,
-                    type: "system",
-                    title: notificationTitle,
-                    message: notificationMessage,
-                    eventId: event.eventId,
-                    eventName: event.eventName,
-                    eventDate: event.dateTime,
-                    read: false,
-                    createdAt: Timestamp.now(),
-                    _debugSource: "RegisterDialog Component"
-                });
+            // Call trusted server-side registration API
+            const idToken = await user.getIdToken();
+            const response = await fetch("/api/events/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ eventId: event.eventId }),
             });
+
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || "Failed to register.");
+            }
 
             showToast(t("Successfully registered!"), "success");
             if (onSuccess) onSuccess();
@@ -228,7 +137,10 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
         } catch (error) {
             console.error(t("Registration error:"), error);
             const errorMessage = error instanceof Error ? error.message : "";
-            if (errorMessage === "ALREADY_REGISTERED") {
+            if (errorMessage === "REDFLAGGED") {
+                showToast("Your account is red-flagged. You cannot register until approved by an administrator.", "error");
+                if (setOpen) setOpen(false);
+            } else if (errorMessage === "ALREADY_REGISTERED") {
                 showToast(t("You are already registered for this event."), "warning");
                 if (onSuccess) onSuccess();
                 if (setOpen) setOpen(false);
@@ -240,25 +152,34 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
             isRegisteringRef.current = false;
         }
     };
-    const handleWithdraw = async () => {
+
+    const executeWithdraw = async (confirmLate: boolean = false) => {
         if (!user || !existingRegistration || isWithdrawingRef.current) return;
         isWithdrawingRef.current = true;
 
-        // Note: RegisterDialog usually handles Single Player mode. 
-        // If your app allows Team players to open this dialog, you might need to fetch the teamId here too.
-        // Assuming this dialog is mostly for Single Players or "My Registration":
-
         try {
-            await withdraw(user, event, existingRegistration, null, () => {
+            const result = await withdraw(user, event, existingRegistration, null, () => {
                 showToast("Successfully withdrawn from event.", "success");
                 if (onSuccess) onSuccess();
                 if (setOpen) setOpen(false);
-            });
+            }, confirmLate);
+
+            if (result?.requiresConfirmation) {
+                setLateWarningMessage(result.message || "Withdrawing within 18 hours of event start will result in a red flag on your account.");
+                setIsLateWarningOpen(true);
+            }
         } catch {
             showToast("Failed to withdraw.", "error");
         } finally {
             isWithdrawingRef.current = false;
         }
+    };
+
+    const handleWithdraw = () => executeWithdraw(false);
+
+    const handleConfirmLate = async () => {
+        setIsLateWarningOpen(false);
+        await executeWithdraw(true);
     };
     const isProcessing = loading || withdrawLoading;
     return (
@@ -345,6 +266,13 @@ export function RegisterDialog({ event, user, trigger, onSuccess, open: controll
                     event={event}
                     open={termsModalOpen}
                     onOpenChange={setTermsModalOpen}
+                />
+
+                <LateWithdrawalWarningDialog
+                    open={isLateWarningOpen}
+                    onOpenChange={setIsLateWarningOpen}
+                    onConfirm={handleConfirmLate}
+                    message={lateWarningMessage}
                 />
             </DialogContent>
         </Dialog>

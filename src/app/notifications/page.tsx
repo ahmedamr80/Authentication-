@@ -72,21 +72,29 @@ export default function NotificationsPage() {
             markAsRead(notification.notificationId);
         }
 
-        // 2. Logic for Partner Invites
-        if (notification.type === "partner_invite" && notification.eventId && notification.fromUserId && notification.teamId) {
+        // 2. Logic for Partner & Replacement Invites
+        const isInvite = notification.type === "partner_invite" || 
+                         notification.type === "PARTNER_INVITE" || 
+                         notification.type === "REPLACEMENT_INVITE";
+
+        if (isInvite && notification.eventId && notification.fromUserId && notification.teamId) {
             try {
                 // A. STALENESS CHECK: Does the team still exist?
-                // (Our logic deletes the team if the initiator cancels/withdraws)
                 const teamRef = doc(db, "teams", notification.teamId);
                 const teamDoc = await getDoc(teamRef);
 
                 if (!teamDoc.exists()) {
-                    showToast("This invite is no longer valid (Team was cancelled).", "error");
-                    return; // Stop here
+                    showToast("This invite is no longer valid (Team was cancelled or expired).", "error");
+                    return;
                 }
 
-                // B. IDEMPOTENCY CHECK: Am I already registered?
-                // (Prevent double-accepting)
+                const teamData = teamDoc.data();
+                if (teamData?.status === "CANCELLED") {
+                    showToast("This invite is no longer valid (Team was cancelled).", "error");
+                    return;
+                }
+
+                // B. IDEMPOTENCY CHECK: Am I already committed to a team?
                 const regQuery = query(
                     collection(db, "registrations"),
                     where("eventId", "==", notification.eventId),
@@ -95,9 +103,12 @@ export default function NotificationsPage() {
                 const regSnap = await getDocs(regQuery);
 
                 if (!regSnap.empty) {
-                    showToast("You have already responded to this invite.", "info");
-                    router.push(`/events/${notification.eventId}`); // Just go to the page
-                    return; // Stop here
+                    const existingReg = regSnap.docs[0].data();
+                    if (existingReg.status === "CONFIRMED" || existingReg.status === "WAITLIST") {
+                        showToast("You are already confirmed or waitlisted for this event.", "info");
+                        router.push(`/events/${notification.eventId}`);
+                        return;
+                    }
                 }
 
                 // C. Fetch Data for Dialog (Only if checks pass)
@@ -127,10 +138,27 @@ export default function NotificationsPage() {
 
     const getIcon = (type: string) => {
         switch (type) {
-            case "partner_invite": return <UserPlus className="h-5 w-5 text-blue-400" />;
-            case "partner_accepted": return <UserCheck className="h-5 w-5 text-green-400" />;
-            case "partner_declined": return <AlertCircle className="h-5 w-5 text-red-400" />;
-            default: return <Bell className="h-5 w-5 text-gray-400" />;
+            case "partner_invite":
+            case "PARTNER_INVITE":
+            case "REPLACEMENT_INVITE":
+                return <UserPlus className="h-5 w-5 text-blue-400" />;
+            case "partner_accepted":
+            case "PARTNER_ACCEPTED":
+            case "REPLACEMENT_ACCEPTED":
+            case "WAITLIST_PROMOTED":
+                return <UserCheck className="h-5 w-5 text-green-400" />;
+            case "partner_declined":
+            case "PARTNER_DECLINED":
+            case "PARTNER_REJECTED":
+            case "REPLACEMENT_REJECTED":
+            case "INVITATION_CANCELLED":
+            case "INVITATION_SUPERSEDED":
+            case "LATE_WITHDRAWAL_WARNING":
+            case "EVENT_CANCELLED":
+            case "EVENT_DELETED":
+                return <AlertCircle className="h-5 w-5 text-red-400" />;
+            default:
+                return <Bell className="h-5 w-5 text-gray-400" />;
         }
     };
 

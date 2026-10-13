@@ -38,9 +38,9 @@ export function PlayerCard({ player }: PlayerCardProps) {
                     <div className="relative h-32 w-full bg-linear-to-r from-blue-600 to-purple-600">
                         <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2">
                             <div className="relative h-24 w-24 rounded-full border-4 border-gray-900 overflow-hidden bg-gray-800 shadow-md group-hover:scale-105 transition-transform duration-300">
-                                {player.photoUrl ? (
+                                {player.photoUrl || (player as any).photoURL ? (
                                     <Image
-                                        src={player.photoUrl}
+                                        src={player.photoUrl || (player as any).photoURL}
                                         alt={player.fullName}
                                         fill
                                         sizes="(max-width: 768px) 100vw, 96px"

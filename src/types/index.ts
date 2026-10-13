@@ -24,7 +24,13 @@ export interface EventData {
         lng: number;
     };
     registrationsCount?: number;
+    confirmedTeamsCount?: number;
     waitlistCount?: number;
+    registrationStatus?: "OPEN" | "CLOSED";
+    eventStatus?: "SCHEDULED" | "ONGOING" | "COMPLETED" | "CANCELLED";
+    registrationDeadline?: Timestamp;
+    eventStartAt?: Timestamp;
+    inviteTtlHours?: number;
     // UI compatibility fields
     maxPlayers?: number;
     eventDate?: Timestamp;
@@ -45,10 +51,13 @@ export interface Registration {
     playerId: string;
     registeredAt: Timestamp;
     status: "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED";
-    isPrimary: boolean;
-    teamId?: string;
-    partnerStatus?: "CONFIRMED" | "PENDING" | "NONE" | "DENIED";
-    waitlistPosition?: number;
+    isPrimary?: boolean;
+    teamId?: string | null;
+    partnerStatus?: "CONFIRMED" | "PENDING" | "NONE" | "DENIED" | "CANCELLED" | "REPLACEMENT_GRACE";
+    lookingForPartner?: boolean;
+    waitlistPosition?: number | null;
+    waitlistSequence?: number | null;
+    fullName?: string;
     fullNameP1?: string;
     fullNameP2?: string;
     playerDisplayName?: string;
@@ -57,8 +66,11 @@ export interface Registration {
     playerSkillLevel?: string;
     playerHand?: string;
     playerPosition?: string;
-    lookingForPartner?: boolean;
-    player2Id?: string;
+    player2Id?: string | null;
+    confirmedAt?: Timestamp | null;
+    withdrawnAt?: Timestamp | null;
+    cancelledAt?: Timestamp | null;
+    createdAt?: Timestamp | null;
 }
 
 export interface User {
@@ -66,6 +78,10 @@ export interface User {
     email: string;
     displayName: string;
     photoURL?: string;
+    redflagged?: boolean;
+    redflaggedAt?: Timestamp | null;
+    redflagReason?: string | null;
+    redflagEventId?: string | null;
     // Compatibility fields
     photoUrl?: string;
     fullName?: string;
@@ -76,12 +92,16 @@ export interface User {
     level?: string;
     hand?: string;
     position?: string;
+    role?: string;
+    isAdmin?: boolean | string;
 }
 
 export interface TeamMember {
     uid: string;
     displayName: string;
     photoURL?: string;
+    photoUrl?: string;
+    skillLevel?: string;
 }
 
 export interface Team {
@@ -91,8 +111,25 @@ export interface Team {
     player2Id: string;
     player1Confirmed: boolean;
     player2Confirmed: boolean;
-    status: "CONFIRMED" | "PENDING" | "WAITLIST";
+    status: "PENDING" | "CONFIRMED" | "WAITLIST" | "REPLACEMENT_GRACE" | "CANCELLED" | "EXPIRED";
+    invitationType?: "STANDARD" | "REPLACEMENT";
+    invitationExpiresAt?: Timestamp | null;
+    waitlistSequence?: number | null;
+    replacementForPlayerId?: string | null;
+    replacementCandidateId?: string | null;
+    replacementInviteExpiresAt?: Timestamp | null;
+    replacementDeadlineAt?: Timestamp | null;
+    vacantSlot?: "PLAYER1" | "PLAYER2" | null;
+    fullNameP1?: string;
+    fullNameP2?: string;
     createdAt: Timestamp;
+    acceptedAt?: Timestamp | null;
+    promotedAt?: Timestamp | null;
+    cancelledAt?: Timestamp | null;
+    cancelledBy?: string | null;
+    cancelReason?: string | null;
+    player1?: TeamMember;
+    player2?: TeamMember;
 }
 
 export interface UserProfile extends User {
@@ -111,13 +148,39 @@ export interface UserProfile extends User {
     isAdmin?: boolean;
 }
 
+export type NotificationType =
+    | "partner_invite"
+    | "partner_accepted"
+    | "partner_declined"
+    | "welcome"
+    | "system"
+    | "EVENT_CANCELLED"
+    | "EVENT_DELETED"
+    | "WAITLIST_PROMOTED"
+    | "WAITLIST_DEMOTED"
+    | "PARTNER_INVITE"
+    | "PARTNER_ACCEPTED"
+    | "PARTNER_DECLINED"
+    | "INVITATION_CANCELLED"
+    | "INVITATION_EXPIRED"
+    | "INVITATION_SUPERSEDED"
+    | "REGISTRATION_CONFIRMED"
+    | "REGISTRATION_WAITLISTED"
+    | "TEAM_CANCELLED"
+    | "REPLACEMENT_GRACE_STARTED"
+    | "REPLACEMENT_INVITE"
+    | "REPLACEMENT_INVITE_CANCELLED"
+    | "REPLACEMENT_ACCEPTED"
+    | "REPLACEMENT_GRACE_EXPIRED";
+
 export interface Notification {
     notificationId: string;
-    type: "partner_invite" | "partner_accepted" | "partner_declined" | "welcome" | "system" | "EVENT_CANCELLED" | "WAITLIST_PROMOTED" | "WAITLIST_DEMOTED";
+    type: NotificationType;
     title: string;
     message: string;
     read: boolean;
     createdAt: Timestamp;
+    userId?: string;
     eventId?: string;
     eventName?: string;
     eventDate?: Timestamp;

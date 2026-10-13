@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/context/ToastContext";
-import { Loader2, User as UserIcon, Camera, Mail, Phone, AlertCircle, CheckCircle2, ArrowLeft, Link as LinkIcon, Check, X, Image as ImageIcon } from "lucide-react";
+import { Loader2, User as UserIcon, Camera, Mail, Phone, AlertCircle, CheckCircle2, ArrowLeft, Link as LinkIcon, Check, X, Image as ImageIcon, Flag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/layout/Header";
@@ -55,6 +56,7 @@ export default function PlayerProfilePage() {
     const [uploadingPhoto, setUploadingPhoto] = useState(false);
     const [savingPhotoUrl, setSavingPhotoUrl] = useState(false);
     const [isVerified, setIsVerified] = useState(false); // Added state
+    const [redflagInfo, setRedflagInfo] = useState<{ redflagged: boolean; reason?: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { isAdmin } = useAuth(); // <--- Get the global admin flag
 
@@ -104,6 +106,11 @@ export default function PlayerProfilePage() {
                         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth.seconds * 1000).toISOString().split('T')[0] : "",
                     });
                     setPhotoUrl(data.photoUrl || null);
+                    if (data.redflagged) {
+                        setRedflagInfo({ redflagged: true, reason: data.redflagReason || "" });
+                    } else {
+                        setRedflagInfo(null);
+                    }
                 }
             } catch (error) {
                 console.error("Error fetching profile:", error);
@@ -332,6 +339,29 @@ export default function PlayerProfilePage() {
                         Back to Dashboard
                     </Button>
                 </div>
+
+                {redflagInfo?.redflagged && (
+                    <div className="p-4 sm:p-5 bg-red-950/20 border border-red-500/40 rounded-xl flex flex-col gap-3 text-red-300 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Flag className="w-5 h-5 text-red-500 fill-red-500/20 shrink-0" />
+                                <h4 className="font-semibold text-sm sm:text-base text-red-400">Account Disciplinary Notice</h4>
+                            </div>
+                            <Badge variant="destructive" className="bg-red-600/80 text-white text-xs uppercase font-bold tracking-wider">
+                                Red-Flagged
+                            </Badge>
+                        </div>
+                        <p className="text-xs sm:text-sm text-gray-300">
+                            An administrator has placed a red flag on your account for bad conduct. This status and reason can only be managed by administrators and cannot be edited by you.
+                        </p>
+                        <div className="p-3 bg-gray-950/80 rounded-lg border border-red-500/20 text-xs sm:text-sm space-y-1">
+                            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">Admin Reason:</span>
+                            <p className="text-red-200 whitespace-pre-wrap font-medium">
+                                {redflagInfo.reason || "Conduct violation / disciplinary action"}
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {!isVerified && user && (
                     <div className="p-4 bg-blue-950/40 border border-blue-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-blue-300 animate-in fade-in duration-200">

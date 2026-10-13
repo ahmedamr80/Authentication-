@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Calendar, Clock, MapPin, Users, CalendarX, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, MapPin, Users, CalendarX, AlertTriangle, Lock } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
@@ -33,6 +33,7 @@ export interface EventData {
         lng: number;
     };
     registrationsCount?: number;
+    waitlistCount?: number;
 }
 
 
@@ -51,9 +52,10 @@ interface EventCardProps {
     event: EventData;
     userRegistrationStatus?: "CONFIRMED" | "WAITLIST" | "PENDING" | "CANCELLED" | null;
     liveRegistrationsCount?: number;
+    liveWaitlistCount?: number;
 }
 
-export function EventCard({ event, userRegistrationStatus, liveRegistrationsCount }: EventCardProps) {
+export function EventCard({ event, userRegistrationStatus, liveRegistrationsCount, liveWaitlistCount }: EventCardProps) {
     const eventDate = event.dateTime.toDate();
     const dynamicStatus = calculateEventStatus(event);
     const formattedDate = eventDate.toLocaleDateString('en-US', {
@@ -69,6 +71,11 @@ export function EventCard({ event, userRegistrationStatus, liveRegistrationsCoun
 
     // Use live-computed count when available, fall back to denormalized counter
     const filledSlots = liveRegistrationsCount ?? event.registrationsCount ?? 0;
+    const waitlistCount = liveWaitlistCount ?? event.waitlistCount ?? 0;
+    const isTeamEvent = event.unitType === "Teams" || event.isTeamRegistration;
+    const waitlistUnit = isTeamEvent
+        ? (waitlistCount === 1 ? "team" : "teams")
+        : (waitlistCount === 1 ? "player" : "players");
     const totalSlots = event.slotsAvailable;
     const progressPercentage = Math.min(100, (filledSlots / totalSlots) * 100);
     const remainingSlots = Math.max(0, totalSlots - filledSlots);
@@ -139,8 +146,14 @@ export function EventCard({ event, userRegistrationStatus, liveRegistrationsCoun
                         </div>
                     </div>
 
-                    {/* Status Badge (Top Right) */}
-                    <div className="absolute top-3 right-3">
+                    {/* Status & Privacy Badges (Top Right) */}
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                        {event.isPublic === false && (
+                            <span className="px-2 py-1 rounded text-xs font-medium bg-purple-950/80 text-purple-300 border border-purple-800/60 backdrop-blur-sm flex items-center gap-1 shadow-lg">
+                                <Lock className="w-3 h-3 text-purple-400" />
+                                Private
+                            </span>
+                        )}
                         <span className={`px-2 py-1 rounded text-xs font-medium bg-gray-950/80 backdrop-blur-sm border ${isCancelled ? 'border-red-900 text-red-400 bg-red-950/40' : 'border-gray-800 text-gray-300'}`}>
                             {dynamicStatus}
                         </span>
@@ -175,6 +188,10 @@ export function EventCard({ event, userRegistrationStatus, liveRegistrationsCoun
                             className="h-full bg-orange-500 rounded-full transition-all duration-500"
                             style={{ width: `${progressPercentage}%` }}
                         />
+                    </div>
+                    <div className={`flex items-center gap-1.5 text-xs font-medium pt-1 ${waitlistCount > 0 ? 'text-amber-500' : 'text-gray-400'}`}>
+                        <Clock className={`w-3.5 h-3.5 ${waitlistCount > 0 ? 'text-amber-500/80' : 'text-gray-500'}`} />
+                        <span>Waiting list: {waitlistCount} {waitlistUnit}</span>
                     </div>
                 </div>
 

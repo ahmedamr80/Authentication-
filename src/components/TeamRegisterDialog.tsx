@@ -4,16 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, UserPlus, User as UserIcon } from "lucide-react";
+import { Loader2, Search, UserPlus, User as UserIcon, AlertCircle } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, Timestamp, doc, runTransaction, limit, setDoc, updateDoc, DocumentData } from "firebase/firestore";
+import { collection, query, where, getDocs, Timestamp, doc, limit, setDoc, updateDoc, DocumentData } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { EventData } from "./EventCard";
-import { useTeamInvite } from "@/hooks/useTeamInvite";
+import { useTeamRegistration } from "@/hooks/useTeamRegistration";
 import { t } from "@/lib/i18n";
 import { EventTermsModal } from "@/components/EventTermsModal";
 import { checkPlayerEligibility } from "@/lib/authRequirements";
+import { PlayerSearchAutocomplete } from "@/components/PlayerSearchAutocomplete";
 
 interface TeamRegisterDialogProps {
     event: EventData;
@@ -29,87 +30,43 @@ interface UserProfile {
     displayName: string;
     email: string;
     photoURL?: string;
+    redflagged?: boolean;
 }
 
-export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: controlledOpen, onOpenChange: setControlledOpen }: TeamRegisterDialogProps) {
+export function TeamRegisterDialog({
+    event,
+    user,
+    trigger,
+    onSuccess,
+    open: controlledOpen,
+    onOpenChange: setControlledOpen,
+}: TeamRegisterDialogProps) {
     const [internalOpen, setInternalOpen] = useState(false);
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : internalOpen;
     const setOpen = isControlled ? setControlledOpen : setInternalOpen;
 
-    console.log("TeamRegisterDialog Render - open:", open, "controlledOpen:", controlledOpen, "event:", event);
-
     const [mode, setMode] = useState<"SELECT" | "PARTNER" | "SINGLE">("SELECT");
-    const [loading, setLoading] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-    const [searching, setSearching] = useState(false);
     const { showToast } = useToast();
 
-    // Hook integration
-    const { sendInvite, loading: inviteLoading } = useTeamInvite();
-    
+    // Hook integration with atomic server service
+    const { registerSolo, sendInvite, loading: teamLoading } = useTeamRegistration();
     const isSubmittingRef = useRef(false);
 
     const [agreedToTerms, setAgreedToTerms] = useState(false);
     const [termsModalOpen, setTermsModalOpen] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isInviting, setIsInviting] = useState(false);
+    const [invitingPartnerName, setInvitingPartnerName] = useState<string | null>(null);
 
     // Reset state when dialog opens
     useEffect(() => {
         if (open) {
             setAgreedToTerms(false);
             setMode("SELECT");
-            setSearchQuery("");
-            setSearchResults([]);
+            setErrorMessage(null);
         }
     }, [open]);
-
-    const handleSearch = async () => {
-        if (!user) return;
-        if (!searchQuery.trim()) return;
-        setSearching(true);
-        try {
-            // 1. Fetch all registrations for this event to filter out already registered users
-            const regsRef = collection(db, "registrations");
-            const regsQ = query(regsRef, where("eventId", "==", event.eventId));
-            const regsSnapshot = await getDocs(regsQ);
-            const registeredUserIds = new Set(regsSnapshot.docs.map(doc => doc.data().playerId));
-
-            // Add current user to filtered list (can't invite yourself)
-            registeredUserIds.add(user.uid);
-
-            // 2. Optimized Search (Simple Prefix Search)
-            const usersRef = collection(db, "users");
-            const q = query(
-                usersRef,
-                where("fullName", ">=", searchQuery),
-                where("fullName", "<=", searchQuery + '\uf8ff'),
-                limit(5)
-            );
-
-            const usersSnapshot = await getDocs(q);
-
-            const results = usersSnapshot.docs
-                .map(doc => {
-                    const data = doc.data();
-                    return {
-                        uid: doc.id,
-                        displayName: data.fullName || data.displayName || "Unknown",
-                        email: data.email,
-                        photoURL: data.photoUrl || data.photoURL
-                    } as UserProfile;
-                })
-                .filter(u => !registeredUserIds.has(u.uid));
-
-            setSearchResults(results);
-        } catch (error) {
-            console.error("Search error:", error);
-            showToast("Failed to search users", "error");
-        } finally {
-            setSearching(false);
-        }
-    };
-
 
     // Helper: Sync Auth Data to Firestore
     const ensureProfileSynced = async () => {
@@ -132,12 +89,18 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                 userProfile = {
                     uid: user.uid,
                     email: user.email,
-                    createdAt: Timestamp.now()
+                    createdAt: Timestamp.now(),
                 };
             }
 
             const updates: Record<string, string | number | boolean | Timestamp | null | undefined> = {};
             let needsUpdate = false;
+
+            if (user.emailVerified && !userProfile.emailVerified && !userProfile.is_email_verified) {
+                updates.emailVerified = true;
+                userProfile.emailVerified = true;
+                needsUpdate = true;
+            }
 
             if (!userProfile.displayName && !userProfile.fullName && user.displayName) {
                 updates.displayName = user.displayName;
@@ -162,11 +125,10 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
             return userProfile;
         } catch (e) {
             console.error("Profile Sync Error:", e);
-            // Fallback to auth user if sync fails, but ideally shouldn't happen
             return {
                 displayName: user.displayName,
                 photoUrl: user.photoURL,
-                uid: user.uid
+                uid: user.uid,
             };
         }
     };
@@ -174,108 +136,79 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
     const handleInvitePartner = async (partner: UserProfile) => {
         if (!user || isSubmittingRef.current) return;
         isSubmittingRef.current = true;
-
-        // 1. Sync Sender Profile before sending invite
-        // Capture the synced profile to ensure we send the latest name/photo
-        const syncedProfile = await ensureProfileSynced();
-
-        // Check eligibility (email verification & phone number)
-        const eligibility = await checkPlayerEligibility(user, syncedProfile);
-        if (!eligibility.eligible) {
-            showToast(eligibility.message, "error");
-            isSubmittingRef.current = false;
-            if (setOpen) setOpen(false);
-            return;
-        }
+        setIsInviting(true);
+        setInvitingPartnerName(partner.displayName);
+        setErrorMessage(null);
 
         try {
-            await sendInvite(
-                user,
-                event,
-                partner,
-                () => {
-                    showToast(`Invite sent to ${partner.displayName}!`, "success");
-                    if (setOpen) setOpen(false);
-                    if (onSuccess) onSuccess();
-                },
-                // Pass the synced profile as override
-                syncedProfile ? {
-                    displayName: syncedProfile.displayName || syncedProfile.fullName,
-                    photoURL: syncedProfile.photoUrl || syncedProfile.photoURL
-                } : undefined
-            );
+            const syncedProfile = await ensureProfileSynced();
+
+            // Check eligibility (email verification & phone number)
+            const eligibility = await checkPlayerEligibility(user, syncedProfile);
+            if (!eligibility.eligible) {
+                setErrorMessage(eligibility.message);
+                showToast(eligibility.message, "error");
+                return;
+            }
+
+            // Check red flag
+            if (syncedProfile?.redflagged) {
+                const msg = "Your account is currently red-flagged.";
+                setErrorMessage(msg);
+                showToast(msg, "error");
+                return;
+            }
+
+            await sendInvite(event.eventId, partner.uid);
+            showToast(`Invitation sent to ${partner.displayName}!`, "success");
+            if (setOpen) setOpen(false);
+            if (onSuccess) onSuccess();
         } catch (error) {
-            showToast(error instanceof Error ? error.message : "Failed to send invite", "error");
+            const msg = error instanceof Error ? error.message : "Failed to send invite";
+            setErrorMessage(msg);
+            showToast(msg, "error");
         } finally {
             isSubmittingRef.current = false;
+            setIsInviting(false);
+            setInvitingPartnerName(null);
         }
     };
 
     const handleRegisterSingle = async () => {
         if (!user || isSubmittingRef.current) return;
         isSubmittingRef.current = true;
-        setLoading(true);
+        setErrorMessage(null);
+
         try {
-            // 1. Sync Profile First
             const profile = await ensureProfileSynced();
 
             // Check eligibility (email verification & phone number)
             const eligibility = await checkPlayerEligibility(user, profile);
             if (!eligibility.eligible) {
+                setErrorMessage(eligibility.message);
                 showToast(eligibility.message, "error");
-                setLoading(false);
-                isSubmittingRef.current = false;
-                if (setOpen) setOpen(false);
                 return;
             }
 
-            await runTransaction(db, async (transaction) => {
-                // Register as Single (Scenario 12)
-                // In Team events, solo players (Free Agents) are always CONFIRMED 
-                // and do not increment registrationsCount.
-                const regRef = doc(collection(db, "registrations"));
-                const regId = regRef.id;
+            // Check red flag
+            if (profile?.redflagged) {
+                const msg = "Your account is currently red-flagged.";
+                setErrorMessage(msg);
+                showToast(msg, "error");
+                return;
+            }
 
-                transaction.set(regRef, {
-                    registrationId: regId,
-                    eventId: event.eventId,
-                    playerId: user.uid,
-                    registeredAt: Timestamp.now(),
-                    status: "CONFIRMED",
-                    partnerStatus: "NONE",
-                    lookingForPartner: true,
-                    isPrimary: true,
-                    fullNameP1: profile?.displayName || profile?.fullName || user.displayName || "Unknown Player",
-                    _debugSource: "TeamRegisterDialog.tsx - handleRegisterSingle"
-                });
-
-                // Create Notification for the user
-                const eventDateFormatted = event.dateTime.toDate().toLocaleDateString('en-GB', {
-                    day: '2-digit', month: '2-digit', year: '2-digit'
-                }).replace(/\//g, '-');
-
-                const notifRef = doc(collection(db, "notifications"));
-                transaction.set(notifRef, {
-                    notificationId: notifRef.id,
-                    userId: user.uid,
-                    type: "system",
-                    title: "Free Agent Registration",
-                    message: `You are registered as a Free Agent for ${event.eventName} on ${eventDateFormatted}. You will be confirmed once a team is formed.`,
-                    eventId: event.eventId,
-                    read: false,
-                    createdAt: Timestamp.now(),
-                    _debugSource: "TeamRegisterDialog.tsx"
-                });
-            });
+            // Call atomic server solo registration (SC-01 / SC-22)
+            await registerSolo(event.eventId);
 
             showToast("Registered as Free Agent!", "success");
             if (onSuccess) onSuccess();
             if (setOpen) setOpen(false);
         } catch (error) {
-            console.error("Registration error:", error);
-            showToast(error instanceof Error ? error.message : "Failed to register", "error");
+            const msg = error instanceof Error ? error.message : "Failed to register";
+            setErrorMessage(msg);
+            showToast(msg, "error");
         } finally {
-            setLoading(false);
             isSubmittingRef.current = false;
         }
     };
@@ -293,6 +226,13 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     </DialogDescription>
                 </DialogHeader>
 
+                {errorMessage && (
+                    <div className="rounded-md bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/60 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span className="flex-1">{errorMessage}</span>
+                    </div>
+                )}
+
                 {mode === "SELECT" && (
                     <div className="grid gap-4 py-4">
                         <Button
@@ -309,47 +249,40 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                             variant="outline"
                             className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-green-50 hover:border-green-200 transition-all disabled:opacity-50"
                             onClick={() => handleRegisterSingle()}
-                            disabled={loading || !agreedToTerms}
+                            disabled={teamLoading || !agreedToTerms}
                         >
-                            {loading ? <Loader2 className="h-8 w-8 animate-spin" /> : <UserIcon className="h-8 w-8 text-green-600" />}
+                            {teamLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : <UserIcon className="h-8 w-8 text-green-600" />}
                             <span className="font-semibold">{t("Find me a partner")}</span>
-                            <span className="text-xs text-gray-500 font-normal">{t("Join the \"Free Agents\" list")}</span>
+                            <span className="text-xs text-gray-500 font-normal">{t('Join the "Free Agents" list')}</span>
                         </Button>
                     </div>
                 )}
 
                 {mode === "PARTNER" && (
-                    <div className="space-y-4 py-4">
-                        <div className="flex gap-2">
-                            <Input
+                    <div className="space-y-4 py-3">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                {t("Invite Partner")}
+                            </label>
+                            <PlayerSearchAutocomplete
+                                eventId={event.eventId}
+                                currentUserId={user?.uid}
+                                disabled={!agreedToTerms || teamLoading || isInviting}
+                                onSelectPlayer={(partner) => handleInvitePartner(partner)}
+                                actionLabel={t("Invite")}
                                 placeholder={t("Search by name or email...")}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                isSubmitting={teamLoading || isInviting}
                             />
-                            <Button onClick={handleSearch} disabled={searching}>
-                                {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                            </Button>
                         </div>
 
-                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                            {searchResults.map(result => (
-                                <div key={result.uid} className="flex items-center justify-between p-2 border rounded hover:bg-gray-50">
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{result.displayName || "Unknown User"}</span>
-                                        <span className="text-xs text-gray-500">{result.email}</span>
-                                    </div>
-                                    <Button size="sm" onClick={() => handleInvitePartner(result)} disabled={inviteLoading || !agreedToTerms}>
-                                        {inviteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Invite")}
-                                    </Button>
-                                </div>
-                            ))}
-                            {searchResults.length === 0 && searchQuery && !searching && (
-                                <p className="text-center text-sm text-gray-500 py-2">{t("No users found")}</p>
-                            )}
-                        </div>
+                        {isInviting && (
+                            <div className="flex items-center justify-center gap-2 py-2 px-3 bg-orange-500/10 border border-orange-500/20 rounded-lg text-orange-600 dark:text-orange-400 text-xs font-medium animate-pulse">
+                                <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+                                <span>Sending invitation{invitingPartnerName ? ` to ${invitingPartnerName}` : ""}...</span>
+                            </div>
+                        )}
 
-                        <Button variant="ghost" size="sm" onClick={() => setMode("SELECT")} className="w-full">
+                        <Button variant="ghost" size="sm" onClick={() => setMode("SELECT")} disabled={isInviting || teamLoading} className="w-full">
                             {t("Back")}
                         </Button>
                     </div>
@@ -368,7 +301,10 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                         I have read and agree to the{" "}
                         <button
                             type="button"
-                            onClick={(e) => { e.preventDefault(); setTermsModalOpen(true); }}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setTermsModalOpen(true);
+                            }}
                             className="text-orange-600 font-semibold underline hover:text-orange-700"
                         >
                             Event Terms & Conditions
@@ -377,14 +313,8 @@ export function TeamRegisterDialog({ event, user, trigger, onSuccess, open: cont
                     </label>
                 </div>
 
-                <EventTermsModal
-                    event={event}
-                    open={termsModalOpen}
-                    onOpenChange={setTermsModalOpen}
-                />
+                <EventTermsModal event={event} open={termsModalOpen} onOpenChange={setTermsModalOpen} />
             </DialogContent>
         </Dialog>
     );
 }
-
-// End of file

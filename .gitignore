@@ -44,3 +44,4 @@ next-env.d.ts
 .idea/
 npm.bat
 npm.cmd
+scratch/

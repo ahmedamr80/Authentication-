@@ -39,3 +39,18 @@ export function parseFirebaseDate(dateField: any): Date | null {
     
     return null;
 }
+
+/**
+ * Safely extracts time in milliseconds from any timestamp-like value
+ * (Firestore Timestamp, JS Date, string, number, or object with seconds).
+ * Returns 0 if invalid or null.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getTimestampMillis(dateField: any): number {
+    if (!dateField) return 0;
+    if (typeof dateField.toMillis === "function") {
+        return dateField.toMillis();
+    }
+    const date = parseFirebaseDate(dateField);
+    return date ? date.getTime() : 0;
+}
