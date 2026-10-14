@@ -660,10 +660,15 @@ export default function PublicProfilePage() {
             }
         };
 
-        if (playerId) {
-            fetchProfile();
+        if (!playerId || authLoading) return;
+
+        if (!user) {
+            setLoading(false);
+            return;
         }
-    }, [playerId]);
+
+        fetchProfile();
+    }, [playerId, user, authLoading]);
 
     if (loading || authLoading) {
         return (

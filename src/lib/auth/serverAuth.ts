@@ -54,7 +54,8 @@ export async function resolveUserFromRequest(request: Request): Promise<Authenti
             phoneNumber: decoded.phone_number,
             isAdmin,
         };
-    } catch {
+    } catch (idTokenError) {
+        console.warn("[resolveUserFromRequest] Firebase ID token verification failed:", idTokenError);
         // 2. Fall back to custom token verification
         try {
             const decodedCustom = await verifyAccessToken(token);

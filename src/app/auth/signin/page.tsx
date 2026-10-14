@@ -600,6 +600,7 @@ function SignInContent() {
                             <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                             <Input
                                 id="email"
+                                autoComplete="email"
                                 type="email"
                                 placeholder="name@example.com"
                                 className="pl-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
@@ -618,6 +619,7 @@ function SignInContent() {
                             <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                             <Input
                                 id="password"
+                                autoComplete={isSignUp ? "new-password" : "current-password"}
                                 type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
                                 className="pl-10 pr-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"
@@ -644,6 +646,7 @@ function SignInContent() {
                                 <Lock className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
                                 <Input
                                     id="confirmPassword"
+                                    autoComplete="new-password"
                                     type={showConfirmPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     className="pl-10 pr-10 bg-gray-950 border-gray-800 text-white placeholder:text-gray-600 focus:border-orange-500"

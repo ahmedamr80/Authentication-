@@ -12,12 +12,28 @@ export function middleware(request: NextRequest) {
         if (origin) {
             try {
                 const originUrl = new URL(origin);
-                const expectedHost = host?.split(":")[0];
-                const originHost = originUrl.hostname;
+                const forwardedHost = headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+                const expectedHost = (forwardedHost || host)?.split(":")[0]?.toLowerCase();
+                const originHost = originUrl.hostname.toLowerCase();
 
-                // Enforce origin matching target host (ignoring port in dev)
-                if (expectedHost && originHost !== expectedHost && originHost !== "localhost" && originHost !== "127.0.0.1") {
-                    console.warn(`[CSRF-SECURITY-ALERT] Blocked cross-origin mutation request! Origin: ${origin} | Host: ${host}`);
+                const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "db-padel-reg";
+                const allowedDomains = [
+                    "localhost",
+                    "127.0.0.1",
+                    `${projectId}.web.app`,
+                    `${projectId}.firebaseapp.com`,
+                ];
+
+                // Allow if origin matches host/forwarded-host, is in allowedDomains, or is a project subdomain
+                const isMatch =
+                    (expectedHost && originHost === expectedHost) ||
+                    allowedDomains.includes(originHost) ||
+                    originHost.endsWith(".web.app") ||
+                    originHost.endsWith(".firebaseapp.com") ||
+                    (expectedHost && originHost.endsWith(expectedHost));
+
+                if (!isMatch) {
+                    console.warn(`[CSRF-SECURITY-ALERT] Blocked cross-origin mutation request! Origin: ${origin} | Host: ${host} | X-Forwarded-Host: ${forwardedHost}`);
                     return NextResponse.json(
                         { success: false, error: "CSRF verification failed: Cross-origin mutation request rejected." },
                         { status: 403 }
@@ -45,14 +61,14 @@ export function middleware(request: NextRequest) {
         "Content-Security-Policy",
         [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://apis.google.com https://www.gstatic.com https://*.firebaseapp.com",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://apis.google.com https://www.gstatic.com https://*.firebaseapp.com https://*.web.app",
             "worker-src 'self' blob: https://www.gstatic.com https://apis.google.com",
-            "child-src 'self' blob: https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com",
+            "child-src 'self' blob: https://*.firebaseapp.com https://*.web.app https://accounts.google.com https://appleid.apple.com",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data: blob: https://*.googleapis.com https://*.googleusercontent.com https://firebasestorage.googleapis.com https://lh3.googleusercontent.com https://*",
-            "connect-src 'self' https://*.googleapis.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://firebasestorage.googleapis.com https://*.firebaseio.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com wss://*.firestore.googleapis.com https://*.firebaseapp.com https://appleid.apple.com https://api.pwnedpasswords.com ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*",
-            "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://appleid.apple.com",
+            "connect-src 'self' https://*.googleapis.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://firebasestorage.googleapis.com https://*.firebaseio.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com wss://*.firebaseio.com wss://*.firestore.googleapis.com https://*.firebaseapp.com https://*.web.app https://appleid.apple.com https://api.pwnedpasswords.com ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*",
+            "frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com https://appleid.apple.com",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
