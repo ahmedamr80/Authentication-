@@ -33,6 +33,7 @@ export const useEventWithdraw = () => {
                 body: JSON.stringify({
                     eventId: event.eventId,
                     targetUid: user.uid,
+                    registrationId: registration?.registrationId || (registration as { id?: string } | null)?.id || undefined,
                     confirmedLateWithdrawal: !!confirmedLateWithdrawal,
                     acknowledgePenalty: !!confirmedLateWithdrawal,
                 }),

@@ -56,6 +56,94 @@ export function getRegistrationDocId(eventId: string, playerId: string): string 
     return `${eventId}_${playerId}`;
 }
 
+/**
+ * Resolves a player's registration document reference and snapshot.
+ * Supports both canonical `${eventId}_${playerId}` IDs and legacy auto-generated IDs.
+ */
+export async function getRegistrationRefAndDoc(
+    db: FirebaseFirestore.Firestore,
+    tx: FirebaseFirestore.Transaction | null,
+    eventId: string,
+    playerId: string,
+    explicitRegistrationId?: string | null
+): Promise<{
+    ref: FirebaseFirestore.DocumentReference;
+    snapshot: FirebaseFirestore.DocumentSnapshot;
+    exists: boolean;
+    data: FirebaseFirestore.DocumentData | undefined;
+}> {
+    // 1. If an explicit registration ID was provided by the client, try looking it up directly
+    if (explicitRegistrationId) {
+        const explicitRef = db.collection("registrations").doc(explicitRegistrationId);
+        const explicitSnap = tx ? await tx.get(explicitRef) : await explicitRef.get();
+        if (explicitSnap.exists) {
+            return {
+                ref: explicitRef,
+                snapshot: explicitSnap,
+                exists: true,
+                data: explicitSnap.data(),
+            };
+        }
+    }
+
+    // 2. Try the canonical registration ID: {eventId}_{playerId}
+    const canonicalId = getRegistrationDocId(eventId, playerId);
+    const canonicalRef = db.collection("registrations").doc(canonicalId);
+    const canonicalSnap = tx ? await tx.get(canonicalRef) : await canonicalRef.get();
+
+    if (canonicalSnap.exists) {
+        return {
+            ref: canonicalRef,
+            snapshot: canonicalSnap,
+            exists: true,
+            data: canonicalSnap.data(),
+        };
+    }
+
+    // 3. Fallback: Query by eventId and playerId (finds legacy random doc IDs)
+    const legacyPlayerQuery = db
+        .collection("registrations")
+        .where("eventId", "==", eventId)
+        .where("playerId", "==", playerId)
+        .limit(1);
+
+    const legacyPlayerSnap = tx ? await tx.get(legacyPlayerQuery) : await legacyPlayerQuery.get();
+    if (!legacyPlayerSnap.empty) {
+        const foundDoc = legacyPlayerSnap.docs[0];
+        return {
+            ref: foundDoc.ref,
+            snapshot: foundDoc,
+            exists: true,
+            data: foundDoc.data(),
+        };
+    }
+
+    // 4. Fallback: Query by eventId and player2Id (for partner registrations)
+    const legacyPartnerQuery = db
+        .collection("registrations")
+        .where("eventId", "==", eventId)
+        .where("player2Id", "==", playerId)
+        .limit(1);
+
+    const legacyPartnerSnap = tx ? await tx.get(legacyPartnerQuery) : await legacyPartnerQuery.get();
+    if (!legacyPartnerSnap.empty) {
+        const foundDoc = legacyPartnerSnap.docs[0];
+        return {
+            ref: foundDoc.ref,
+            snapshot: foundDoc,
+            exists: true,
+            data: foundDoc.data(),
+        };
+    }
+
+    return {
+        ref: canonicalRef,
+        snapshot: canonicalSnap,
+        exists: false,
+        data: undefined,
+    };
+}
+
 export interface PlayerEligibilityResult {
     eligible: boolean;
     reason?: "REDFLAGGED" | "EMAIL_NOT_VERIFIED" | "PHONE_NOT_VERIFIED" | "USER_NOT_FOUND";

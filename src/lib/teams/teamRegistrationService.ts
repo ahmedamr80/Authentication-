@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import {
     calculateLateWithdrawalWindow,
     getRegistrationDocId,
+    getRegistrationRefAndDoc,
     evaluatePlayerEligibility,
     resolvePlayerEligibilityWithAuth,
     normalizeEventDoc,
@@ -1249,7 +1250,7 @@ function executeFifoPromotion(
 export async function withdrawFromTeamEvent(
     eventId: string,
     playerId: string,
-    options?: { confirmedLateWithdrawal?: boolean; acknowledgePenalty?: boolean }
+    options?: { confirmedLateWithdrawal?: boolean; acknowledgePenalty?: boolean; registrationId?: string }
 ): Promise<ServiceResult<{ action: string; redflagged?: boolean }>> {
     const db = getAdminFirestore();
     const confirmedLateWithdrawal = !!(options?.confirmedLateWithdrawal || options?.acknowledgePenalty);
@@ -1264,14 +1265,13 @@ export async function withdrawFromTeamEvent(
         const eventData = eventSnap.data() || {};
         const meta = normalizeEventTimes(eventData);
 
-        const regId = getRegistrationDocId(eventId, playerId);
-        const regRef = db.collection("registrations").doc(regId);
+        const regResolution = await getRegistrationRefAndDoc(db, tx, eventId, playerId, options?.registrationId);
+        const regRef = regResolution.ref;
+        const regSnap = regResolution.snapshot;
+        const regId = regRef.id;
         const userRef = db.collection("users").doc(playerId);
-        const [regSnap, userSnap] = await Promise.all([
-            tx.get(regRef),
-            tx.get(userRef),
-        ]);
-        const regData = regSnap.data() || {};
+        const userSnap = await tx.get(userRef);
+        const regData = regResolution.data || {};
         const userData = userSnap.data() || {};
         const playerName = (regData.fullName || regData.fullNameP1 || userData.displayName || userData.fullName || "Player") as string;
 

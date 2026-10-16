@@ -143,8 +143,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     const [error, setError] = useState<string | null>(null);
     const [userProfiles, setUserProfiles] = useState<Record<string, FirestoreUser>>({});
     const fetchedIds = useRef<Set<string>>(new Set());
-    // Add this ref to track processed URL invites
     const handledInviteRef = useRef<string | null>(null);
+    const [tournamentId, setTournamentId] = useState<string | null>(null);
+    const [tournamentData, setTournamentData] = useState<{ status?: string; title?: string; mode?: string } | null>(null);
 
     // UI State
     const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -239,6 +240,24 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
         });
         return () => unsub();
     }, [eventId, user]);
+
+    // 4. Fetch Tournament linked to this Event (1-to-1)
+    useEffect(() => {
+        if (!eventId) return;
+        const qTournament = query(collection(db, "tournaments"), where("eventId", "==", eventId));
+        const unsub = onSnapshot(qTournament, (snap) => {
+            if (!snap.empty) {
+                setTournamentId(snap.docs[0].id);
+                setTournamentData(snap.docs[0].data() as any);
+            } else {
+                setTournamentId(null);
+                setTournamentData(null);
+            }
+        }, (err) => {
+            console.error("Error listening to tournament for event:", err);
+        });
+        return () => unsub();
+    }, [eventId]);
 
     // 3. Fetch Teams (Conditional Optimization)
     useEffect(() => {
@@ -532,6 +551,14 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
     const spotsLeft = useMemo(() => {
         return event ? calculateSpotsLeft(event, registrations, teams, !!user) : 0;
     }, [event, registrations, teams, user]);
+
+    const isEventCompleted = useMemo(() => {
+        if (!event) return false;
+        const isCancelled = event.status === "Cancelled" || event.status === "cancelled" || !!event.cancellationMessage;
+        if (isCancelled) return false;
+        const isPast = event.eventDate ? event.eventDate.toDate() < new Date() : false;
+        return spotsLeft === 0 || isPast;
+    }, [event, spotsLeft]);
 
     // C. Build the Team List (Single Source of Truth: The 'teams' collection)
     const teamsWithPlayers = useMemo(() => {
@@ -1031,12 +1058,42 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                         </div>
 
                         <div className="flex items-center gap-1.5 sm:gap-2">
+                            {/* Tournament Button: Visible to ALL users when tournament exists */}
+                            {tournamentId ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9 px-2.5 sm:px-3 text-amber-400 bg-amber-500/10 border-amber-500/50 hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-400 transition-all flex items-center gap-1.5 shadow-sm font-semibold cursor-pointer"
+                                    onClick={() => router.push(`/events/${eventId}/tournament`)}
+                                    title={isAdmin || (user && event?.adminId === user.uid) ? "Open Tournament Workspace" : "View Live Tournament & Scores"}
+                                    aria-label={isAdmin || (user && event?.adminId === user.uid) ? "Open Tournament Workspace" : "View Live Tournament & Scores"}
+                                >
+                                    <Trophy className="w-4 h-4 shrink-0 text-amber-400" />
+                                    <span className="hidden sm:inline font-medium">
+                                        {isAdmin || (user && event?.adminId === user.uid) ? "Tournament Workspace" : "Tournament & Scores"}
+                                    </span>
+                                </Button>
+                            ) : (isAdmin || (user && event?.adminId === user.uid)) && isEventCompleted ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9 px-2.5 sm:px-3 text-amber-400 bg-gray-900/90 border-amber-500/50 hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-400 transition-all flex items-center gap-1.5 shadow-sm font-semibold cursor-pointer"
+                                    onClick={() => router.push(`/events/${eventId}/tournament/create`)}
+                                    title="Create a Tournament"
+                                    aria-label="Create a Tournament"
+                                >
+                                    <Trophy className="w-4 h-4 shrink-0 text-amber-400" />
+                                    <span className="hidden sm:inline font-medium">Create a Tournament</span>
+                                </Button>
+                            ) : null}
+
                             {(isAdmin || (user && event?.adminId === user.uid)) && (
                                 <>
+
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-9 px-2.5 sm:px-3 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500 transition-all flex items-center gap-1.5"
+                                        className="h-9 px-2.5 sm:px-3 text-emerald-400 bg-gray-900/90 border-emerald-500/50 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-400 transition-all flex items-center gap-1.5 shadow-sm"
                                         onClick={() => router.push(`/events/${eventId}/admin`)}
                                         title="Activity Feed"
                                         aria-label="Activity Feed"
@@ -1047,7 +1104,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-9 px-2.5 sm:px-3 text-blue-400 border-blue-500/40 hover:bg-blue-500/20 hover:text-blue-300 hover:border-blue-500 transition-all flex items-center gap-1.5"
+                                        className="h-9 px-2.5 sm:px-3 text-blue-400 bg-gray-900/90 border-blue-500/50 hover:bg-blue-500/20 hover:text-blue-300 hover:border-blue-400 transition-all flex items-center gap-1.5 shadow-sm"
                                         onClick={() => router.push(`/events/create?cloneFrom=${eventId}`)}
                                         title="Clone Event"
                                         aria-label="Clone Event"
@@ -1058,7 +1115,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-9 px-2.5 sm:px-3 text-orange-400 border-orange-500/40 hover:bg-orange-500/20 hover:text-orange-300 hover:border-orange-500 transition-all flex items-center gap-1.5"
+                                        className="h-9 px-2.5 sm:px-3 text-orange-400 bg-gray-900/90 border-orange-500/50 hover:bg-orange-500/20 hover:text-orange-300 hover:border-orange-400 transition-all flex items-center gap-1.5 shadow-sm"
                                         onClick={() => router.push(`/events/${eventId}/edit`)}
                                         title="Edit Event"
                                         aria-label="Edit Event"
@@ -1205,6 +1262,41 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                             <span>Waiting list: {waitlistCount} {waitlistUnit}</span>
                         </div>
                     </div>
+
+                    {/* Active/Completed Tournament Banner (Visible to ALL users) */}
+                    {tournamentId && (
+                        <div className="mt-8 p-4 sm:p-5 rounded-2xl bg-linear-to-r from-amber-950/40 via-slate-900 to-amber-950/20 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-amber-500/5 animate-in fade-in duration-300">
+                            <div className="flex items-center gap-3.5">
+                                <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                                    <Trophy className="w-6 h-6 text-amber-400" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-base font-bold text-white">
+                                            {tournamentData?.title || "Tournament In Progress"}
+                                        </span>
+                                        <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px] px-2 py-0.5">
+                                            {tournamentData?.status === "completed" ? "COMPLETED" : "LIVE SCORES"}
+                                        </Badge>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        {tournamentData?.status === "completed"
+                                            ? "Tournament finalized. View official podium, rankings, and match results."
+                                            : "Track live court matches, scores, and official leaderboard in real time."}
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                onClick={() => router.push(`/events/${eventId}/tournament`)}
+                                className="w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs h-10 px-5 rounded-xl shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                            >
+                                <Trophy className="w-4 h-4 text-slate-950" />
+                                {isAdmin || (user && event?.adminId === user.uid)
+                                    ? "Open Tournament Workspace"
+                                    : "View Live Scores & Rankings"}
+                            </Button>
+                        </div>
+                    )}
 
                     {/* Register Buttons */}
                     {!isPastEvent && (

@@ -20,6 +20,8 @@ export function middleware(request: NextRequest) {
                 const allowedDomains = [
                     "localhost",
                     "127.0.0.1",
+                    "ewpuae.com",
+                    "www.ewpuae.com",
                     `${projectId}.web.app`,
                     `${projectId}.firebaseapp.com`,
                 ];

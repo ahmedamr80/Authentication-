@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import {
     calculateLateWithdrawalWindow,
     getRegistrationDocId,
+    getRegistrationRefAndDoc,
     evaluatePlayerEligibility,
     resolvePlayerEligibilityWithAuth,
     normalizeEventDoc,
@@ -84,16 +85,17 @@ export async function registerIndividualPlayer(
         }
 
         const playerName = (userData.displayName || userData.fullName || userData.fullname || "Player") as string;
-        const regId = getRegistrationDocId(eventId, playerId);
-        const regRef = db.collection("registrations").doc(regId);
-        const regSnap = await tx.get(regRef);
+        const regResolution = await getRegistrationRefAndDoc(db, tx, eventId, playerId);
+        const regRef = regResolution.ref;
+        const regSnap = regResolution.snapshot;
+        const regId = regRef.id;
 
         const serverNow = Timestamp.now();
         let isReRegistration = false;
         let previousStatus: string | null = null;
 
-        if (regSnap.exists) {
-            const regData = regSnap.data() || {};
+        if (regResolution.exists) {
+            const regData = regResolution.data || {};
             previousStatus = (regData.status as string) || null;
             // Rule: Repeated requests must return current state without double-updating counters
             if (regData.status === "CONFIRMED" || regData.status === "WAITLIST") {
@@ -213,7 +215,7 @@ export async function registerIndividualPlayer(
 export async function withdrawIndividualPlayer(
     eventId: string,
     playerId: string,
-    options?: { acknowledgePenalty?: boolean; confirmedLateWithdrawal?: boolean }
+    options?: { acknowledgePenalty?: boolean; confirmedLateWithdrawal?: boolean; registrationId?: string }
 ): Promise<ServiceResult<{ action: string; redflagged?: boolean }>> {
     const db = getAdminFirestore();
     const now = new Date();
@@ -240,15 +242,16 @@ export async function withdrawIndividualPlayer(
             return { success: false, error: "Capacity adjustment in progress. Please retry shortly." };
         }
 
-        const regId = getRegistrationDocId(eventId, playerId);
-        const regRef = db.collection("registrations").doc(regId);
-        const regSnap = await tx.get(regRef);
+        const regResolution = await getRegistrationRefAndDoc(db, tx, eventId, playerId, options?.registrationId);
 
-        if (!regSnap.exists) {
+        if (!regResolution.exists) {
             return { success: false, error: "No registration found for this event." };
         }
 
-        const regData = regSnap.data() || {};
+        const regRef = regResolution.ref;
+        const regSnap = regResolution.snapshot;
+        const regId = regRef.id;
+        const regData = regResolution.data || {};
         const currentStatus = regData.status as string;
 
         // Idempotency: Already cancelled

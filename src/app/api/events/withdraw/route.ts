@@ -13,7 +13,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { eventId, targetUid, acknowledgePenalty, confirmedLateWithdrawal } = body;
+        const { eventId, targetUid, registrationId, acknowledgePenalty, confirmedLateWithdrawal } = body;
 
         if (!eventId) {
             return NextResponse.json({ success: false, error: "eventId is required." }, { status: 400 });
@@ -33,6 +33,7 @@ export async function POST(request: Request) {
         if (eventMeta.unitType === "players") {
             const result = await withdrawIndividualPlayer(eventId, effectiveUid, {
                 acknowledgePenalty: confirmedLate,
+                registrationId: registrationId || undefined,
             });
 
             if (result.requiresConfirmation || result.requiresAcknowledgment) {
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
         } else {
             const result = await withdrawFromTeamEvent(eventId, effectiveUid, {
                 confirmedLateWithdrawal: confirmedLate,
+                registrationId: registrationId || undefined,
             });
 
             if (result.requiresConfirmation) {

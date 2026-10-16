@@ -144,5 +144,34 @@ service cloud.firestore {
     match /counters/{counterId} {
       allow read, update, create: if isSignedIn();
     }
+
+    // --- TOURNAMENTS ---
+    match /tournaments/{tournamentId} {
+      // 1. Reading: Public (Spectators, Players, Admins)
+      allow read: if true;
+
+      // 2. Creation, Updating, Deletion: Admins or Event Creator
+      allow create: if isAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('adminId', '') == request.auth.uid
+      );
+      allow update, delete: if isAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/events/$(resource.data.eventId)) &&
+        get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.get('adminId', '') == request.auth.uid
+      );
+
+      match /{subcollection=**} {
+        allow read: if true;
+        allow write: if isAdmin() || isSignedIn();
+      }
+    }
+
+    // --- TOURNAMENT TEMPLATES ---
+    match /tournamentTemplates/{templateId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
