@@ -58,7 +58,22 @@ export async function POST(request: Request) {
         const isUnitTypeChanged = unitType !== originalUnitType;
 
         // Parse date
-        const parsedDate = dateTime ? new Date(dateTime) : (curEvent.dateTime ? curEvent.dateTime.toDate() : new Date());
+        let parsedDate: Date;
+        if (dateTime) {
+            let dateStr = String(dateTime).trim();
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(dateStr)) {
+                // Naive ISO string without timezone - default to UAE (+04:00)
+                dateStr = `${dateStr}+04:00`;
+            }
+            parsedDate = new Date(dateStr);
+            if (isNaN(parsedDate.getTime())) {
+                return NextResponse.json({ success: false, error: "Invalid dateTime provided." }, { status: 400 });
+            }
+        } else if (curEvent.dateTime) {
+            parsedDate = curEvent.dateTime.toDate();
+        } else {
+            parsedDate = new Date();
+        }
         const eventTimestamp = Timestamp.fromDate(parsedDate);
 
         // 1. CANCELLATION CASE

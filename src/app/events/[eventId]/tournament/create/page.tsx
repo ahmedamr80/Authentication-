@@ -22,8 +22,10 @@ import {
     TournamentPair,
     TournamentParticipant,
     TournamentTemplate,
+    normalizePreferredSide,
 } from "@/lib/tournaments/types";
 import { generateTournamentSchedule } from "@/lib/tournaments/templateMatcher";
+import { cleanForFirestore } from "@/lib/tournaments/firestoreUtils";
 import { getTimestampMillis } from "@/lib/date-utils";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -51,6 +53,12 @@ import {
     Grid,
     Flame,
     Loader2,
+    Users,
+    Scale,
+    Plus,
+    Edit2,
+    RotateCcw,
+    X,
 } from "lucide-react";
 
 interface UnifiedEntry {
@@ -60,7 +68,14 @@ interface UnifiedEntry {
     playerIds: string[];
     playerNames: string[];
     playerPhotos: (string | undefined)[];
-    preferredSide?: "Left" | "Right" | "Both";
+    preferredSide?: "Left" | "Right" | "Both" | null;
+}
+
+export interface CustomPlayerPair {
+    id: string;
+    name: string;
+    player1: TournamentParticipant;
+    player2?: TournamentParticipant | null;
 }
 
 export default function TournamentCreatePage({
@@ -107,6 +122,12 @@ export default function TournamentCreatePage({
     // Team Battle Pools
     const [teamAPool, setTeamAPool] = useState<TournamentParticipant[]>([]);
     const [teamBPool, setTeamBPool] = useState<TournamentParticipant[]>([]);
+
+    // Custom Fixed Pairs (for Players event in Team modes: Round Robin, Knockout, Hybrid)
+    const [customPlayerPairs, setCustomPlayerPairs] = useState<CustomPlayerPair[]>([]);
+    const [stagedUnassignedPlayerId, setStagedUnassignedPlayerId] = useState<string | null>(null);
+    const [editingPairId, setEditingPairId] = useState<string | null>(null);
+    const [editingPairName, setEditingPairName] = useState<string>("");
 
     // Firestore Tournament Templates
     const [templates, setTemplates] = useState<TournamentTemplate[]>([]);
@@ -294,9 +315,21 @@ export default function TournamentCreatePage({
         } else {
             registrations.forEach((r) => {
                 const profile = userProfiles[r.playerId];
-                const playerName = r.fullName || profile?.fullName || profile?.displayName || "Player";
-                const position = profile?.position as "Left" | "Right" | "Both" | undefined;
-                const photo = profile?.photoUrl || profile?.photoURL;
+                const playerName =
+                    r.fullName ||
+                    r.playerDisplayName ||
+                    profile?.displayName ||
+                    profile?.fullName ||
+                    "Player";
+                const rawSide =
+                    profile?.position ||
+                    (profile as any)?.preferredSide ||
+                    (profile as any)?.courtSide ||
+                    (profile as any)?.side ||
+                    r.playerPosition ||
+                    (r as any)?.preferredSide;
+                const position = normalizePreferredSide(rawSide);
+                const photo = r.playerPhotoURL || profile?.photoURL || profile?.photoUrl;
 
                 const item: UnifiedEntry = {
                     id: r.registrationId,
@@ -326,38 +359,283 @@ export default function TournamentCreatePage({
             list.push({
                 id: c.id,
                 name: c.title,
-                uid: c.playerIds[0],
-                photoURL: c.playerPhotos[0],
-                preferredSide: c.preferredSide,
+                uid: c.playerIds[0] || null,
+                photoURL: c.playerPhotos[0] || null,
+                preferredSide: normalizePreferredSide(c.preferredSide),
             });
         });
 
         return list;
     }, [confirmedEntries, waitlistedEntries, selectedEntryIds]);
 
+    const isTeamMode = useMemo(() => {
+        return mode === "round_robin" || mode === "knockout" || mode === "round_robin_knockout";
+    }, [mode]);
+
+    // Paired player IDs for custom player pairs
+    const pairedPlayerIds = useMemo(() => {
+        const set = new Set<string | number>();
+        customPlayerPairs.forEach((p) => {
+            if (p.player1) set.add(p.player1.id);
+            if (p.player2) set.add(p.player2.id);
+        });
+        return set;
+    }, [customPlayerPairs]);
+
+    // Unpaired players for Players event in Team mode
+    const unpairedPlayers = useMemo(() => {
+        if (!isTeamMode || event?.unitType === "Teams") return [];
+        return activeParticipants.filter((p) => !pairedPlayerIds.has(p.id));
+    }, [isTeamMode, event, activeParticipants, pairedPlayerIds]);
+
     // Active Pairs list (for Teams modes: Round Robin, Knockout, Hybrid)
     const activePairs = useMemo<TournamentPair[]>(() => {
-        if (event?.unitType !== "Teams") return [];
-        const allCandidates = [...confirmedEntries, ...waitlistedEntries];
-        const pairs: TournamentPair[] = [];
-        let seedCounter = 1;
+        if (event?.unitType === "Teams") {
+            const allCandidates = [...confirmedEntries, ...waitlistedEntries];
+            const pairs: TournamentPair[] = [];
+            let seedCounter = 1;
 
-        allCandidates.forEach((c) => {
-            if (!selectedEntryIds.has(c.id)) return;
-            pairs.push({
-                pairId: c.id,
-                pairName: c.title,
-                playerIds: c.playerIds,
-                playerNames: c.playerNames,
-                playerPhotos: c.playerPhotos,
-                seed: seedCounter++,
+            allCandidates.forEach((c) => {
+                if (!selectedEntryIds.has(c.id)) return;
+                pairs.push({
+                    pairId: c.id,
+                    pairName: c.title,
+                    playerIds: c.playerIds,
+                    playerNames: c.playerNames,
+                    playerPhotos: (c.playerPhotos || []).map((ph) => ph || null),
+                    seed: seedCounter++,
+                });
             });
+
+            return pairs;
+        } else if (isTeamMode) {
+            return customPlayerPairs
+                .filter((p) => p.player1 && p.player2)
+                .map((p, idx) => ({
+                    pairId: p.id,
+                    pairName: p.name || `${p.player1.name} & ${p.player2!.name}`,
+                    playerIds: [p.player1.id, p.player2!.id],
+                    playerNames: [p.player1.name, p.player2!.name],
+                    playerPhotos: [p.player1.photoURL || null, p.player2!.photoURL || null],
+                    seed: idx + 1,
+                }));
+        }
+
+        return [];
+    }, [event, confirmedEntries, waitlistedEntries, selectedEntryIds, customPlayerPairs, isTeamMode]);
+
+    // Synchronize customPlayerPairs when active roster or team mode changes
+    useEffect(() => {
+        if (!isTeamMode || event?.unitType === "Teams") return;
+        const validIds = new Set(activeParticipants.map((p) => String(p.id)));
+
+        setCustomPlayerPairs((prev) => {
+            const cleaned = prev
+                .map((pair) => {
+                    const p1Valid = validIds.has(String(pair.player1.id));
+                    const p2Valid = pair.player2 ? validIds.has(String(pair.player2.id)) : false;
+
+                    if (!p1Valid && !p2Valid) return null;
+                    if (!p1Valid && p2Valid) {
+                        return { ...pair, player1: pair.player2!, player2: null, name: pair.player2!.name };
+                    }
+                    if (p1Valid && !p2Valid) {
+                        return { ...pair, player2: null, name: pair.player1.name };
+                    }
+                    return pair;
+                })
+                .filter(Boolean) as CustomPlayerPair[];
+
+            // If empty and we have active participants, auto-pair sequentially
+            if (cleaned.length === 0 && activeParticipants.length >= 2) {
+                const pairs: CustomPlayerPair[] = [];
+                for (let i = 0; i < activeParticipants.length; i += 2) {
+                    const p1 = activeParticipants[i];
+                    const p2 = activeParticipants[i + 1] || null;
+                    pairs.push({
+                        id: `pair_${pairs.length + 1}`,
+                        name: p2 ? `${p1.name} & ${p2.name}` : `Team ${pairs.length + 1}`,
+                        player1: p1,
+                        player2: p2,
+                    });
+                }
+                return pairs;
+            }
+
+            return cleaned;
+        });
+    }, [isTeamMode, event, activeParticipants]);
+
+    // Auto-Pair algorithms
+    const autoPairSequential = () => {
+        const pairs: CustomPlayerPair[] = [];
+        for (let i = 0; i < activeParticipants.length; i += 2) {
+            const p1 = activeParticipants[i];
+            const p2 = activeParticipants[i + 1] || null;
+            pairs.push({
+                id: `pair_${pairs.length + 1}`,
+                name: p2 ? `${p1.name} & ${p2.name}` : `Team ${pairs.length + 1}`,
+                player1: p1,
+                player2: p2,
+            });
+        }
+        setCustomPlayerPairs(pairs);
+        setStagedUnassignedPlayerId(null);
+        showToast(`Paired ${pairs.length} teams in registration order.`, "success");
+    };
+
+    const autoPairRandom = () => {
+        const shuffled = [...activeParticipants].sort(() => Math.random() - 0.5);
+        const pairs: CustomPlayerPair[] = [];
+        for (let i = 0; i < shuffled.length; i += 2) {
+            const p1 = shuffled[i];
+            const p2 = shuffled[i + 1] || null;
+            pairs.push({
+                id: `pair_${pairs.length + 1}`,
+                name: p2 ? `${p1.name} & ${p2.name}` : `Team ${pairs.length + 1}`,
+                player1: p1,
+                player2: p2,
+            });
+        }
+        setCustomPlayerPairs(pairs);
+        setStagedUnassignedPlayerId(null);
+        showToast(`Randomly shuffled into ${pairs.length} teams.`, "success");
+    };
+
+    const autoPairSideBalanced = () => {
+        const lefts = activeParticipants.filter((p) => normalizePreferredSide(p.preferredSide) === "Left");
+        const rights = activeParticipants.filter((p) => normalizePreferredSide(p.preferredSide) === "Right");
+        const others = activeParticipants.filter((p) => {
+            const s = normalizePreferredSide(p.preferredSide);
+            return s !== "Left" && s !== "Right";
         });
 
-        return pairs;
-    }, [event, confirmedEntries, waitlistedEntries, selectedEntryIds]);
+        const pairs: CustomPlayerPair[] = [];
+        const remL = [...lefts];
+        const remR = [...rights];
+        const remO = [...others];
 
-    // Auto-map Mixicano pools (Left vs Right)
+        while (remL.length > 0 && remR.length > 0) {
+            const p1 = remL.shift()!;
+            const p2 = remR.shift()!;
+            pairs.push({
+                id: `pair_${pairs.length + 1}`,
+                name: `${p1.name} & ${p2.name}`,
+                player1: p1,
+                player2: p2,
+            });
+        }
+        while (remL.length > 0 && remO.length > 0) {
+            const p1 = remL.shift()!;
+            const p2 = remO.shift()!;
+            pairs.push({
+                id: `pair_${pairs.length + 1}`,
+                name: `${p1.name} & ${p2.name}`,
+                player1: p1,
+                player2: p2,
+            });
+        }
+        while (remR.length > 0 && remO.length > 0) {
+            const p1 = remR.shift()!;
+            const p2 = remO.shift()!;
+            pairs.push({
+                id: `pair_${pairs.length + 1}`,
+                name: `${p1.name} & ${p2.name}`,
+                player1: p1,
+                player2: p2,
+            });
+        }
+        const remAll = [...remL, ...remR, ...remO];
+        for (let i = 0; i < remAll.length; i += 2) {
+            const p1 = remAll[i];
+            const p2 = remAll[i + 1] || null;
+            pairs.push({
+                id: `pair_${pairs.length + 1}`,
+                name: p2 ? `${p1.name} & ${p2.name}` : `Team ${pairs.length + 1}`,
+                player1: p1,
+                player2: p2,
+            });
+        }
+
+        setCustomPlayerPairs(pairs);
+        setStagedUnassignedPlayerId(null);
+        showToast(`Side-balanced ${pairs.length} teams (Left + Right).`, "success");
+    };
+
+    const handleUnpairAll = () => {
+        setCustomPlayerPairs([]);
+        setStagedUnassignedPlayerId(null);
+        showToast("All teams cleared. Players moved to unassigned pool.", "info");
+    };
+
+    const handleUnpairTeam = (pairId: string) => {
+        setCustomPlayerPairs((prev) => prev.filter((p) => p.id !== pairId));
+    };
+
+    const handleRemovePlayerFromPair = (pairId: string, slot: 1 | 2) => {
+        setCustomPlayerPairs((prev) => {
+            return prev
+                .map((pair) => {
+                    if (pair.id !== pairId) return pair;
+                    if (slot === 1) {
+                        if (pair.player2) {
+                            return { ...pair, player1: pair.player2, player2: null, name: pair.player2.name };
+                        }
+                        return null;
+                    } else {
+                        return { ...pair, player2: null, name: pair.player1.name };
+                    }
+                })
+                .filter(Boolean) as CustomPlayerPair[];
+        });
+    };
+
+    const handleAssignPlayerToOpenSlot = (pairId: string, player: TournamentParticipant) => {
+        setCustomPlayerPairs((prev) =>
+            prev.map((pair) => {
+                if (pair.id !== pairId) return pair;
+                const p1 = pair.player1;
+                const p2 = player;
+                return {
+                    ...pair,
+                    player2: p2,
+                    name: pair.name.includes("Team") ? pair.name : `${p1.name} & ${p2.name}`,
+                };
+            })
+        );
+        setStagedUnassignedPlayerId(null);
+    };
+
+    const handleSelectUnassignedPlayer = (player: TournamentParticipant) => {
+        if (!stagedUnassignedPlayerId) {
+            const openTeam = customPlayerPairs.find((p) => !p.player2);
+            if (openTeam) {
+                handleAssignPlayerToOpenSlot(openTeam.id, player);
+                return;
+            }
+            setStagedUnassignedPlayerId(String(player.id));
+        } else {
+            if (stagedUnassignedPlayerId === String(player.id)) {
+                setStagedUnassignedPlayerId(null);
+                return;
+            }
+            const p1 = activeParticipants.find((p) => String(p.id) === stagedUnassignedPlayerId);
+            if (p1) {
+                setCustomPlayerPairs((prev) => [
+                    ...prev,
+                    {
+                        id: `pair_${prev.length + 1}`,
+                        name: `${p1.name} & ${player.name}`,
+                        player1: p1,
+                        player2: player,
+                    },
+                ]);
+            }
+            setStagedUnassignedPlayerId(null);
+        }
+    };
+
+    // Auto-map Mixicano pools (Left vs Right with case-insensitive & flexible side parsing)
     useEffect(() => {
         if (mode === "mixicano") {
             const left: TournamentParticipant[] = [];
@@ -365,10 +643,11 @@ export default function TournamentCreatePage({
             const unassigned: TournamentParticipant[] = [];
 
             activeParticipants.forEach((p) => {
-                if (p.preferredSide === "Left") {
-                    left.push(p);
-                } else if (p.preferredSide === "Right") {
-                    right.push(p);
+                const side = normalizePreferredSide(p.preferredSide);
+                if (side === "Left") {
+                    left.push({ ...p, preferredSide: "Left" });
+                } else if (side === "Right") {
+                    right.push({ ...p, preferredSide: "Right" });
                 } else {
                     unassigned.push(p);
                 }
@@ -384,12 +663,38 @@ export default function TournamentCreatePage({
         }
     }, [mode, activeParticipants]);
 
+    const handleAutoBalanceMixicano = () => {
+        const needed = numCourts * 2;
+        let l = [...leftPool];
+        let r = [...rightPool];
+        let u = [...unassignedPool];
+
+        while (l.length < needed && u.length > 0) {
+            const p = u.shift()!;
+            l.push({ ...p, preferredSide: "Left" });
+        }
+        while (r.length < needed && u.length > 0) {
+            const p = u.shift()!;
+            r.push({ ...p, preferredSide: "Right" });
+        }
+        while (l.length < needed && r.length > needed) {
+            const p = r.pop()!;
+            l.push({ ...p, preferredSide: "Left" });
+        }
+        while (r.length < needed && l.length > needed) {
+            const p = l.pop()!;
+            r.push({ ...p, preferredSide: "Right" });
+        }
+
+        setLeftPool(l);
+        setRightPool(r);
+        setUnassignedPool(u);
+        showToast("Mixicano pools balanced to court count.", "success");
+    };
+
     // Suggested defaults when active count changes
     useEffect(() => {
-        const count =
-            mode === "round_robin" || mode === "knockout" || mode === "round_robin_knockout"
-                ? activePairs.length
-                : activeParticipants.length;
+        const count = isTeamMode ? activePairs.length : activeParticipants.length;
 
         if (count > 0) {
             if (mode === "americano") {
@@ -409,7 +714,7 @@ export default function TournamentCreatePage({
                 setNumGroups(Math.max(2, Math.floor(count / 4)));
             }
         }
-    }, [mode, activeParticipants.length, activePairs.length]);
+    }, [mode, isTeamMode, activeParticipants.length, activePairs.length]);
 
     // Generate Preview
     const generatePreview = () => {
@@ -448,11 +753,21 @@ export default function TournamentCreatePage({
                 throw new Error("Americano requires at least 4 active players.");
             }
 
-            if (
-                (mode === "round_robin" || mode === "knockout" || mode === "round_robin_knockout") &&
-                activePairs.length < 2
-            ) {
-                throw new Error("Team tournament formats require at least 2 teams.");
+            if (isTeamMode) {
+                if (activePairs.length < 2) {
+                    throw new Error("Team tournament formats require at least 2 teams.");
+                }
+                if (event?.unitType === "Players" && unpairedPlayers.length > 0) {
+                    throw new Error(
+                        `Please assign all ${unpairedPlayers.length} unassigned player(s) into teams before generating the schedule.`
+                    );
+                }
+                const incompleteTeam = customPlayerPairs.find((p) => !p.player2);
+                if (event?.unitType === "Players" && incompleteTeam) {
+                    throw new Error(
+                        `Team "${incompleteTeam.name}" has only 1 player. All teams must have 2 players.`
+                    );
+                }
             }
 
             const result = generateTournamentSchedule({
@@ -494,18 +809,18 @@ export default function TournamentCreatePage({
             const config: TournamentConfig = {
                 numCourts,
                 numRounds: previewResult.numRounds,
-                cycles,
-                numGroups,
-                qualifiersPerGroup,
-                thirdPlacePlayoff,
+                ...(cycles ? { cycles } : {}),
+                ...(numGroups ? { numGroups } : {}),
+                ...(qualifiersPerGroup ? { qualifiersPerGroup } : {}),
+                ...(thirdPlacePlayoff !== undefined ? { thirdPlacePlayoff } : {}),
             };
 
-            const docData = {
+            const rawDocData = {
                 id: tournamentId,
                 eventId,
                 title: tournamentTitle,
                 mode,
-                unitType: event.unitType === "Teams" ? "teams" : "players",
+                unitType: (event.unitType === "Teams" || isTeamMode) ? "teams" : "players",
                 status,
                 config,
                 participants: previewResult.players,
@@ -515,11 +830,13 @@ export default function TournamentCreatePage({
                 bracketSlots: previewResult.bracketSlots || [],
                 matches: previewResult.matches,
                 templateId: previewResult.templateId || null,
-                isFromTemplate: previewResult.isFromTemplate,
+                isFromTemplate: Boolean(previewResult.isFromTemplate),
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 createdBy: user.uid,
             };
+
+            const docData = cleanForFirestore(rawDocData);
 
             await setDoc(tournamentRef, docData);
 
@@ -747,144 +1064,171 @@ export default function TournamentCreatePage({
                 {/* STEP 2: MODE SELECTION */}
                 {step === 2 && (
                     <div className="space-y-6 animate-in fade-in duration-200">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {event?.unitType === "Players" ? (
-                                <>
-                                    <div
-                                        onClick={() => setMode("americano")}
-                                        className={`cursor-pointer p-5 rounded-2xl border transition-all ${
-                                            mode === "americano"
-                                                ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
-                                                : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
-                                        }`}
-                                    >
-                                        <div className="flex items-start justify-between">
-                                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold">
-                                                <Shuffle className="w-5 h-5" />
-                                            </div>
-                                            {mode === "americano" && (
-                                                <Badge className="bg-amber-500 text-slate-950 font-bold">Selected</Badge>
-                                            )}
-                                        </div>
-                                        <h3 className="text-lg font-bold text-white mt-4">Americano (Social Rotation)</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Switch partners every round. All players play with and against each other, accumulating individual points on a unified leaderboard.
-                                        </p>
-                                    </div>
+                        <div className="space-y-6">
+                            {event?.unitType === "Players" && (
+                                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2.5">
+                                    <Sparkles className="w-4 h-4 shrink-0 text-amber-400" />
+                                    <span>
+                                        <strong>Flexible Format Support:</strong> You can select individual rotation modes (Americano, Mixicano, Team Battle) or fixed team modes (Round Robin, Knockout, Hybrid). When choosing a team mode, you will assign your registered players into 2-player teams in Step 3.
+                                    </span>
+                                </div>
+                            )}
 
-                                    <div
-                                        onClick={() => setMode("mixicano")}
-                                        className={`cursor-pointer p-5 rounded-2xl border transition-all ${
-                                            mode === "mixicano"
-                                                ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
-                                                : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
-                                        }`}
-                                    >
-                                        <div className="flex items-start justify-between">
-                                            <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center font-bold">
-                                                <Layers className="w-5 h-5" />
-                                            </div>
-                                            {mode === "mixicano" && (
-                                                <Badge className="bg-amber-500 text-slate-950 font-bold">Selected</Badge>
-                                            )}
-                                        </div>
-                                        <h3 className="text-lg font-bold text-white mt-4">Mixicano (Left vs Right)</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Pairs 1 Left-court player with 1 Right-court player every round. Profile court-side preferences are automatically pre-mapped.
-                                        </p>
+                            {/* Section 1: Individual & Social Rotations (Available for Players events) */}
+                            {event?.unitType === "Players" && (
+                                <div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Shuffle className="w-4 h-4 text-amber-400" />
+                                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                                            Individual & Social Rotations (Switching Partners)
+                                        </h3>
                                     </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div
+                                            onClick={() => setMode("americano")}
+                                            className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                                                mode === "americano"
+                                                    ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
+                                                    : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold">
+                                                    <Shuffle className="w-4 h-4" />
+                                                </div>
+                                                {mode === "americano" && (
+                                                    <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
+                                                )}
+                                            </div>
+                                            <h4 className="text-sm font-bold text-white mt-3">Americano</h4>
+                                            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                                Switch partners every round. All players play with and against each other on a unified leaderboard.
+                                            </p>
+                                        </div>
 
-                                    <div
-                                        onClick={() => setMode("team_battle")}
-                                        className={`cursor-pointer p-5 rounded-2xl border transition-all ${
-                                            mode === "team_battle"
-                                                ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
-                                                : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
-                                        }`}
-                                    >
-                                        <div className="flex items-start justify-between">
-                                            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center font-bold">
-                                                <Flame className="w-5 h-5" />
+                                        <div
+                                            onClick={() => setMode("mixicano")}
+                                            className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                                                mode === "mixicano"
+                                                    ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
+                                                    : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center font-bold">
+                                                    <Layers className="w-4 h-4" />
+                                                </div>
+                                                {mode === "mixicano" && (
+                                                    <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
+                                                )}
                                             </div>
-                                            {mode === "team_battle" && (
-                                                <Badge className="bg-amber-500 text-slate-950 font-bold">Selected</Badge>
-                                            )}
+                                            <h4 className="text-sm font-bold text-white mt-3">Mixicano (Left vs Right)</h4>
+                                            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                                Pairs 1 Left-court player with 1 Right-court player every round. Profile side preferences are automatically mapped.
+                                            </p>
                                         </div>
-                                        <h3 className="text-lg font-bold text-white mt-4">Team Battle (Alpha vs Beta)</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Two squads battle head-to-head across all courts. Individual scores sum towards each team’s grand victory.
-                                        </p>
+
+                                        <div
+                                            onClick={() => setMode("team_battle")}
+                                            className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                                                mode === "team_battle"
+                                                    ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
+                                                    : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between">
+                                                <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center font-bold">
+                                                    <Flame className="w-4 h-4" />
+                                                </div>
+                                                {mode === "team_battle" && (
+                                                    <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
+                                                )}
+                                            </div>
+                                            <h4 className="text-sm font-bold text-white mt-3">Team Battle (Alpha vs Beta)</h4>
+                                            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                                Two clubs or squads battle head-to-head across all courts. Individual scores roll up to squad victory.
+                                            </p>
+                                        </div>
                                     </div>
-                                </>
-                            ) : (
-                                <>
+                                </div>
+                            )}
+
+                            {/* Section 2: Fixed Team & Group Formats (Available for ALL events) */}
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Grid className="w-4 h-4 text-emerald-400" />
+                                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                                        Fixed Team & Bracket Formats {event?.unitType === "Players" ? "(Assigned in Step 3)" : ""}
+                                    </h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div
                                         onClick={() => setMode("round_robin")}
-                                        className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+                                        className={`cursor-pointer p-4 rounded-2xl border transition-all ${
                                             mode === "round_robin"
                                                 ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
                                                 : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
                                         }`}
                                     >
                                         <div className="flex items-start justify-between">
-                                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold">
-                                                <Grid className="w-5 h-5" />
+                                            <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold">
+                                                <Grid className="w-4 h-4" />
                                             </div>
                                             {mode === "round_robin" && (
-                                                <Badge className="bg-amber-500 text-slate-950 font-bold">Selected</Badge>
+                                                <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
                                             )}
                                         </div>
-                                        <h3 className="text-lg font-bold text-white mt-4">Round Robin (Groups)</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Fixed teams play against every other team in their group. Single-group mode preserves event registration order.
+                                        <h4 className="text-sm font-bold text-white mt-3">Round Robin (Groups)</h4>
+                                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                            Fixed teams play against every other team in their group. Supports single or multi-group stages.
                                         </p>
                                     </div>
 
                                     <div
                                         onClick={() => setMode("knockout")}
-                                        className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+                                        className={`cursor-pointer p-4 rounded-2xl border transition-all ${
                                             mode === "knockout"
                                                 ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
                                                 : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
                                         }`}
                                     >
                                         <div className="flex items-start justify-between">
-                                            <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold">
-                                                <Trophy className="w-5 h-5" />
+                                            <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold">
+                                                <Trophy className="w-4 h-4" />
                                             </div>
                                             {mode === "knockout" && (
-                                                <Badge className="bg-amber-500 text-slate-950 font-bold">Selected</Badge>
+                                                <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
                                             )}
                                         </div>
-                                        <h3 className="text-lg font-bold text-white mt-4">Knockout Cup (Single Elimination)</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Single elimination bracket with standard seeding, automatic bye advances, and optional 3rd place playoff match.
+                                        <h4 className="text-sm font-bold text-white mt-3">Knockout Cup</h4>
+                                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                            Single elimination bracket with standard seeding, automatic bye advances, and optional 3rd place match.
                                         </p>
                                     </div>
 
                                     <div
                                         onClick={() => setMode("round_robin_knockout")}
-                                        className={`cursor-pointer p-5 rounded-2xl border transition-all ${
+                                        className={`cursor-pointer p-4 rounded-2xl border transition-all ${
                                             mode === "round_robin_knockout"
                                                 ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
                                                 : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
                                         }`}
                                     >
                                         <div className="flex items-start justify-between">
-                                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
-                                                <Sparkles className="w-5 h-5" />
+                                            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
+                                                <Sparkles className="w-4 h-4" />
                                             </div>
                                             {mode === "round_robin_knockout" && (
-                                                <Badge className="bg-amber-500 text-slate-950 font-bold">Selected</Badge>
+                                                <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
                                             )}
                                         </div>
-                                        <h3 className="text-lg font-bold text-white mt-4">Round Robin + Knockout (Hybrid)</h3>
-                                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                            Group stage followed by bracket playoffs for top advancing teams. Automated qualifier synchronization.
+                                        <h4 className="text-sm font-bold text-white mt-3">Round Robin + Knockout</h4>
+                                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                            Group stage followed by bracket playoffs for top advancing teams. Automated qualifier progression.
                                         </p>
                                     </div>
-                                </>
-                            )}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="flex justify-between pt-4">
@@ -1062,14 +1406,24 @@ export default function TournamentCreatePage({
                         {/* Mixicano Left vs Right Pools */}
                         {mode === "mixicano" && (
                             <Card className="bg-slate-900 border-slate-800">
-                                <CardHeader className="pb-3 border-b border-slate-800">
-                                    <CardTitle className="text-base font-bold text-white flex items-center gap-2">
-                                        <Layers className="w-4 h-4 text-sky-400" />
-                                        Mixicano Side Mapping (Left vs Right)
-                                    </CardTitle>
-                                    <p className="text-xs text-slate-400 mt-0.5">
-                                        Automatically mapped based on profile side preference. You can reassign players between Left and Right anytime.
-                                    </p>
+                                <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-800 flex-wrap gap-2">
+                                    <div>
+                                        <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                                            <Layers className="w-4 h-4 text-sky-400" />
+                                            Mixicano Side Mapping (Left vs Right)
+                                        </CardTitle>
+                                        <p className="text-xs text-slate-400 mt-0.5">
+                                            Auto-mapped based on profile preferences (case-insensitive). You can reassign players or auto-balance anytime.
+                                        </p>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={handleAutoBalanceMixicano}
+                                        className="bg-slate-950 border-sky-500/40 text-sky-300 hover:bg-sky-500/20 text-xs h-8 font-medium"
+                                    >
+                                        <Scale className="w-3.5 h-3.5 mr-1.5" /> Auto-Balance Pools
+                                    </Button>
                                 </CardHeader>
                                 <CardContent className="p-4 space-y-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1080,23 +1434,44 @@ export default function TournamentCreatePage({
                                                 <Badge className="bg-sky-500/20 text-sky-300 text-[10px]">Backhand Side</Badge>
                                             </div>
                                             <div className="space-y-1.5 min-h-[100px]">
-                                                {leftPool.map((p) => (
-                                                    <div
-                                                        key={p.id}
-                                                        className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between"
-                                                    >
-                                                        <span className="text-slate-200 font-medium truncate">{p.name}</span>
-                                                        <button
-                                                            onClick={() => {
-                                                                setLeftPool((l) => l.filter((x) => x.id !== p.id));
-                                                                setRightPool((r) => [...r, p]);
-                                                            }}
-                                                            className="text-[10px] text-sky-400 hover:text-sky-300 ml-2"
+                                                {leftPool.length === 0 ? (
+                                                    <p className="text-[11px] text-slate-500 italic py-2 text-center">No players assigned to Left pool yet</p>
+                                                ) : (
+                                                    leftPool.map((p) => (
+                                                        <div
+                                                            key={p.id}
+                                                            className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between gap-1"
                                                         >
-                                                            Move Right →
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                                <span className="text-slate-200 font-medium truncate">{p.name}</span>
+                                                                <span className="text-[10px] text-sky-400/80 shrink-0">
+                                                                    ({p.preferredSide ? `${p.preferredSide}` : "Flex"})
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setLeftPool((l) => l.filter((x) => x.id !== p.id));
+                                                                        setUnassignedPool((u) => [...u, p]);
+                                                                    }}
+                                                                    className="text-[10px] text-slate-500 hover:text-slate-300 px-1 py-0.5 rounded"
+                                                                    title="Return to unassigned pool"
+                                                                >
+                                                                    Unassign
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setLeftPool((l) => l.filter((x) => x.id !== p.id));
+                                                                        setRightPool((r) => [...r, p]);
+                                                                    }}
+                                                                    className="text-[10px] text-sky-400 hover:text-sky-300 px-1.5 py-0.5 rounded bg-sky-500/10 hover:bg-sky-500/20"
+                                                                >
+                                                                    Move Right →
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
                                             </div>
                                         </div>
 
@@ -1107,23 +1482,44 @@ export default function TournamentCreatePage({
                                                 <Badge className="bg-emerald-500/20 text-emerald-300 text-[10px]">Forehand Side</Badge>
                                             </div>
                                             <div className="space-y-1.5 min-h-[100px]">
-                                                {rightPool.map((p) => (
-                                                    <div
-                                                        key={p.id}
-                                                        className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between"
-                                                    >
-                                                        <span className="text-slate-200 font-medium truncate">{p.name}</span>
-                                                        <button
-                                                            onClick={() => {
-                                                                setRightPool((r) => r.filter((x) => x.id !== p.id));
-                                                                setLeftPool((l) => [...l, p]);
-                                                            }}
-                                                            className="text-[10px] text-emerald-400 hover:text-emerald-300 ml-2"
+                                                {rightPool.length === 0 ? (
+                                                    <p className="text-[11px] text-slate-500 italic py-2 text-center">No players assigned to Right pool yet</p>
+                                                ) : (
+                                                    rightPool.map((p) => (
+                                                        <div
+                                                            key={p.id}
+                                                            className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between gap-1"
                                                         >
-                                                            ← Move Left
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                                <span className="text-slate-200 font-medium truncate">{p.name}</span>
+                                                                <span className="text-[10px] text-emerald-400/80 shrink-0">
+                                                                    ({p.preferredSide ? `${p.preferredSide}` : "Flex"})
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setRightPool((r) => r.filter((x) => x.id !== p.id));
+                                                                        setLeftPool((l) => [...l, p]);
+                                                                    }}
+                                                                    className="text-[10px] text-emerald-400 hover:text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20"
+                                                                >
+                                                                    ← Move Left
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setRightPool((r) => r.filter((x) => x.id !== p.id));
+                                                                        setUnassignedPool((u) => [...u, p]);
+                                                                    }}
+                                                                    className="text-[10px] text-slate-500 hover:text-slate-300 px-1 py-0.5 rounded"
+                                                                    title="Return to unassigned pool"
+                                                                >
+                                                                    Unassign
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1140,14 +1536,19 @@ export default function TournamentCreatePage({
                                                         key={p.id}
                                                         className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between"
                                                     >
-                                                        <span className="text-slate-300 truncate">{p.name}</span>
-                                                        <div className="flex gap-1.5">
+                                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                            <span className="text-slate-300 truncate">{p.name}</span>
+                                                            <span className="text-[10px] text-slate-500 shrink-0">
+                                                                ({p.preferredSide ? `${p.preferredSide}` : "Flexible"})
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex gap-1.5 shrink-0">
                                                             <button
                                                                 onClick={() => {
                                                                     setUnassignedPool((u) => u.filter((x) => x.id !== p.id));
                                                                     setLeftPool((l) => [...l, p]);
                                                                 }}
-                                                                className="px-2 py-0.5 bg-sky-500/20 text-sky-300 rounded text-[10px]"
+                                                                className="px-2 py-0.5 bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 rounded text-[10px] font-medium"
                                                             >
                                                                 + Left
                                                             </button>
@@ -1156,7 +1557,7 @@ export default function TournamentCreatePage({
                                                                     setUnassignedPool((u) => u.filter((x) => x.id !== p.id));
                                                                     setRightPool((r) => [...r, p]);
                                                                 }}
-                                                                className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[10px]"
+                                                                className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 rounded text-[10px] font-medium"
                                                             >
                                                                 + Right
                                                             </button>
@@ -1170,6 +1571,367 @@ export default function TournamentCreatePage({
                             </Card>
                         )}
 
+                        {/* Team & Pair Assignment Workspace (For Players Event running in Team Mode) */}
+                        {isTeamMode && event?.unitType === "Players" && (
+                            <Card className="bg-slate-900 border-amber-500/40 shadow-lg">
+                                <CardHeader className="pb-3 border-b border-slate-800 space-y-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                        <div>
+                                            <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                                                <Users className="w-5 h-5 text-amber-400" />
+                                                Team & Pair Assignment Workspace
+                                            </CardTitle>
+                                            <p className="text-xs text-slate-400 mt-0.5">
+                                                Assign individual registrants into 2-player teams for {mode.replace(/_/g, " ").toUpperCase()}.
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-xs px-2.5 py-1 font-semibold">
+                                                {customPlayerPairs.filter((p) => p.player1 && p.player2).length} Teams Formed
+                                            </Badge>
+                                            {unpairedPlayers.length > 0 && (
+                                                <Badge className="bg-slate-800 text-slate-300 border-slate-700 text-xs px-2.5 py-1">
+                                                    {unpairedPlayers.length} Unassigned
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Odd Count Alert */}
+                                    {activeParticipants.length % 2 !== 0 && (
+                                        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-300">
+                                            <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                                            <span>
+                                                <strong>Odd Participant Count ({activeParticipants.length} players selected):</strong> Fixed 2-player team formats require an even number of players. One player will remain unpaired unless you adjust confirmed roster selection.
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Quick Auto-Assignment Bar */}
+                                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                                        <span className="text-xs font-semibold text-slate-400">Auto-Pair:</span>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={autoPairSideBalanced}
+                                            className="bg-slate-950 border-sky-500/40 hover:bg-sky-500/20 text-sky-300 text-xs h-8"
+                                        >
+                                            <Scale className="w-3.5 h-3.5 mr-1.5 text-sky-400" /> Side-Balanced (Left + Right)
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={autoPairRandom}
+                                            className="bg-slate-950 border-slate-700 hover:border-slate-600 text-slate-200 text-xs h-8"
+                                        >
+                                            <Shuffle className="w-3.5 h-3.5 mr-1.5 text-purple-400" /> Random Shuffle
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={autoPairSequential}
+                                            className="bg-slate-950 border-slate-700 hover:border-slate-600 text-slate-200 text-xs h-8"
+                                        >
+                                            <Users className="w-3.5 h-3.5 mr-1.5 text-blue-400" /> Registration Order
+                                        </Button>
+                                        {customPlayerPairs.length > 0 && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={handleUnpairAll}
+                                                className="bg-slate-950 border-red-500/30 hover:bg-red-500/20 text-red-400 text-xs h-8 ml-auto"
+                                            >
+                                                <RotateCcw className="w-3.5 h-3.5 mr-1" /> Unpair All
+                                            </Button>
+                                        )}
+                                    </div>
+                                </CardHeader>
+
+                                <CardContent className="p-4 space-y-6">
+                                    {/* Formed Teams Grid */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                                Formed Teams ({customPlayerPairs.length})
+                                            </span>
+                                            {stagedUnassignedPlayerId && (
+                                                <span className="text-xs text-amber-400 font-medium animate-pulse">
+                                                    Click an open team slot or unassigned player to complete a pair
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {customPlayerPairs.length === 0 ? (
+                                            <div className="p-6 rounded-xl border border-dashed border-slate-800 text-center bg-slate-950/40">
+                                                <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                                                <p className="text-xs text-slate-400 font-medium">No teams formed yet.</p>
+                                                <p className="text-[11px] text-slate-500 mt-1">
+                                                    Use the Auto-Pair buttons above for instant pairing, or select an unassigned player below to form a team.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {customPlayerPairs.map((pair, pIdx) => {
+                                                    const isEditing = editingPairId === pair.id;
+                                                    const side1 = normalizePreferredSide(pair.player1.preferredSide);
+                                                    const side2 = pair.player2 ? normalizePreferredSide(pair.player2.preferredSide) : null;
+
+                                                    return (
+                                                        <div
+                                                            key={pair.id}
+                                                            className={`p-3 rounded-xl border transition-all ${
+                                                                pair.player2
+                                                                    ? "bg-slate-950/80 border-slate-800"
+                                                                    : "bg-amber-950/20 border-amber-500/40 ring-1 ring-amber-500/20"
+                                                            }`}
+                                                        >
+                                                            {/* Team Header */}
+                                                            <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-800/80">
+                                                                <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                                                                    <Badge className="bg-slate-900 border-slate-700 text-slate-300 text-[10px] shrink-0 font-mono">
+                                                                        #{pIdx + 1}
+                                                                    </Badge>
+                                                                    {isEditing ? (
+                                                                        <div className="flex items-center gap-1 flex-1">
+                                                                            <Input
+                                                                                value={editingPairName}
+                                                                                onChange={(e) => setEditingPairName(e.target.value)}
+                                                                                onKeyDown={(e) => {
+                                                                                    if (e.key === "Enter") {
+                                                                                        setCustomPlayerPairs((prev) =>
+                                                                                            prev.map((p) =>
+                                                                                                p.id === pair.id ? { ...p, name: editingPairName } : p
+                                                                                            )
+                                                                                        );
+                                                                                        setEditingPairId(null);
+                                                                                    }
+                                                                                }}
+                                                                                className="h-6 text-xs bg-slate-900 border-slate-700 py-0 px-2"
+                                                                                autoFocus
+                                                                            />
+                                                                            <Button
+                                                                                size="sm"
+                                                                                onClick={() => {
+                                                                                    setCustomPlayerPairs((prev) =>
+                                                                                        prev.map((p) =>
+                                                                                            p.id === pair.id ? { ...p, name: editingPairName } : p
+                                                                                        )
+                                                                                    );
+                                                                                    setEditingPairId(null);
+                                                                                }}
+                                                                                className="h-6 text-[10px] px-2 bg-amber-500 text-slate-950"
+                                                                            >
+                                                                                Save
+                                                                            </Button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-1.5 truncate">
+                                                                            <span className="text-xs font-bold text-slate-200 truncate">
+                                                                                {pair.name}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditingPairId(pair.id);
+                                                                                    setEditingPairName(pair.name);
+                                                                                }}
+                                                                                className="text-slate-500 hover:text-slate-300"
+                                                                                title="Rename Team"
+                                                                            >
+                                                                                <Edit2 className="w-3 h-3" />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleUnpairTeam(pair.id)}
+                                                                    className="text-[10px] text-red-400 hover:text-red-300 hover:underline shrink-0"
+                                                                >
+                                                                    Unpair
+                                                                </button>
+                                                            </div>
+
+                                                            {/* Slots */}
+                                                            <div className="space-y-1.5">
+                                                                {/* Player 1 Slot */}
+                                                                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 text-xs">
+                                                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                        <Avatar className="h-6 w-6 border border-slate-700 shrink-0">
+                                                                            <AvatarImage src={pair.player1.photoURL || undefined} />
+                                                                            <AvatarFallback className="bg-slate-800 text-[9px] text-slate-300">
+                                                                                {pair.player1.name?.charAt(0) || "P"}
+                                                                            </AvatarFallback>
+                                                                        </Avatar>
+                                                                        <span className="text-slate-200 font-medium truncate">
+                                                                            {pair.player1.name}
+                                                                        </span>
+                                                                        <Badge
+                                                                            className={`text-[9px] px-1.5 py-0 font-medium shrink-0 ${
+                                                                                side1 === "Left"
+                                                                                    ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                                                                                    : side1 === "Right"
+                                                                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                                                                    : "bg-slate-800 text-slate-400 border-slate-700"
+                                                                            }`}
+                                                                        >
+                                                                            {side1 || "Flexible"}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleRemovePlayerFromPair(pair.id, 1)}
+                                                                        className="text-slate-500 hover:text-red-400 p-0.5 rounded ml-1"
+                                                                        title="Remove player from team"
+                                                                    >
+                                                                        <X className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </div>
+
+                                                                {/* Player 2 Slot */}
+                                                                {pair.player2 ? (
+                                                                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 text-xs">
+                                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                            <Avatar className="h-6 w-6 border border-slate-700 shrink-0">
+                                                                                <AvatarImage src={pair.player2.photoURL || undefined} />
+                                                                                <AvatarFallback className="bg-slate-800 text-[9px] text-slate-300">
+                                                                                {pair.player2.name?.charAt(0) || "P"}
+                                                                                </AvatarFallback>
+                                                                            </Avatar>
+                                                                            <span className="text-slate-200 font-medium truncate">
+                                                                                {pair.player2.name}
+                                                                            </span>
+                                                                            <Badge
+                                                                                className={`text-[9px] px-1.5 py-0 font-medium shrink-0 ${
+                                                                                    side2 === "Left"
+                                                                                        ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                                                                                        : side2 === "Right"
+                                                                                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                                                                        : "bg-slate-800 text-slate-400 border-slate-700"
+                                                                                }`}
+                                                                            >
+                                                                                {side2 || "Flexible"}
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleRemovePlayerFromPair(pair.id, 2)}
+                                                                            className="text-slate-500 hover:text-red-400 p-0.5 rounded ml-1"
+                                                                            title="Remove player from team"
+                                                                        >
+                                                                            <X className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div
+                                                                        onClick={() => {
+                                                                            if (stagedUnassignedPlayerId) {
+                                                                                const candidate = activeParticipants.find(
+                                                                                    (p) => String(p.id) === stagedUnassignedPlayerId
+                                                                                );
+                                                                                if (candidate) {
+                                                                                    handleAssignPlayerToOpenSlot(pair.id, candidate);
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                        className={`p-2 rounded-lg border border-dashed flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer ${
+                                                                            stagedUnassignedPlayerId
+                                                                                ? "bg-amber-500/20 border-amber-400 text-amber-300 hover:bg-amber-500/30"
+                                                                                : "bg-slate-900/40 border-slate-800 text-slate-500 hover:border-slate-700"
+                                                                        }`}
+                                                                    >
+                                                                        <Plus className="w-3.5 h-3.5" />
+                                                                        <span>
+                                                                            {stagedUnassignedPlayerId
+                                                                                ? "Click to assign staged player here"
+                                                                                : "Open Slot (Pick player below)"}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Unassigned Players Pool */}
+                                    <div className="pt-2 border-t border-slate-800">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                                Unassigned Players ({unpairedPlayers.length})
+                                            </span>
+                                            {stagedUnassignedPlayerId && (
+                                                <button
+                                                    onClick={() => setStagedUnassignedPlayerId(null)}
+                                                    className="text-xs text-amber-400 hover:text-amber-300 underline"
+                                                >
+                                                    Cancel Staged Selection
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {unpairedPlayers.length === 0 ? (
+                                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2 text-xs text-emerald-300">
+                                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                                                <span>All {activeParticipants.length} selected players are assigned to teams!</span>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                                {unpairedPlayers.map((player) => {
+                                                    const isStaged = stagedUnassignedPlayerId === String(player.id);
+                                                    const side = normalizePreferredSide(player.preferredSide);
+
+                                                    return (
+                                                        <div
+                                                            key={player.id}
+                                                            onClick={() => handleSelectUnassignedPlayer(player)}
+                                                            className={`cursor-pointer p-2 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                                                                isStaged
+                                                                    ? "bg-amber-500/20 border-amber-400 ring-2 ring-amber-500/30"
+                                                                    : "bg-slate-950 border-slate-800 hover:border-slate-700"
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                <Avatar className="h-6 w-6 border border-slate-700 shrink-0">
+                                                                    <AvatarImage src={player.photoURL || undefined} />
+                                                                    <AvatarFallback className="bg-slate-800 text-[9px] text-slate-300">
+                                                                        {player.name?.charAt(0) || "P"}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <span className="text-xs text-slate-200 font-medium truncate">
+                                                                    {player.name}
+                                                                </span>
+                                                                <Badge
+                                                                    className={`text-[9px] px-1.5 py-0 font-medium shrink-0 ${
+                                                                        side === "Left"
+                                                                            ? "bg-sky-500/20 text-sky-300 border-sky-500/30"
+                                                                            : side === "Right"
+                                                                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                                                            : "bg-slate-800 text-slate-400 border-slate-700"
+                                                                    }`}
+                                                                >
+                                                                    {side || "Flexible"}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="shrink-0">
+                                                                {isStaged ? (
+                                                                    <Badge className="bg-amber-500 text-slate-950 text-[10px] font-bold">
+                                                                        Selected
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-amber-400 hover:underline font-medium">
+                                                                        + Pair
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
                         <div className="flex justify-between pt-4">
                             <Button
                                 variant="outline"
@@ -1179,7 +1941,24 @@ export default function TournamentCreatePage({
                                 <ArrowLeft className="w-4 h-4 mr-2" /> Back
                             </Button>
                             <Button
-                                onClick={() => setStep(4)}
+                                onClick={() => {
+                                    if (isTeamMode && event?.unitType === "Players") {
+                                        const incomplete = customPlayerPairs.some((p) => !p.player1 || !p.player2);
+                                        if (customPlayerPairs.length === 0) {
+                                            showToast("Please assign players into teams before configuring parameters. You can use Quick Auto-Pair or pair them manually.", "error");
+                                            return;
+                                        }
+                                        if (incomplete) {
+                                            showToast("Some teams have only 1 player. Please complete all teams before proceeding.", "error");
+                                            return;
+                                        }
+                                        if (unpairedPlayers.length > 0) {
+                                            showToast(`There are ${unpairedPlayers.length} unassigned player(s). Please pair them or deselect them from confirmed participants.`, "error");
+                                            return;
+                                        }
+                                    }
+                                    setStep(4);
+                                }}
                                 className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 h-11"
                             >
                                 Configure Parameters <ArrowRight className="w-4 h-4 ml-2" />
@@ -1415,7 +2194,7 @@ export default function TournamentCreatePage({
                                                                 <div className="flex items-center -space-x-1.5 shrink-0">
                                                                     {m.team1Photos?.map((photo, idx) => (
                                                                         <Avatar key={idx} className="h-5 w-5 border border-slate-900 shrink-0">
-                                                                            <AvatarImage src={photo} />
+                                                                            <AvatarImage src={photo || undefined} />
                                                                             <AvatarFallback className="text-[8px] bg-slate-800 text-slate-300 font-bold">
                                                                                 {m.team1Names?.[idx]?.charAt(0) || "P"}
                                                                             </AvatarFallback>
@@ -1430,7 +2209,7 @@ export default function TournamentCreatePage({
                                                                 <div className="flex items-center -space-x-1.5 shrink-0">
                                                                     {m.team2Photos?.map((photo, idx) => (
                                                                         <Avatar key={idx} className="h-5 w-5 border border-slate-900 shrink-0">
-                                                                            <AvatarImage src={photo} />
+                                                                            <AvatarImage src={photo || undefined} />
                                                                             <AvatarFallback className="text-[8px] bg-slate-800 text-slate-300 font-bold">
                                                                                 {m.team2Names?.[idx]?.charAt(0) || "P"}
                                                                             </AvatarFallback>

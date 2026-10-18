@@ -219,6 +219,13 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                 return;
             }
 
+            const parsedDate = new Date(formData.dateTime);
+            if (isNaN(parsedDate.getTime())) {
+                showToast("Please enter a valid date and time", "error");
+                setSaving(false);
+                return;
+            }
+
             const idToken = await currentUser.getIdToken();
             const res = await fetch("/api/admin/events/update", {
                 method: "POST",
@@ -231,7 +238,7 @@ export default function EditEventPage({ params }: { params: Promise<{ eventId: s
                     eventName: formData.eventName.trim(),
                     locationName: formData.locationName.trim(),
                     clubId: formData.clubId,
-                    dateTime: formData.dateTime,
+                    dateTime: parsedDate.toISOString(),
                     duration: formData.duration,
                     unitType: formData.unitType,
                     isPublic: formData.isPublic,

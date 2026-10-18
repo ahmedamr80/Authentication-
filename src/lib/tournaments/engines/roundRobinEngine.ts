@@ -73,6 +73,69 @@ export function solveRoundRobin(
         });
     });
 
+    // Optimal 8 Pairs, 4 Courts, 7 Rounds schedule
+    if (pairs.length === 8 && numCourts === 4 && resolvedNumGroups === 1 && resolvedCycles === 1) {
+        const matrix = [
+            [[0, 6], [2, 4], [3, 7], [1, 5]],
+            [[1, 3], [0, 7], [4, 6], [2, 5]],
+            [[5, 7], [1, 4], [3, 6], [0, 2]],
+            [[5, 6], [0, 3], [1, 2], [4, 7]],
+            [[6, 7], [4, 5], [0, 1], [2, 3]],
+            [[0, 4], [1, 7], [3, 5], [2, 6]],
+            [[2, 7], [1, 6], [0, 5], [3, 4]],
+        ];
+
+        const scheduleMatches: TournamentMatch[] = [];
+        matrix.forEach((round, rIdx) => {
+            round.forEach((courtSlots, cIdx) => {
+                const [p1Idx, p2Idx] = courtSlots;
+                const p1 = pairs[p1Idx];
+                const p2 = pairs[p2Idx];
+
+                scheduleMatches.push({
+                    matchId: `rr_group_1_r${rIdx + 1}_c${cIdx + 1}`,
+                    roundIdx: rIdx,
+                    courtIdx: cIdx,
+                    courtName: `Court ${cIdx + 1}`,
+                    stageId: "group",
+                    team1PlayerIds: p1.playerIds,
+                    team2PlayerIds: p2.playerIds,
+                    team1Names: p1.playerNames,
+                    team2Names: p2.playerNames,
+                    team1Photos: p1.playerPhotos ? p1.playerPhotos.map((ph) => ph || null) : [],
+                    team2Photos: p2.playerPhotos ? p2.playerPhotos.map((ph) => ph || null) : [],
+                    result: {
+                        scoreA: 0,
+                        scoreB: 0,
+                        status: "not_started",
+                        winner: null,
+                    },
+                });
+            });
+        });
+
+        const groupStage = {
+            stageId: "group",
+            stageType: "group",
+            stageOrder: 1,
+            groupIds: Object.keys(groupDict),
+            status: "active",
+        };
+
+        return {
+            tournamentId: Math.random().toString(36).substring(2, 10),
+            title: title || `Round Robin (8 Pairs, 4 Courts)`,
+            mode: "round_robin",
+            numCourts: 4,
+            numRounds: 7,
+            players,
+            pairs,
+            groups: groupList,
+            stages: [groupStage],
+            matches: scheduleMatches,
+        };
+    }
+
     interface RequiredMatch {
         gid: string;
         p1: TournamentPair;
@@ -222,8 +285,8 @@ export function solveRoundRobin(
                         team2PlayerIds: item.p2.playerIds,
                         team1Names: item.p1.playerNames,
                         team2Names: item.p2.playerNames,
-                        team1Photos: item.p1.playerPhotos,
-                        team2Photos: item.p2.playerPhotos,
+                        team1Photos: item.p1.playerPhotos ? item.p1.playerPhotos.map((ph) => ph || null) : [],
+                        team2Photos: item.p2.playerPhotos ? item.p2.playerPhotos.map((ph) => ph || null) : [],
                         result: {
                             scoreA: 0,
                             scoreB: 0,
@@ -251,8 +314,8 @@ export function solveRoundRobin(
                         team2PlayerIds: item.p2.playerIds,
                         team1Names: item.p1.playerNames,
                         team2Names: item.p2.playerNames,
-                        team1Photos: item.p1.playerPhotos,
-                        team2Photos: item.p2.playerPhotos,
+                        team1Photos: item.p1.playerPhotos ? item.p1.playerPhotos.map((ph) => ph || null) : [],
+                        team2Photos: item.p2.playerPhotos ? item.p2.playerPhotos.map((ph) => ph || null) : [],
                         result: {
                             scoreA: 0,
                             scoreB: 0,

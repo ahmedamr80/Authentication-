@@ -201,8 +201,8 @@ export function solveKnockout(
                 team2PlayerIds: pB ? pB.playerIds : [],
                 team1Names: pA ? pA.playerNames : [],
                 team2Names: pB ? pB.playerNames : [],
-                team1Photos: pA ? pA.playerPhotos : [],
-                team2Photos: pB ? pB.playerPhotos : [],
+                team1Photos: pA && pA.playerPhotos ? pA.playerPhotos.map((ph) => ph || null) : [],
+                team2Photos: pB && pB.playerPhotos ? pB.playerPhotos.map((ph) => ph || null) : [],
                 result: { scoreA: 0, scoreB: 0, status: "not_started", winner: null },
             });
         });
@@ -227,8 +227,8 @@ export function solveKnockout(
                     team2PlayerIds: pB ? pB.playerIds : [],
                     team1Names: pA ? pA.playerNames : [],
                     team2Names: pB ? pB.playerNames : [],
-                    team1Photos: pA ? pA.playerPhotos : [],
-                    team2Photos: pB ? pB.playerPhotos : [],
+                    team1Photos: pA && pA.playerPhotos ? pA.playerPhotos.map((ph) => ph || null) : [],
+                    team2Photos: pB && pB.playerPhotos ? pB.playerPhotos.map((ph) => ph || null) : [],
                     result: { scoreA: 0, scoreB: 0, status: "not_started", winner: null },
                 });
             });

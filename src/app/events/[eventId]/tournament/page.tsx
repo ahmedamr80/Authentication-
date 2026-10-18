@@ -27,6 +27,7 @@ import {
 } from "@/lib/tournaments/types";
 import { calculatePairStandings, calculatePlayerStandings } from "@/lib/tournaments/standingsCalculator";
 import { updateBracketProgression, syncQualifiersFromGroups } from "@/lib/tournaments/bracketManager";
+import { cleanForFirestore } from "@/lib/tournaments/firestoreUtils";
 import { BracketSlot } from "@/lib/tournaments/engines/knockoutEngine";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -204,7 +205,7 @@ export default function TournamentWorkspacePage({
     }, [tournament, matches]);
 
     // Helper to get player photo from profiles map or tournament document
-    const getPlayerPhoto = (playerIdOrUid: string | number, fallbackPhoto?: string) => {
+    const getPlayerPhoto = (playerIdOrUid: string | number, fallbackPhoto?: string | null) => {
         if (fallbackPhoto) return fallbackPhoto;
         const key = String(playerIdOrUid);
         const profile = userProfiles[key];
@@ -296,11 +297,11 @@ export default function TournamentWorkspacePage({
 
         try {
             const tRef = doc(db, "tournaments", tournament.id);
-            await updateDoc(tRef, {
+            await updateDoc(tRef, cleanForFirestore({
                 matches: updatedMatches,
                 bracketSlots: updatedBracket,
                 updatedAt: serverTimestamp(),
-            });
+            }));
         } catch (err: any) {
             console.error("Error saving match score:", err);
             showToast("Failed to save score update.", "error");
@@ -349,11 +350,11 @@ export default function TournamentWorkspacePage({
             );
 
             const tRef = doc(db, "tournaments", tournament.id);
-            await updateDoc(tRef, {
+            await updateDoc(tRef, cleanForFirestore({
                 bracketSlots: updatedSlots,
                 matches: updatedMatches,
                 updatedAt: serverTimestamp(),
-            });
+            }));
 
             setBracketSlots(updatedSlots);
             setMatches(updatedMatches);
@@ -429,11 +430,11 @@ export default function TournamentWorkspacePage({
             }
 
             const tRef = doc(db, "tournaments", tournament.id);
-            await updateDoc(tRef, {
+            await updateDoc(tRef, cleanForFirestore({
                 matches: resetMatches,
                 bracketSlots: resetSlots,
                 updatedAt: serverTimestamp(),
-            });
+            }));
 
             setMatches(resetMatches);
             setBracketSlots(resetSlots);
@@ -945,7 +946,7 @@ export default function TournamentWorkspacePage({
                                     </thead>
                                     <tbody className="divide-y divide-slate-800/80">
                                         {(tournament.unitType === "teams" ? pairStandings : playerStandings).map((row) => {
-                                            const competitorPhotos: (string | undefined)[] =
+                                            const competitorPhotos: (string | null | undefined)[] =
                                                 tournament.unitType === "teams"
                                                     ? row.playerPhotos && row.playerPhotos.length > 0
                                                         ? row.playerPhotos
@@ -969,7 +970,7 @@ export default function TournamentWorkspacePage({
                                                             <div className="flex items-center -space-x-2 shrink-0">
                                                                 {competitorPhotos.map((photo, pIdx) => (
                                                                     <Avatar key={pIdx} className="h-7 w-7 border-2 border-slate-900 z-10 shrink-0">
-                                                                        <AvatarImage src={photo} alt={row.name} />
+                                                                        <AvatarImage src={photo || undefined} alt={row.name} />
                                                                         <AvatarFallback className="bg-slate-800 text-slate-300 text-[10px] font-bold">
                                                                             {row.name?.charAt(0) || "P"}
                                                                         </AvatarFallback>
@@ -1076,7 +1077,7 @@ export default function TournamentWorkspacePage({
                                                                     <div className="flex items-center -space-x-1.5 shrink-0">
                                                                         {getPlayerPhotosForPair(pairA.pairId).map((photo, pIdx) => (
                                                                             <Avatar key={pIdx} className="h-6 w-6 border border-slate-900 z-10 shrink-0">
-                                                                                <AvatarImage src={photo} alt={pairA.pairName} />
+                                                                                <AvatarImage src={photo || undefined} alt={pairA.pairName} />
                                                                                 <AvatarFallback className="bg-slate-800 text-slate-300 text-[9px] font-bold">
                                                                                     {pairA.pairName?.charAt(0) || "P"}
                                                                                 </AvatarFallback>
@@ -1101,7 +1102,7 @@ export default function TournamentWorkspacePage({
                                                                     <div className="flex items-center -space-x-1.5 shrink-0">
                                                                         {getPlayerPhotosForPair(pairB.pairId).map((photo, pIdx) => (
                                                                             <Avatar key={pIdx} className="h-6 w-6 border border-slate-900 z-10 shrink-0">
-                                                                                <AvatarImage src={photo} alt={pairB.pairName} />
+                                                                                <AvatarImage src={photo || undefined} alt={pairB.pairName} />
                                                                                 <AvatarFallback className="bg-slate-800 text-slate-300 text-[9px] font-bold">
                                                                                     {pairB.pairName?.charAt(0) || "P"}
                                                                                 </AvatarFallback>
