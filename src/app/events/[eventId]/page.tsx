@@ -26,7 +26,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { EventTermsSection } from "@/components/EventTermsSection";
 import { EligibilityGateDialog } from "@/components/EligibilityGateDialog";
 import { checkPlayerEligibility } from "@/lib/authRequirements";
-import { getTimestampMillis } from "@/lib/date-utils";
+import { getTimestampMillis, parseFirebaseDate } from "@/lib/date-utils";
 
 import { LateWithdrawalWarningDialog } from "@/components/LateWithdrawalWarningDialog";
 
@@ -1166,7 +1166,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                         <Calendar className="h-3 w-3" /> Date
                                     </div>
                                     <div className="text-sm sm:text-base font-semibold text-white">
-                                        {event.eventDate ? format(event.eventDate.toDate(), "MMM d, yyyy") : "TBD"}
+                                        {(() => {
+                                            const d = parseFirebaseDate(event.eventDate || event.dateTime);
+                                            return d ? format(d, "MMM d, yyyy") : "TBD";
+                                        })()}
                                     </div>
                                 </div>
                                 <div className="bg-gray-950/50 p-3 sm:p-4 rounded-xl border border-gray-800">
@@ -1174,7 +1177,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ eventId:
                                         <Clock className="h-3 w-3" /> Time
                                     </div>
                                     <div className="text-sm sm:text-base font-semibold text-white">
-                                        {event.eventDate ? format(event.eventDate.toDate(), "h:mm a") : "TBD"}
+                                        {(() => {
+                                            const d = parseFirebaseDate(event.eventDate || event.dateTime);
+                                            return d ? format(d, "h:mm a") : "TBD";
+                                        })()}
                                         {event.duration && <span className="text-gray-500 text-[10px] sm:text-xs ml-1">({event.duration}m)</span>}
                                     </div>
                                 </div>
