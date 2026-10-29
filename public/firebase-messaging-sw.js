@@ -1,7 +1,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'ewp-cache-v5'; // Increment version for updates
+const CACHE_NAME = 'ewp-cache-v6'; // Increment version for updates
 const isLocalhost = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 const STATIC_ASSETS = [
     '/',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(request.url);
 
     // In local development, bypass SW cache completely for _next/ assets to avoid stale hot-reloads
-    if (isLocalhost && url.pathname.startsWith('/_next/')) {
+    if (isLocalhost) {
         return;
     }
 

@@ -128,11 +128,15 @@ export async function registerSoloTeamEvent(
 
         if (regSnap.exists) {
             const regData = regSnap.data() || {};
-            // Single commitment rule: cannot register if already confirmed or waitlisted
-            if (regData.status === "CONFIRMED" || regData.status === "WAITLIST") {
+            // Single commitment rule: cannot register if already confirmed or waitlisted in a team
+            if (
+                (regData.status === "CONFIRMED" || regData.status === "WAITLIST") &&
+                regData.teamId &&
+                !regData.lookingForPartner
+            ) {
                 return { success: false, error: "You already have an active commitment in this event." };
             }
-            if (regData.status === "PENDING" && !regData.teamId) {
+            if ((regData.status === "PENDING" || regData.lookingForPartner === true) && !regData.teamId) {
                 // Idempotent return for active free agent
                 return {
                     success: true,
@@ -280,7 +284,11 @@ export async function sendTeamInvitation(
         const inviterRegSnap = await tx.get(inviterRegRef);
         if (inviterRegSnap.exists) {
             const regData = inviterRegSnap.data() || {};
-            if (regData.status === "CONFIRMED" || regData.status === "WAITLIST") {
+            if (
+                (regData.status === "CONFIRMED" || regData.status === "WAITLIST") &&
+                regData.teamId &&
+                !regData.lookingForPartner
+            ) {
                 return { success: false, error: "You are already committed to an existing team." };
             }
         }
@@ -291,7 +299,11 @@ export async function sendTeamInvitation(
         const inviteeRegSnap = await tx.get(inviteeRegRef);
         if (inviteeRegSnap.exists) {
             const regData = inviteeRegSnap.data() || {};
-            if (regData.status === "CONFIRMED" || regData.status === "WAITLIST") {
+            if (
+                (regData.status === "CONFIRMED" || regData.status === "WAITLIST") &&
+                regData.teamId &&
+                !regData.lookingForPartner
+            ) {
                 return { success: false, error: "The invited player is already committed to another team." };
             }
         }

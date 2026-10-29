@@ -127,7 +127,10 @@ export function usePlayerSearch(options: UsePlayerSearchOptions = {}) {
                 const committedIds = new Set<string>();
                 regsSnapshot.docs.forEach((docSnap) => {
                     const regData = docSnap.data();
-                    if (regData.status === "CONFIRMED" || regData.status === "WAITLIST") {
+                    if (
+                        (regData.status === "CONFIRMED" || regData.status === "WAITLIST") &&
+                        !regData.lookingForPartner
+                    ) {
                         if (regData.playerId) committedIds.add(regData.playerId);
                         if (regData.player2Id) committedIds.add(regData.player2Id);
                     }
