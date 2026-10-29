@@ -1,4 +1,11 @@
-import { TournamentMatch, TournamentMode, TournamentPair, TournamentParticipant, TournamentTemplate } from "./types";
+import {
+    TournamentMatch,
+    TournamentMode,
+    TournamentPair,
+    TournamentParticipant,
+    TournamentTemplate,
+    createInitialSets,
+} from "./types";
 import { solveAmericano } from "./engines/americanoEngine";
 import { solveMixicano } from "./engines/mixicanoEngine";
 import { solveTeamBattle } from "./engines/teamBattleEngine";
@@ -11,6 +18,7 @@ export interface TournamentGenerationParams {
     title: string;
     numCourts: number;
     numRounds?: number;
+    numberOfSets?: 1 | 3 | 5;
     cycles?: 1 | 2;
     numGroups?: number;
     qualifiersPerGroup?: number;
@@ -46,6 +54,66 @@ export interface GeneratedTournamentResult {
     isFromTemplate: boolean;
     classification?: string;
     metrics?: Record<string, any>;
+}
+
+/**
+ * Resolves a deterministic team ID for a match side using the pair list (if pair mode)
+ * or fallback to the player IDs on that side.
+ */
+function resolveSideTeamId(
+    sidePlayerIds: (string | number)[],
+    explicitPairId: string | null | undefined,
+    pairs?: TournamentPair[]
+): string | null {
+    if (explicitPairId) return explicitPairId;
+    const normalizedSideIds = sidePlayerIds.map((pid) => String(pid));
+    if (pairs && pairs.length > 0 && normalizedSideIds.length > 0) {
+        const matchedPair = pairs.find((pair) =>
+            pair.playerIds.some((pid) => normalizedSideIds.includes(String(pid)))
+        );
+        if (matchedPair) return matchedPair.pairId;
+    }
+    if (normalizedSideIds.length === 1) return normalizedSideIds[0];
+    if (normalizedSideIds.length >= 2) return normalizedSideIds.join("__");
+    return null;
+}
+
+/**
+ * Enriches generated matches with tournamentId, teamAId, teamBId, and initial sets.
+ */
+function enrichGeneratedMatches(
+    result: GeneratedTournamentResult,
+    numberOfSets: 1 | 3 | 5 = 1
+): GeneratedTournamentResult {
+    const pairs = result.pairs;
+    const enrichedMatches: TournamentMatch[] = result.matches.map((m) => {
+        const teamAId = resolveSideTeamId(m.team1PlayerIds || [], m.pairAId || m.teamAId, pairs);
+        const teamBId = resolveSideTeamId(m.team2PlayerIds || [], m.pairBId || m.teamBId, pairs);
+        const initialSets = createInitialSets(numberOfSets);
+        return {
+            ...m,
+            tournamentId: result.tournamentId,
+            teamAId,
+            teamBId,
+            sets: m.sets && m.sets.length > 0 ? m.sets : initialSets,
+            winnerTeamId: m.winnerTeamId ?? null,
+            loserTeamId: m.loserTeamId ?? null,
+            isDraw: m.isDraw ?? false,
+            result: {
+                ...m.result,
+                status: m.result?.status || "NOT_STARTED",
+                sets: m.result?.sets && m.result.sets.length > 0 ? m.result.sets : initialSets,
+                winnerTeamId: m.result?.winnerTeamId ?? null,
+                loserTeamId: m.result?.loserTeamId ?? null,
+                isDraw: m.result?.isDraw ?? false,
+            },
+        };
+    });
+
+    return {
+        ...result,
+        matches: enrichedMatches,
+    };
 }
 
 /**
@@ -234,6 +302,7 @@ export function generateTournamentSchedule(
         title,
         numCourts,
         numRounds,
+        numberOfSets = 1,
         cycles,
         numGroups,
         qualifiersPerGroup,
@@ -340,6 +409,10 @@ export function generateTournamentSchedule(
                     courtIdx: m.courtIdx,
                     courtName: `Court ${m.courtIdx + 1}`,
                     stageId: "group",
+                    pairAId: pairA?.pairId ?? null,
+                    pairBId: pairB?.pairId ?? null,
+                    teamAId: pairA?.pairId ?? null,
+                    teamBId: pairB?.pairId ?? null,
                     team1PlayerIds: pairA && Array.isArray(pairA.playerIds) ? pairA.playerIds : [m.sideASlots[0]],
                     team2PlayerIds: pairB && Array.isArray(pairB.playerIds) ? pairB.playerIds : [m.sideBSlots[0]],
                     team1Names: pairA && Array.isArray(pairA.playerNames) ? pairA.playerNames : [`Pair ${pAIndex + 1}`],
@@ -349,7 +422,7 @@ export function generateTournamentSchedule(
                     result: {
                         scoreA: 0,
                         scoreB: 0,
-                        status: "not_started",
+                        status: "NOT_STARTED",
                         winner: null,
                     },
                 };
@@ -382,21 +455,24 @@ export function generateTournamentSchedule(
                 }
             });
 
-            return {
-                tournamentId: Math.random().toString(36).substring(2, 10),
-                title,
-                mode: mode === "round_robin" ? "round_robin" : mode,
-                numCourts,
-                numRounds: matchedFirestoreTemplate.roundCount,
-                players: participants.length > 0 ? participants : playersList,
-                pairs: resolvedPairs,
-                groups: groupList,
-                stages: [groupStage],
-                matches: scheduleMatches,
-                templateId: matchedFirestoreTemplate.templateId,
-                isFromTemplate: true,
-                classification: "PERFECT",
-            };
+            return enrichGeneratedMatches(
+                {
+                    tournamentId: Math.random().toString(36).substring(2, 10),
+                    title,
+                    mode: mode === "round_robin" ? "round_robin" : mode,
+                    numCourts,
+                    numRounds: matchedFirestoreTemplate.roundCount,
+                    players: participants.length > 0 ? participants : playersList,
+                    pairs: resolvedPairs,
+                    groups: groupList,
+                    stages: [groupStage],
+                    matches: scheduleMatches,
+                    templateId: matchedFirestoreTemplate.templateId,
+                    isFromTemplate: true,
+                    classification: "PERFECT",
+                },
+                numberOfSets
+            );
         }
 
         const activePlayers =
@@ -428,24 +504,27 @@ export function generateTournamentSchedule(
                 result: {
                     scoreA: 0,
                     scoreB: 0,
-                    status: "not_started",
+                    status: "NOT_STARTED",
                     winner: null,
                 },
             };
         });
 
-        return {
-            tournamentId: Math.random().toString(36).substring(2, 10),
-            title,
-            mode,
-            numCourts,
-            numRounds: matchedFirestoreTemplate.roundCount,
-            players: activePlayers,
-            matches: scheduleMatches,
-            templateId: matchedFirestoreTemplate.templateId,
-            isFromTemplate: true,
-            classification: "PERFECT",
-        };
+        return enrichGeneratedMatches(
+            {
+                tournamentId: Math.random().toString(36).substring(2, 10),
+                title,
+                mode,
+                numCourts,
+                numRounds: matchedFirestoreTemplate.roundCount,
+                players: activePlayers,
+                matches: scheduleMatches,
+                templateId: matchedFirestoreTemplate.templateId,
+                isFromTemplate: true,
+                classification: "PERFECT",
+            },
+            numberOfSets
+        );
     }
 
     // Try Builtin Templates (e.g. Americano 8p 2c 7r, Mixicano 16p 4c 8r)
@@ -482,25 +561,28 @@ export function generateTournamentSchedule(
                         result: {
                             scoreA: 0,
                             scoreB: 0,
-                            status: "not_started",
+                            status: "NOT_STARTED",
                             winner: null,
                         },
                     });
                 });
             });
 
-            return {
-                tournamentId: Math.random().toString(36).substring(2, 10),
-                title,
-                mode,
-                numCourts,
-                numRounds: matrix.length,
-                players: activePlayers,
-                matches: scheduleMatches,
-                templateId: `builtin_${builtinKey}`,
-                isFromTemplate: true,
-                classification: "PERFECT",
-            };
+            return enrichGeneratedMatches(
+                {
+                    tournamentId: Math.random().toString(36).substring(2, 10),
+                    title,
+                    mode,
+                    numCourts,
+                    numRounds: matrix.length,
+                    players: activePlayers,
+                    matches: scheduleMatches,
+                    templateId: `builtin_${builtinKey}`,
+                    isFromTemplate: true,
+                    classification: "PERFECT",
+                },
+                numberOfSets
+            );
         }
     }
 
@@ -508,44 +590,59 @@ export function generateTournamentSchedule(
     switch (mode) {
         case "americano": {
             const res = solveAmericano(participants.length, numCourts, numRounds, title, participants);
-            return {
-                ...res,
-                isFromTemplate: false,
-            };
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
         }
 
         case "mixicano": {
             const res = solveMixicano(numCourts, numRounds, title, leftParticipants, rightParticipants);
-            return {
-                ...res,
-                isFromTemplate: false,
-            };
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
         }
 
         case "team_battle": {
             const res = solveTeamBattle(numCourts, numRounds, title, teamAParticipants, teamBParticipants);
-            return {
-                ...res,
-                isFromTemplate: false,
-            };
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
         }
 
         case "round_robin": {
             const res = solveRoundRobin(pairs, numCourts, numGroups, cycles, title);
             if (!res) throw new Error("Could not solve Round Robin tournament with given pairs.");
-            return {
-                ...res,
-                isFromTemplate: false,
-            };
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
         }
 
         case "knockout": {
             const res = solveKnockout(pairs, numCourts, thirdPlacePlayoff, title);
             if (!res) throw new Error("Could not solve Knockout tournament with given pairs.");
-            return {
-                ...res,
-                isFromTemplate: false,
-            };
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
         }
 
         case "round_robin_knockout": {
@@ -559,10 +656,13 @@ export function generateTournamentSchedule(
                 title
             );
             if (!res) throw new Error("Could not solve Round Robin + Knockout tournament with given pairs.");
-            return {
-                ...res,
-                isFromTemplate: false,
-            };
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
         }
 
         default:

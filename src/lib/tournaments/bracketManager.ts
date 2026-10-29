@@ -1,5 +1,5 @@
 import { BracketSlot } from "./engines/knockoutEngine";
-import { TournamentMatch, TournamentPair } from "./types";
+import { TournamentMatch, TournamentPair, isMatchClosed } from "./types";
 import { calculatePairStandings } from "./standingsCalculator";
 
 export function updateBracketProgression(
@@ -16,12 +16,16 @@ export function updateBracketProgression(
             // 1. Check match result
             if (slot.matchId) {
                 const m = matches.find((x) => x.matchId === slot.matchId);
-                if (m && (m.result.status === "completed" || m.result.status === "walkover")) {
-                    if (m.result.scoreA > m.result.scoreB || m.result.winner === "Side A") {
+                if (m && isMatchClosed(m.result.status)) {
+                    if (m.result.winner === "Side A" || (!m.result.winner && m.result.scoreA > m.result.scoreB)) {
                         slot.winnerPairId = slot.resolvedPairAId;
-                    } else if (m.result.scoreB > m.result.scoreA || m.result.winner === "Side B") {
+                    } else if (m.result.winner === "Side B" || (!m.result.winner && m.result.scoreB > m.result.scoreA)) {
                         slot.winnerPairId = slot.resolvedPairBId;
+                    } else {
+                        slot.winnerPairId = null;
                     }
+                } else if (m && !isMatchClosed(m.result.status)) {
+                    slot.winnerPairId = null;
                 }
             }
 
@@ -72,10 +76,14 @@ export function updateBracketProgression(
                 const pairA = pairs.find((p) => p.pairId === slot.resolvedPairAId);
                 const pairB = pairs.find((p) => p.pairId === slot.resolvedPairBId);
                 if (m && pairA && pairB) {
+                    m.teamAId = pairA.pairId;
+                    m.teamBId = pairB.pairId;
                     m.team1PlayerIds = pairA.playerIds;
                     m.team2PlayerIds = pairB.playerIds;
                     m.team1Names = pairA.playerNames;
                     m.team2Names = pairB.playerNames;
+                    m.team1Photos = pairA.playerPhotos;
+                    m.team2Photos = pairB.playerPhotos;
                 }
             }
         });

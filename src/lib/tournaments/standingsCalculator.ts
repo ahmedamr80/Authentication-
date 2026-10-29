@@ -1,8 +1,57 @@
-import { TournamentDocument, TournamentMatch, TournamentPair, TournamentParticipant, TournamentStandingsEntry } from "./types";
+import {
+    TournamentMatch,
+    TournamentPair,
+    TournamentParticipant,
+    TournamentStandingsEntry,
+    evaluateMatchSets,
+    isMatchClosed,
+} from "./types";
+
+/**
+ * Helper to extract effective match games, sets won, and winner for a closed match.
+ */
+function extractClosedMatchMetrics(m: TournamentMatch) {
+    const res = m.result;
+    const hasCustomSets = Array.isArray(res?.sets) && res.sets.length > 0;
+
+    if (hasCustomSets) {
+        const numSets = (res.sets!.length === 5 ? 5 : res.sets!.length === 3 ? 3 : 1) as 1 | 3 | 5;
+        const evalRes = evaluateMatchSets(res.sets, numSets, m.teamAId, m.teamBId);
+        const winner = res.winner || evalRes.winner;
+        const isDraw = res.isDraw !== undefined ? res.isDraw : winner === "Draw";
+        return {
+            gamesA: evalRes.totalGamesA,
+            gamesB: evalRes.totalGamesB,
+            setsA: evalRes.setsWonA,
+            setsB: evalRes.setsWonB,
+            winner,
+            isDraw,
+        };
+    }
+
+    const sA = Number(res?.scoreA) || 0;
+    const sB = Number(res?.scoreB) || 0;
+    let winner = res?.winner || null;
+    if (!winner) {
+        if (sA > sB) winner = "Side A";
+        else if (sB > sA) winner = "Side B";
+        else winner = "Draw";
+    }
+    const isDraw = res?.isDraw !== undefined ? res.isDraw : winner === "Draw";
+
+    return {
+        gamesA: sA,
+        gamesB: sB,
+        setsA: winner === "Side A" ? 1 : 0,
+        setsB: winner === "Side B" ? 1 : 0,
+        winner,
+        isDraw,
+    };
+}
 
 /**
  * Calculates individual player standings (for Americano, Mixicano, and individual rankings).
- * Evaluates points, wins, draws, losses, games for, games against, diff, and walkovers conceded.
+ * Evaluates points, wins, draws, losses, games for, games against, diff, sets diff, and walkovers conceded.
  */
 export function calculatePlayerStandings(
     players: TournamentParticipant[],
@@ -15,6 +64,7 @@ export function calculatePlayerStandings(
         entries[String(p.id)] = {
             id: p.id,
             name: p.name,
+            photoURL: p.photoURL || undefined,
             groupId: p.group || "ALL",
             points: 0,
             played: 0,
@@ -24,6 +74,9 @@ export function calculatePlayerStandings(
             gf: 0,
             ga: 0,
             diff: 0,
+            setsWon: 0,
+            setsLost: 0,
+            setsDiff: 0,
             walkoversConceded: 0,
             rank: 1,
         };
@@ -31,27 +84,29 @@ export function calculatePlayerStandings(
 
     matches.forEach((m) => {
         const res = m.result;
-        if (!res || (res.status !== "completed" && res.status !== "walkover")) return;
+        if (!res || !isMatchClosed(res.status)) return;
 
-        const sA = res.scoreA || 0;
-        const sB = res.scoreB || 0;
+        const { gamesA, gamesB, setsA, setsB, winner, isDraw } = extractClosedMatchMetrics(m);
 
         m.team1PlayerIds.forEach((id) => {
             const e = entries[String(id)];
             if (!e) return;
             e.played++;
-            e.gf += sA;
-            e.ga += sB;
-            if (sA > sB || res.winner === "Side A") {
+            e.gf += gamesA;
+            e.ga += gamesB;
+            e.setsWon = (e.setsWon || 0) + setsA;
+            e.setsLost = (e.setsLost || 0) + setsB;
+
+            if (winner === "Side A" && !isDraw) {
                 e.wins++;
                 e.points += 3;
-            } else if (sA === sB && res.winner === "Draw") {
+            } else if (isDraw || winner === "Draw") {
                 e.draws++;
                 e.points += 1;
             } else {
                 e.losses++;
             }
-            if (res.status === "walkover" && res.winner === "Side B") {
+            if (res.status === "walkover" && winner === "Side B") {
                 e.walkoversConceded++;
             }
         });
@@ -60,18 +115,21 @@ export function calculatePlayerStandings(
             const e = entries[String(id)];
             if (!e) return;
             e.played++;
-            e.gf += sB;
-            e.ga += sA;
-            if (sB > sA || res.winner === "Side B") {
+            e.gf += gamesB;
+            e.ga += gamesA;
+            e.setsWon = (e.setsWon || 0) + setsB;
+            e.setsLost = (e.setsLost || 0) + setsA;
+
+            if (winner === "Side B" && !isDraw) {
                 e.wins++;
                 e.points += 3;
-            } else if (sA === sB && res.winner === "Draw") {
+            } else if (isDraw || winner === "Draw") {
                 e.draws++;
                 e.points += 1;
             } else {
                 e.losses++;
             }
-            if (res.status === "walkover" && res.winner === "Side A") {
+            if (res.status === "walkover" && winner === "Side A") {
                 e.walkoversConceded++;
             }
         });
@@ -82,12 +140,16 @@ export function calculatePlayerStandings(
         list = list.filter((e) => e.groupId === filterGroup);
     }
 
-    list.forEach((e) => (e.diff = e.gf - e.ga));
+    list.forEach((e) => {
+        e.diff = e.gf - e.ga;
+        e.setsDiff = (e.setsWon || 0) - (e.setsLost || 0);
+    });
 
-    // 8-Tier Sorting
+    // Multi-Tier Sorting (Points -> Wins -> Sets Diff -> Games Diff -> GF -> Walkovers -> ID)
     list.sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         if (b.wins !== a.wins) return b.wins - a.wins;
+        if ((b.setsDiff || 0) !== (a.setsDiff || 0)) return (b.setsDiff || 0) - (a.setsDiff || 0);
         if (b.diff !== a.diff) return b.diff - a.diff;
         if (b.gf !== a.gf) return b.gf - a.gf;
         if (a.walkoversConceded !== b.walkoversConceded) return a.walkoversConceded - b.walkoversConceded;
@@ -117,6 +179,7 @@ export function calculatePairStandings(
             name: p.pairName,
             pairId: p.pairId,
             pairName: p.pairName,
+            playerPhotos: (p.playerPhotos || []).map((ph) => ph || undefined),
             groupId: p.groupId || "Group A",
             points: 0,
             played: 0,
@@ -126,6 +189,9 @@ export function calculatePairStandings(
             gf: 0,
             ga: 0,
             diff: 0,
+            setsWon: 0,
+            setsLost: 0,
+            setsDiff: 0,
             walkoversConceded: 0,
             rank: 1,
         };
@@ -135,50 +201,53 @@ export function calculatePairStandings(
         // Exclude knockout matches from round robin group standings
         if (m.matchId && m.matchId.startsWith("ko_")) return;
         const res = m.result;
-        if (!res || (res.status !== "completed" && res.status !== "walkover")) return;
+        if (!res || !isMatchClosed(res.status)) return;
 
-        const sA = res.scoreA || 0;
-        const sB = res.scoreB || 0;
+        const { gamesA, gamesB, setsA, setsB, winner, isDraw } = extractClosedMatchMetrics(m);
 
-        const pairA = pairs.find(
-            (p) => p.playerIds && p.playerIds.every((pid) => m.team1PlayerIds.includes(pid))
-        );
-        const pairB = pairs.find(
-            (p) => p.playerIds && p.playerIds.every((pid) => m.team2PlayerIds.includes(pid))
-        );
+        const pairA =
+            (m.teamAId && pairs.find((p) => p.pairId === m.teamAId)) ||
+            pairs.find((p) => p.playerIds && p.playerIds.every((pid) => m.team1PlayerIds.includes(pid)));
+        const pairB =
+            (m.teamBId && pairs.find((p) => p.pairId === m.teamBId)) ||
+            pairs.find((p) => p.playerIds && p.playerIds.every((pid) => m.team2PlayerIds.includes(pid)));
 
         if (pairA && entries[pairA.pairId]) {
             const e = entries[pairA.pairId];
             e.played++;
-            e.gf += sA;
-            e.ga += sB;
-            if (sA > sB || res.winner === "Side A") {
+            e.gf += gamesA;
+            e.ga += gamesB;
+            e.setsWon = (e.setsWon || 0) + setsA;
+            e.setsLost = (e.setsLost || 0) + setsB;
+            if (winner === "Side A" && !isDraw) {
                 e.wins++;
                 e.points += 3;
-            } else if (sA === sB && res.winner === "Draw") {
+            } else if (isDraw || winner === "Draw") {
                 e.draws++;
                 e.points += 1;
             } else {
                 e.losses++;
             }
-            if (res.status === "walkover" && res.winner === "Side B") e.walkoversConceded++;
+            if (res.status === "walkover" && winner === "Side B") e.walkoversConceded++;
         }
 
         if (pairB && entries[pairB.pairId]) {
             const e = entries[pairB.pairId];
             e.played++;
-            e.gf += sB;
-            e.ga += sA;
-            if (sB > sA || res.winner === "Side B") {
+            e.gf += gamesB;
+            e.ga += gamesA;
+            e.setsWon = (e.setsWon || 0) + setsB;
+            e.setsLost = (e.setsLost || 0) + setsA;
+            if (winner === "Side B" && !isDraw) {
                 e.wins++;
                 e.points += 3;
-            } else if (sA === sB && res.winner === "Draw") {
+            } else if (isDraw || winner === "Draw") {
                 e.draws++;
                 e.points += 1;
             } else {
                 e.losses++;
             }
-            if (res.status === "walkover" && res.winner === "Side A") e.walkoversConceded++;
+            if (res.status === "walkover" && winner === "Side A") e.walkoversConceded++;
         }
     });
 
@@ -187,11 +256,15 @@ export function calculatePairStandings(
         list = list.filter((e) => e.groupId === filterGroupId);
     }
 
-    list.forEach((e) => (e.diff = e.gf - e.ga));
+    list.forEach((e) => {
+        e.diff = e.gf - e.ga;
+        e.setsDiff = (e.setsWon || 0) - (e.setsLost || 0);
+    });
 
     list.sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         if (b.wins !== a.wins) return b.wins - a.wins;
+        if ((b.setsDiff || 0) !== (a.setsDiff || 0)) return (b.setsDiff || 0) - (a.setsDiff || 0);
         if (b.diff !== a.diff) return b.diff - a.diff;
         if (b.gf !== a.gf) return b.gf - a.gf;
 
@@ -199,7 +272,7 @@ export function calculatePairStandings(
         const h2hMatches = matches.filter((m) => {
             if (m.matchId && m.matchId.startsWith("ko_")) return false;
             const res = m.result;
-            if (!res || (res.status !== "completed" && res.status !== "walkover")) return false;
+            if (!res || !isMatchClosed(res.status)) return false;
             const pairA = pairs.find((p) => p.pairId === a.pairId);
             const pairB = pairs.find((p) => p.pairId === b.pairId);
             if (!pairA || !pairB) return false;
@@ -216,10 +289,11 @@ export function calculatePairStandings(
             h2hMatches.forEach((m) => {
                 const pairA = pairs.find((p) => p.pairId === a.pairId);
                 const hasA1 = pairA && pairA.playerIds.every((pid) => m.team1PlayerIds.includes(pid));
-                const sA = hasA1 ? m.result.scoreA : m.result.scoreB;
-                const sB = hasA1 ? m.result.scoreB : m.result.scoreA;
-                if (sA > sB) h2hA += 3;
-                else if (sB > sA) h2hB += 3;
+                const { winner, isDraw } = extractClosedMatchMetrics(m);
+                if (!isDraw) {
+                    if ((hasA1 && winner === "Side A") || (!hasA1 && winner === "Side B")) h2hA += 3;
+                    else if ((hasA1 && winner === "Side B") || (!hasA1 && winner === "Side A")) h2hB += 3;
+                }
             });
             if (h2hA !== h2hB) return h2hB - h2hA;
         }

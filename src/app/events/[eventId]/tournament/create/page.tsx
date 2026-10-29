@@ -106,6 +106,7 @@ export default function TournamentCreatePage({
     const [tournamentTitle, setTournamentTitle] = useState("");
     const [numCourts, setNumCourts] = useState<number>(2);
     const [numRounds, setNumRounds] = useState<number>(7);
+    const [numberOfSets, setNumberOfSets] = useState<1 | 3 | 5>(1);
     const [cycles, setCycles] = useState<1 | 2>(1);
     const [numGroups, setNumGroups] = useState<number>(2);
     const [qualifiersPerGroup, setQualifiersPerGroup] = useState<number>(2);
@@ -775,6 +776,7 @@ export default function TournamentCreatePage({
                 title: tournamentTitle,
                 numCourts,
                 numRounds,
+                numberOfSets,
                 cycles,
                 numGroups,
                 qualifiersPerGroup,
@@ -806,14 +808,27 @@ export default function TournamentCreatePage({
             const tournamentRef = doc(collection(db, "tournaments"));
             const tournamentId = tournamentRef.id;
 
+            const matchFormat = {
+                numberOfSets,
+                setsToWin: Math.ceil(numberOfSets / 2) as 1 | 2 | 3,
+            };
+
             const config: TournamentConfig = {
+                mode,
                 numCourts,
                 numRounds: previewResult.numRounds,
+                numberOfSets,
+                matchFormat,
                 ...(cycles ? { cycles } : {}),
                 ...(numGroups ? { numGroups } : {}),
                 ...(qualifiersPerGroup ? { qualifiersPerGroup } : {}),
                 ...(thirdPlacePlayoff !== undefined ? { thirdPlacePlayoff } : {}),
             };
+
+            const matchesWithTournamentId = previewResult.matches.map((m) => ({
+                ...m,
+                tournamentId,
+            }));
 
             const rawDocData = {
                 id: tournamentId,
@@ -823,12 +838,13 @@ export default function TournamentCreatePage({
                 unitType: (event.unitType === "Teams" || isTeamMode) ? "teams" : "players",
                 status,
                 config,
+                matchFormat,
                 participants: previewResult.players,
                 pairs: previewResult.pairs || [],
                 groups: previewResult.groups || [],
                 stages: previewResult.stages || [],
                 bracketSlots: previewResult.bracketSlots || [],
-                matches: previewResult.matches,
+                matches: matchesWithTournamentId,
                 templateId: previewResult.templateId || null,
                 isFromTemplate: Boolean(previewResult.isFromTemplate),
                 createdAt: serverTimestamp(),
@@ -1996,6 +2012,46 @@ export default function TournamentCreatePage({
                                         onChange={(e) => setNumCourts(Math.max(1, parseInt(e.target.value) || 1))}
                                         className="bg-slate-950 border-slate-800 text-white h-11"
                                     />
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                            Match Format (Number of Sets)
+                                        </label>
+                                        <span className="text-base font-bold text-amber-400">
+                                            {numberOfSets === 1
+                                                ? "1 Set (Default)"
+                                                : numberOfSets === 3
+                                                ? "Best of 3 Sets"
+                                                : "Best of 5 Sets"}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {([1, 3, 5] as const).map((setOption) => (
+                                            <button
+                                                key={setOption}
+                                                type="button"
+                                                onClick={() => setNumberOfSets(setOption)}
+                                                className={`p-3 rounded-xl border text-xs font-semibold transition-all ${
+                                                    numberOfSets === setOption
+                                                        ? "bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm"
+                                                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                                                }`}
+                                            >
+                                                <span className="block text-sm font-bold">
+                                                    {setOption} {setOption === 1 ? "Set" : "Sets"}
+                                                </span>
+                                                <span className="text-[10px] opacity-80 block mt-0.5">
+                                                    {setOption === 1
+                                                        ? "Default • Single Set"
+                                                        : setOption === 3
+                                                        ? "First to 2 Sets"
+                                                        : "First to 3 Sets"}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 {(mode === "americano" || mode === "mixicano" || mode === "team_battle") && (
