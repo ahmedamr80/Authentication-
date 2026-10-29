@@ -1,6 +1,6 @@
 # Padel Community Platform
 
-A production-grade padel community platform built with Next.js, Firebase, and Tailwind CSS. Connect with players, discover events, find clubs, and manage your padel journey.
+A production-grade padel community platform built with Next.js, Firebase, and Tailwind CSS. Connect with players, discover events, find clubs, and manage your padel journey. The project also includes cross-platform support using Capacitor to build mobile applications (iOS/Android) from the same codebase.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -12,6 +12,7 @@ A production-grade padel community platform built with Next.js, Firebase, and Ta
 - [Overview](#overview)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -19,7 +20,7 @@ A production-grade padel community platform built with Next.js, Firebase, and Ta
 
 ## Overview
 
-The Padel Community Platform is a comprehensive digital ecosystem designed for the padel community. Whether you're joining matches, discovering courts, connecting with players, or managing profiles—everything is here.
+The Padel Community Platform is a comprehensive digital ecosystem designed for the padel community. Whether you're joining matches, discovering courts, connecting with players, or managing profiles—everything is here. It provides a solid foundation for applications requiring authentication and real-time database capabilities via Firebase.
 
 ### Key Highlights
 
@@ -29,6 +30,7 @@ The Padel Community Platform is a comprehensive digital ecosystem designed for t
 - **Club Directory** (Explore partner venues)
 - **User Profiles** (Statistics, preferences, media)
 - **Enterprise Security** (Server-side validation, protected APIs)
+- **Mobile Ready** (Capacitor integration for generating native iOS and Android apps)
 
 ## Features
 
@@ -86,11 +88,29 @@ The Padel Community Platform is a comprehensive digital ecosystem designed for t
 | **Database** | Firebase Firestore |
 | **Storage** | Firebase Storage |
 | **Admin SDK** | Firebase Admin SDK |
+| **Mobile** | Capacitor |
+
+## Project Structure
+
+```
+├── src/                # Next.js application source code (App Router)
+│   ├── app/            # Application routes and pages
+│   ├── components/     # Reusable UI components
+│   ├── context/        # React context providers
+│   ├── hooks/          # Custom React hooks
+│   ├── lib/            # Utility functions and Firebase configuration
+│   └── types/          # TypeScript type definitions
+├── functions/          # Firebase Cloud Functions source code
+├── android/            # Capacitor Android project
+├── ios/                # Capacitor iOS project
+├── public/             # Static assets (images, icons, etc.)
+└── ...                 # Configuration files (Tailwind, Next.js, etc.)
+```
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js (version 20 or higher recommended)
 - npm or yarn
 - Firebase project
 
@@ -101,8 +121,13 @@ The Padel Community Platform is a comprehensive digital ecosystem designed for t
 git clone <repository-url>
 cd padel-community-platform
 
-# Install dependencies
+# Install dependencies in the root directory
 npm install
+
+# Install dependencies in the functions directory
+cd functions
+npm install
+cd ..
 
 # Setup environment variables
 cp .env.example .env.local
@@ -129,13 +154,15 @@ Complete documentation available in the `docs/` directory:
 | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Production deployment guide |
 | [CHANGELOG.md](./docs/CHANGELOG.md) | Release history |
 
-## Development
+## Available Scripts
+
+In the project directory, you can run:
 
 ```bash
-npm run dev       # Start development server
-npm run build     # Build for production
-npm start         # Run production build
-npm run lint      # Run ESLint
+npm run dev       # Start Next.js development server on port 5000
+npm run build     # Build the app for production to the .next folder
+npm start         # Run Next.js production server on port 5000
+npm run lint      # Run ESLint to catch and fix code style issues
 ```
 
 ## Contributing
