@@ -4,7 +4,8 @@ export type TournamentMode =
     | "team_battle"
     | "round_robin"
     | "knockout"
-    | "round_robin_knockout";
+    | "round_robin_knockout"
+    | "group_vs_group";
 
 export type TournamentStatus = "draft" | "active" | "completed" | "cancelled";
 

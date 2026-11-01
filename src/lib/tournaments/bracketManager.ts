@@ -17,9 +17,17 @@ export function updateBracketProgression(
             if (slot.matchId) {
                 const m = matches.find((x) => x.matchId === slot.matchId);
                 if (m && isMatchClosed(m.result.status)) {
-                    if (m.result.winner === "Side A" || (!m.result.winner && m.result.scoreA > m.result.scoreB)) {
+                    if (
+                        m.result.winner === "Side A" ||
+                        m.result.winner === "Team 1" ||
+                        (!m.result.winner && m.result.scoreA > m.result.scoreB)
+                    ) {
                         slot.winnerPairId = slot.resolvedPairAId;
-                    } else if (m.result.winner === "Side B" || (!m.result.winner && m.result.scoreB > m.result.scoreA)) {
+                    } else if (
+                        m.result.winner === "Side B" ||
+                        m.result.winner === "Team 2" ||
+                        (!m.result.winner && m.result.scoreB > m.result.scoreA)
+                    ) {
                         slot.winnerPairId = slot.resolvedPairBId;
                     } else {
                         slot.winnerPairId = null;
@@ -76,6 +84,8 @@ export function updateBracketProgression(
                 const pairA = pairs.find((p) => p.pairId === slot.resolvedPairAId);
                 const pairB = pairs.find((p) => p.pairId === slot.resolvedPairBId);
                 if (m && pairA && pairB) {
+                    m.pairAId = pairA.pairId;
+                    m.pairBId = pairB.pairId;
                     m.teamAId = pairA.pairId;
                     m.teamBId = pairB.pairId;
                     m.team1PlayerIds = pairA.playerIds;

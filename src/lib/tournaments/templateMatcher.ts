@@ -12,6 +12,7 @@ import { solveTeamBattle } from "./engines/teamBattleEngine";
 import { solveRoundRobin } from "./engines/roundRobinEngine";
 import { solveKnockout, BracketSlot } from "./engines/knockoutEngine";
 import { solveRoundRobinKnockout } from "./engines/hybridEngine";
+import { solveCrossGroup } from "./engines/crossGroupEngine";
 
 export interface TournamentGenerationParams {
     mode: TournamentMode;
@@ -318,7 +319,7 @@ export function generateTournamentSchedule(
 
     // 1. Check participant count based on tournament format
     const participantCount =
-        mode === "round_robin" || mode === "knockout" || mode === "round_robin_knockout"
+        mode === "round_robin" || mode === "knockout" || mode === "round_robin_knockout" || mode === "group_vs_group"
             ? pairs.length
             : mode === "mixicano"
             ? (leftParticipants.length + rightParticipants.length || participants.length)
@@ -656,6 +657,25 @@ export function generateTournamentSchedule(
                 title
             );
             if (!res) throw new Error("Could not solve Round Robin + Knockout tournament with given pairs.");
+            return enrichGeneratedMatches(
+                {
+                    ...res,
+                    isFromTemplate: false,
+                },
+                numberOfSets
+            );
+        }
+
+        case "group_vs_group": {
+            const res = solveCrossGroup(
+                pairs,
+                numCourts,
+                cycles,
+                qualifiersPerGroup,
+                thirdPlacePlayoff,
+                title
+            );
+            if (!res) throw new Error("Could not solve Group A vs Group B tournament with given pairs.");
             return enrichGeneratedMatches(
                 {
                     ...res,

@@ -102,7 +102,7 @@ export default function TournamentWorkspacePage({
     // Active View / Subfilters
     const [activeTab, setActiveTab] = useState<"schedule" | "standings" | "bracket" | "admin">("schedule");
     const [selectedRoundFilter, setSelectedRoundFilter] = useState<string>("ALL");
-    const [selectedGroupFilter] = useState<string>("ALL");
+    const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>("ALL");
 
     // Interactive Team Filter Modal State
     const [selectedTeamIdForModal, setSelectedTeamIdForModal] = useState<string | null>(null);
@@ -951,8 +951,14 @@ export default function TournamentWorkspacePage({
         tourneyMode === "round_robin" ||
         tourneyMode === "knockout" ||
         tourneyMode === "round_robin_knockout" ||
+        tourneyMode === "group_vs_group" ||
         Boolean(tournament.pairs && tournament.pairs.length > 0);
-    const hasBracket = tourneyMode === "knockout" || tourneyMode === "round_robin_knockout";
+    const hasBracket =
+        tourneyMode === "knockout" ||
+        tourneyMode === "round_robin_knockout" ||
+        (tourneyMode === "group_vs_group" && bracketSlots.length > 0);
+    const tournamentGroups: Array<{ groupId: string; pairIds: string[] }> = (tournament as any).groups || [];
+    const qualifiersPerGroupCount = tournament.config?.qualifiersPerGroup || 0;
     const activeStandings = isTeamUnit ? pairStandings : playerStandings;
 
     const closedMatchesCount = matches.filter((m) => getEffectiveMatchStatus(m) === "CLOSED").length;
@@ -1854,12 +1860,48 @@ export default function TournamentWorkspacePage({
                     {/* TAB 2: STANDINGS */}
                     {activeTab === "standings" && (
                         <div className="space-y-6">
+                            {tournamentGroups.length > 1 && (
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                                        <button
+                                            onClick={() => setSelectedGroupFilter("ALL")}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+                                                selectedGroupFilter === "ALL"
+                                                    ? "bg-amber-500 text-slate-950 font-bold"
+                                                    : "bg-slate-900/60 border border-slate-800 text-slate-400 hover:text-slate-200"
+                                            }`}
+                                        >
+                                            All Groups ({tournament.pairs?.length || 0})
+                                        </button>
+                                        {tournamentGroups.map((g) => (
+                                            <button
+                                                key={g.groupId}
+                                                onClick={() => setSelectedGroupFilter(g.groupId)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+                                                    selectedGroupFilter === g.groupId
+                                                        ? "bg-amber-500 text-slate-950 font-bold"
+                                                        : "bg-slate-900/60 border border-slate-800 text-slate-400 hover:text-slate-200"
+                                                }`}
+                                            >
+                                                {g.groupId} ({g.pairIds?.length || 0})
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {qualifiersPerGroupCount > 0 &&
+                                        (tourneyMode === "round_robin_knockout" || tourneyMode === "group_vs_group") && (
+                                            <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30 text-[10px]">
+                                                Top {qualifiersPerGroupCount} per group qualify for Knockout
+                                            </Badge>
+                                        )}
+                                </div>
+                            )}
+
                             <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
                                 <CardHeader className="p-4 border-b border-slate-800 flex flex-row items-center justify-between flex-wrap gap-2">
                                     <div>
                                         <CardTitle className="text-base font-bold text-white flex items-center gap-2">
                                             <Trophy className="w-4 h-4 text-amber-400" />
-                                            Official Leaderboard
+                                            Official Leaderboard {selectedGroupFilter !== "ALL" ? `— ${selectedGroupFilter}` : ""}
                                         </CardTitle>
                                         <p className="text-xs text-slate-400 mt-0.5">
                                             Calculated automatically from CLOSED matches with multi-set & tie-break resolution. Click any competitor to view their matches.
@@ -1935,6 +1977,15 @@ export default function TournamentWorkspacePage({
                                                                 <span className="font-bold text-white hover:text-amber-300 underline-offset-2 hover:underline truncate max-w-[200px]">
                                                                     {displayName}
                                                                 </span>
+                                                                {selectedGroupFilter !== "ALL" &&
+                                                                    qualifiersPerGroupCount > 0 &&
+                                                                    (tourneyMode === "round_robin_knockout" ||
+                                                                        tourneyMode === "group_vs_group") &&
+                                                                    row.rank <= qualifiersPerGroupCount && (
+                                                                        <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[9px] px-1.5 py-0 shrink-0">
+                                                                            Qualifies
+                                                                        </Badge>
+                                                                    )}
                                                             </div>
                                                         </td>
                                                         <td className="py-3 px-2 text-center text-slate-400">
@@ -1987,7 +2038,7 @@ export default function TournamentWorkspacePage({
                     {/* TAB 3: PLAYOFF BRACKET */}
                     {activeTab === "bracket" && hasBracket && (
                         <div className="space-y-6">
-                            {tourneyMode === "round_robin_knockout" && isAuthorizedAdmin && (
+                            {(tourneyMode === "round_robin_knockout" || tourneyMode === "group_vs_group") && isAuthorizedAdmin && (
                                 <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between flex-wrap gap-3">
                                     <div>
                                         <span className="text-sm font-bold text-white block">
@@ -2094,7 +2145,21 @@ export default function TournamentWorkspacePage({
                                                                         </div>
                                                                     )}
                                                                     <span className="truncate">
-                                                                        {pairA ? pairA.pairName : "TBD"}
+                                                                        {pairA
+                                                                            ? pairA.pairName
+                                                                            : slot.sourceA?.type === "group_qualifier" &&
+                                                                              slot.sourceA.groupId &&
+                                                                              slot.sourceA.rank
+                                                                            ? `TBD (${
+                                                                                  slot.sourceA.rank === 1
+                                                                                      ? "1st"
+                                                                                      : slot.sourceA.rank === 2
+                                                                                      ? "2nd"
+                                                                                      : slot.sourceA.rank === 3
+                                                                                      ? "3rd"
+                                                                                      : `${slot.sourceA.rank}th`
+                                                                              } ${slot.sourceA.groupId})`
+                                                                            : "TBD"}
                                                                     </span>
                                                                 </div>
                                                                 <span className="shrink-0">
@@ -2139,7 +2204,21 @@ export default function TournamentWorkspacePage({
                                                                         </div>
                                                                     )}
                                                                     <span className="truncate">
-                                                                        {pairB ? pairB.pairName : "TBD"}
+                                                                        {pairB
+                                                                            ? pairB.pairName
+                                                                            : slot.sourceB?.type === "group_qualifier" &&
+                                                                              slot.sourceB.groupId &&
+                                                                              slot.sourceB.rank
+                                                                            ? `TBD (${
+                                                                                  slot.sourceB.rank === 1
+                                                                                      ? "1st"
+                                                                                      : slot.sourceB.rank === 2
+                                                                                      ? "2nd"
+                                                                                      : slot.sourceB.rank === 3
+                                                                                      ? "3rd"
+                                                                                      : `${slot.sourceB.rank}th`
+                                                                              } ${slot.sourceB.groupId})`
+                                                                            : "TBD"}
                                                                     </span>
                                                                 </div>
                                                                 <span className="shrink-0">

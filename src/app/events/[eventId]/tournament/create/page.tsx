@@ -130,6 +130,9 @@ export default function TournamentCreatePage({
     const [editingPairId, setEditingPairId] = useState<string | null>(null);
     const [editingPairName, setEditingPairName] = useState<string>("");
 
+    // Team Group Allocations (pairId -> "Group A" | "Group B" | ...)
+    const [teamGroupAssignments, setTeamGroupAssignments] = useState<Record<string, string>>({});
+
     // Firestore Tournament Templates
     const [templates, setTemplates] = useState<TournamentTemplate[]>([]);
 
@@ -370,7 +373,12 @@ export default function TournamentCreatePage({
     }, [confirmedEntries, waitlistedEntries, selectedEntryIds]);
 
     const isTeamMode = useMemo(() => {
-        return mode === "round_robin" || mode === "knockout" || mode === "round_robin_knockout";
+        return (
+            mode === "round_robin" ||
+            mode === "knockout" ||
+            mode === "round_robin_knockout" ||
+            mode === "group_vs_group"
+        );
     }, [mode]);
 
     // Paired player IDs for custom player pairs
@@ -389,8 +397,20 @@ export default function TournamentCreatePage({
         return activeParticipants.filter((p) => !pairedPlayerIds.has(p.id));
     }, [isTeamMode, event, activeParticipants, pairedPlayerIds]);
 
-    // Active Pairs list (for Teams modes: Round Robin, Knockout, Hybrid)
-    const activePairs = useMemo<TournamentPair[]>(() => {
+    // Effective group count & names for group-based team modes
+    const effectiveGroupCount = useMemo(() => {
+        if (mode === "group_vs_group") return 2;
+        if (mode === "round_robin_knockout") return Math.max(2, numGroups || 2);
+        if (mode === "round_robin") return Math.max(1, numGroups || 1);
+        return 1;
+    }, [mode, numGroups]);
+
+    const effectiveGroupNames = useMemo(() => {
+        return Array.from({ length: effectiveGroupCount }, (_, i) => `Group ${String.fromCharCode(65 + i)}`);
+    }, [effectiveGroupCount]);
+
+    // Base Pairs list before groupId attachment
+    const basePairs = useMemo<TournamentPair[]>(() => {
         if (event?.unitType === "Teams") {
             const allCandidates = [...confirmedEntries, ...waitlistedEntries];
             const pairs: TournamentPair[] = [];
@@ -424,6 +444,105 @@ export default function TournamentCreatePage({
 
         return [];
     }, [event, confirmedEntries, waitlistedEntries, selectedEntryIds, customPlayerPairs, isTeamMode]);
+
+    // Keep teamGroupAssignments synchronized when basePairs or effectiveGroupNames change
+    useEffect(() => {
+        if (!isTeamMode || basePairs.length === 0) return;
+        const validSet = new Set(effectiveGroupNames);
+        const G = effectiveGroupNames.length;
+
+        setTeamGroupAssignments((prev) => {
+            const next: Record<string, string> = {};
+            let changed = false;
+
+            basePairs.forEach((pair, idx) => {
+                const existing = prev[pair.pairId];
+                if (existing && validSet.has(existing)) {
+                    next[pair.pairId] = existing;
+                } else {
+                    const cycle = 2 * G;
+                    const pos = idx % cycle;
+                    const gIdx = pos < G ? pos : cycle - 1 - pos;
+                    next[pair.pairId] = effectiveGroupNames[gIdx] || "Group A";
+                    changed = true;
+                }
+            });
+
+            if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+                return prev;
+            }
+            return next;
+        });
+    }, [isTeamMode, basePairs, effectiveGroupNames]);
+
+    // Active Pairs list with explicit groupId attached
+    const activePairs = useMemo<TournamentPair[]>(() => {
+        const G = effectiveGroupNames.length;
+        return basePairs.map((pair, idx) => {
+            const cycle = 2 * G;
+            const pos = idx % cycle;
+            const gIdx = pos < G ? pos : cycle - 1 - pos;
+            const fallbackGroup = effectiveGroupNames[gIdx] || "Group A";
+            return {
+                ...pair,
+                groupId: teamGroupAssignments[pair.pairId] || fallbackGroup,
+            };
+        });
+    }, [basePairs, teamGroupAssignments, effectiveGroupNames]);
+
+    // Group Allocation helper actions
+    const handleAssignTeamToGroup = (pairId: string, targetGroup: string) => {
+        setTeamGroupAssignments((prev) => ({
+            ...prev,
+            [pairId]: targetGroup,
+        }));
+    };
+
+    const handleAllocateGroupsSnake = () => {
+        const G = effectiveGroupNames.length;
+        const next: Record<string, string> = {};
+        basePairs.forEach((pair, idx) => {
+            const cycle = 2 * G;
+            const pos = idx % cycle;
+            const gIdx = pos < G ? pos : cycle - 1 - pos;
+            next[pair.pairId] = effectiveGroupNames[gIdx] || "Group A";
+        });
+        setTeamGroupAssignments(next);
+        showToast(`Teams allocated across ${G} groups using Snake Seeding.`, "success");
+    };
+
+    const handleAllocateGroupsAlternating = () => {
+        const G = effectiveGroupNames.length;
+        const next: Record<string, string> = {};
+        basePairs.forEach((pair, idx) => {
+            next[pair.pairId] = effectiveGroupNames[idx % G] || "Group A";
+        });
+        setTeamGroupAssignments(next);
+        showToast(`Teams allocated across ${G} groups in alternating order.`, "success");
+    };
+
+    const handleAllocateGroupsSplitHalf = () => {
+        const G = effectiveGroupNames.length;
+        const next: Record<string, string> = {};
+        const perGroup = Math.ceil(basePairs.length / G);
+        basePairs.forEach((pair, idx) => {
+            const gIdx = Math.min(G - 1, Math.floor(idx / Math.max(1, perGroup)));
+            next[pair.pairId] = effectiveGroupNames[gIdx] || "Group A";
+        });
+        setTeamGroupAssignments(next);
+        showToast(`Teams split sequentially across ${G} groups.`, "success");
+    };
+
+    const handleAllocateGroupsRandom = () => {
+        const G = effectiveGroupNames.length;
+        const shuffled = [...basePairs].sort(() => Math.random() - 0.5);
+        const next: Record<string, string> = {};
+        shuffled.forEach((pair, idx) => {
+            next[pair.pairId] = effectiveGroupNames[idx % G] || "Group A";
+        });
+        setTeamGroupAssignments(next);
+        showToast(`Teams randomly drawn into ${G} balanced groups.`, "success");
+    };
 
     // Synchronize customPlayerPairs when active roster or team mode changes
     useEffect(() => {
@@ -713,6 +832,11 @@ export default function TournamentCreatePage({
                 const suggestedCourts = Math.max(1, Math.min(4, Math.floor(count / 2)));
                 setNumCourts(suggestedCourts);
                 setNumGroups(Math.max(2, Math.floor(count / 4)));
+            } else if (mode === "group_vs_group") {
+                const suggestedCourts = Math.max(1, Math.min(6, Math.floor(count / 2)));
+                setNumCourts(suggestedCourts);
+                setNumGroups(2);
+                setQualifiersPerGroup(2);
             }
         }
     }, [mode, isTeamMode, activeParticipants.length, activePairs.length]);
@@ -769,6 +893,16 @@ export default function TournamentCreatePage({
                         `Team "${incompleteTeam.name}" has only 1 player. All teams must have 2 players.`
                     );
                 }
+                if (effectiveGroupCount > 1) {
+                    for (const gName of effectiveGroupNames) {
+                        const countInGroup = activePairs.filter((p) => p.groupId === gName).length;
+                        if (countInGroup === 0) {
+                            throw new Error(
+                                `${gName} has 0 teams allocated. Please assign at least 1 team to ${gName}.`
+                            );
+                        }
+                    }
+                }
             }
 
             const result = generateTournamentSchedule({
@@ -821,7 +955,7 @@ export default function TournamentCreatePage({
                 matchFormat,
                 ...(cycles ? { cycles } : {}),
                 ...(numGroups ? { numGroups } : {}),
-                ...(qualifiersPerGroup ? { qualifiersPerGroup } : {}),
+                ...(qualifiersPerGroup !== undefined ? { qualifiersPerGroup } : {}),
                 ...(thirdPlacePlayoff !== undefined ? { thirdPlacePlayoff } : {}),
             };
 
@@ -1177,7 +1311,7 @@ export default function TournamentCreatePage({
                                         Fixed Team & Bracket Formats {event?.unitType === "Players" ? "(Assigned in Step 3)" : ""}
                                     </h3>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div
                                         onClick={() => setMode("round_robin")}
                                         className={`cursor-pointer p-4 rounded-2xl border transition-all ${
@@ -1241,6 +1375,33 @@ export default function TournamentCreatePage({
                                         <h4 className="text-sm font-bold text-white mt-3">Round Robin + Knockout</h4>
                                         <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                                             Group stage followed by bracket playoffs for top advancing teams. Automated qualifier progression.
+                                        </p>
+                                    </div>
+
+                                    <div
+                                        onClick={() => setMode("group_vs_group")}
+                                        className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                                            mode === "group_vs_group"
+                                                ? "bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500"
+                                                : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between">
+                                            <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold">
+                                                <Scale className="w-4 h-4" />
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 font-semibold text-[9px]">
+                                                    100% Courts • Odd Groups
+                                                </Badge>
+                                                {mode === "group_vs_group" && (
+                                                    <Badge className="bg-amber-500 text-slate-950 font-bold text-[10px]">Selected</Badge>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <h4 className="text-sm font-bold text-white mt-3">Group A vs Group B + Knockout</h4>
+                                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                            Every team in Group A plays every team in Group B. Perfect for odd group sizes (e.g. 10 teams / 5v5 on 5 courts with 0 resting teams) + Top 2 or Top 4 per group Knockout.
                                         </p>
                                     </div>
                                 </div>
@@ -1948,6 +2109,203 @@ export default function TournamentCreatePage({
                             </Card>
                         )}
 
+                        {/* Team Group Allocation Workspace (Step 3 - when mode uses multiple groups) */}
+                        {(mode === "group_vs_group" ||
+                            mode === "round_robin_knockout" ||
+                            (mode === "round_robin" && numGroups > 1)) &&
+                            activePairs.length >= 2 && (
+                                <Card className="bg-slate-900 border-cyan-500/40 shadow-lg">
+                                    <CardHeader className="pb-3 border-b border-slate-800 space-y-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                            <div>
+                                                <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                                                    <Grid className="w-5 h-5 text-cyan-400" />
+                                                    Group Allocation ({effectiveGroupNames.join(" • ")})
+                                                </CardTitle>
+                                                <p className="text-xs text-slate-400 mt-0.5">
+                                                    Allocate teams into groups manually or use one of the seeding presets below.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                {effectiveGroupNames.map((gName) => {
+                                                    const c = activePairs.filter((p) => p.groupId === gName).length;
+                                                    return (
+                                                        <Badge
+                                                            key={gName}
+                                                            className="bg-cyan-500/15 text-cyan-300 border-cyan-500/30 text-xs px-2.5 py-0.5 font-semibold"
+                                                        >
+                                                            {gName}: {c}
+                                                        </Badge>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                            <span className="text-xs font-semibold text-slate-400">Auto-Allocate:</span>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                type="button"
+                                                onClick={handleAllocateGroupsSnake}
+                                                className="bg-slate-950 border-cyan-500/40 hover:bg-cyan-500/20 text-cyan-300 text-xs h-8"
+                                            >
+                                                <Scale className="w-3.5 h-3.5 mr-1.5 text-cyan-400" /> Snake Seeding (1→A, 2→B, 3→B, 4→A)
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                type="button"
+                                                onClick={handleAllocateGroupsAlternating}
+                                                className="bg-slate-950 border-slate-700 hover:border-slate-600 text-slate-200 text-xs h-8"
+                                            >
+                                                <Layers className="w-3.5 h-3.5 mr-1.5 text-amber-400" /> Alternating (1→A, 2→B, 3→A, 4→B)
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                type="button"
+                                                onClick={handleAllocateGroupsSplitHalf}
+                                                className="bg-slate-950 border-slate-700 hover:border-slate-600 text-slate-200 text-xs h-8"
+                                            >
+                                                <Users className="w-3.5 h-3.5 mr-1.5 text-emerald-400" /> Top / Bottom Split
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                type="button"
+                                                onClick={handleAllocateGroupsRandom}
+                                                className="bg-slate-950 border-slate-700 hover:border-slate-600 text-slate-200 text-xs h-8"
+                                            >
+                                                <Shuffle className="w-3.5 h-3.5 mr-1.5 text-purple-400" /> Random Draw
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+
+                                    <CardContent className="p-4">
+                                        <div
+                                            className={`grid grid-cols-1 ${
+                                                effectiveGroupCount === 2 ? "md:grid-cols-2" : "md:grid-cols-2 lg:grid-cols-3"
+                                            } gap-4`}
+                                        >
+                                            {effectiveGroupNames.map((gName, gIdx) => {
+                                                const groupPairs = activePairs.filter((p) => p.groupId === gName);
+                                                const isGroupA = gIdx === 0;
+                                                return (
+                                                    <div
+                                                        key={gName}
+                                                        className={`p-4 rounded-xl bg-slate-950 border ${
+                                                            isGroupA
+                                                                ? "border-cyan-500/30"
+                                                                : gIdx === 1
+                                                                ? "border-amber-500/30"
+                                                                : "border-emerald-500/30"
+                                                        } space-y-2.5`}
+                                                    >
+                                                        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                                                            <span
+                                                                className={`text-sm font-bold ${
+                                                                    isGroupA
+                                                                        ? "text-cyan-400"
+                                                                        : gIdx === 1
+                                                                        ? "text-amber-400"
+                                                                        : "text-emerald-400"
+                                                                }`}
+                                                            >
+                                                                {gName}
+                                                            </span>
+                                                            <Badge className="bg-slate-900 border-slate-800 text-slate-300 text-[10px]">
+                                                                {groupPairs.length} {groupPairs.length === 1 ? "Team" : "Teams"}
+                                                            </Badge>
+                                                        </div>
+
+                                                        {groupPairs.length === 0 ? (
+                                                            <p className="text-xs text-slate-500 italic py-4 text-center">
+                                                                No teams in {gName}. Move a team here from another group.
+                                                            </p>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {groupPairs.map((pair) => (
+                                                                    <div
+                                                                        key={pair.pairId}
+                                                                        className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                                                                    >
+                                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                                            <span className="text-[10px] font-bold text-slate-500 w-5 shrink-0">
+                                                                                #{pair.seed}
+                                                                            </span>
+                                                                            <div className="flex items-center -space-x-1.5 shrink-0">
+                                                                                {(pair.playerPhotos || []).map((photo, pIdx) => (
+                                                                                    <Avatar
+                                                                                        key={pIdx}
+                                                                                        className="h-6 w-6 border border-slate-900 shrink-0"
+                                                                                    >
+                                                                                        <AvatarImage src={photo || undefined} />
+                                                                                        <AvatarFallback className="bg-slate-800 text-[9px] text-slate-300 font-bold">
+                                                                                            {pair.playerNames?.[pIdx]?.charAt(0) || "T"}
+                                                                                        </AvatarFallback>
+                                                                                    </Avatar>
+                                                                                ))}
+                                                                            </div>
+                                                                            <span className="text-slate-200 font-semibold truncate">
+                                                                                {pair.pairName}
+                                                                            </span>
+                                                                        </div>
+
+                                                                        {effectiveGroupCount === 2 ? (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleAssignTeamToGroup(
+                                                                                        pair.pairId,
+                                                                                        isGroupA ? "Group B" : "Group A"
+                                                                                    )
+                                                                                }
+                                                                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-colors ${
+                                                                                    isGroupA
+                                                                                        ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
+                                                                                        : "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25"
+                                                                                }`}
+                                                                            >
+                                                                                {isGroupA ? "Move to Group B →" : "← Move to Group A"}
+                                                                            </button>
+                                                                        ) : (
+                                                                            <div className="flex items-center gap-1 shrink-0">
+                                                                                {effectiveGroupNames.map((targetG) => {
+                                                                                    const active = pair.groupId === targetG;
+                                                                                    const shortLabel = targetG.replace("Group ", "");
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={targetG}
+                                                                                            type="button"
+                                                                                            onClick={() =>
+                                                                                                handleAssignTeamToGroup(pair.pairId, targetG)
+                                                                                            }
+                                                                                            className={`w-6 h-6 rounded-md text-[10px] font-bold transition-colors ${
+                                                                                                active
+                                                                                                    ? "bg-amber-500 text-slate-950"
+                                                                                                    : "bg-slate-950 text-slate-400 border border-slate-800 hover:text-white"
+                                                                                            }`}
+                                                                                            title={`Assign to ${targetG}`}
+                                                                                        >
+                                                                                            {shortLabel}
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
                         <div className="flex justify-between pt-4">
                             <Button
                                 variant="outline"
@@ -2073,14 +2431,14 @@ export default function TournamentCreatePage({
                                     </div>
                                 )}
 
-                                {(mode === "round_robin" || mode === "round_robin_knockout") && (
+                                {(mode === "round_robin" || mode === "round_robin_knockout" || mode === "group_vs_group") && (
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
                                             <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                                                Round Robin Cycles
+                                                {mode === "group_vs_group" ? "Cross-Group Cycles" : "Round Robin Cycles"}
                                             </label>
                                             <span className="text-base font-bold text-amber-400">
-                                                {cycles === 2 ? "Double Round Robin (2 Cycles)" : "Single Round Robin (1 Cycle)"}
+                                                {cycles === 2 ? "Double Cycle (2 Matches vs each)" : "Single Cycle (1 Match vs each)"}
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
@@ -2150,7 +2508,196 @@ export default function TournamentCreatePage({
                                     </div>
                                 )}
 
-                                {(mode === "knockout" || mode === "round_robin_knockout") && (
+                                {mode === "group_vs_group" && (
+                                    <div className="space-y-4">
+                                        <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 space-y-1.5 text-xs">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                                                    <Scale className="w-4 h-4 text-cyan-400" />
+                                                    Group A vs Group B Stage Breakdown
+                                                </span>
+                                                <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/40 text-[10px]">
+                                                    {activePairs.filter((p) => p.groupId === "Group A").length} vs{" "}
+                                                    {activePairs.filter((p) => p.groupId === "Group B").length} Teams
+                                                </Badge>
+                                            </div>
+                                            <p className="text-slate-300 leading-relaxed">
+                                                Teams are divided into{" "}
+                                                <strong>Group A ({activePairs.filter((p) => p.groupId === "Group A").length})</strong> and{" "}
+                                                <strong>Group B ({activePairs.filter((p) => p.groupId === "Group B").length})</strong>. Every team in Group A plays every team in Group B (
+                                                {activePairs.filter((p) => p.groupId === "Group A").length *
+                                                    activePairs.filter((p) => p.groupId === "Group B").length *
+                                                    cycles}{" "}
+                                                cross-group matches total).
+                                                {activePairs.filter((p) => p.groupId === "Group A").length ===
+                                                    activePairs.filter((p) => p.groupId === "Group B").length &&
+                                                numCourts >= activePairs.filter((p) => p.groupId === "Group A").length
+                                                    ? ` All ${activePairs.filter((p) => p.groupId === "Group A").length} courts will be 100% utilized every round with 0 teams resting!`
+                                                    : ""}
+                                            </p>
+                                        </div>
+
+                                        {/* Inline Group A vs Group B Team Allocation in Step 4 */}
+                                        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                                                <div>
+                                                    <span className="text-xs font-bold text-white uppercase tracking-wider block">
+                                                        Allocate Teams to Group A & Group B
+                                                    </span>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        Click any team to move it between Group A and Group B, or use a preset draw.
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        type="button"
+                                                        onClick={handleAllocateGroupsSnake}
+                                                        className="bg-slate-900 border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/20 text-[11px] h-7 px-2.5"
+                                                    >
+                                                        Snake
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        type="button"
+                                                        onClick={handleAllocateGroupsAlternating}
+                                                        className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 text-[11px] h-7 px-2.5"
+                                                    >
+                                                        Alternate
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        type="button"
+                                                        onClick={handleAllocateGroupsSplitHalf}
+                                                        className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 text-[11px] h-7 px-2.5"
+                                                    >
+                                                        Split Half
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        type="button"
+                                                        onClick={handleAllocateGroupsRandom}
+                                                        className="bg-slate-900 border-purple-500/40 text-purple-300 hover:bg-purple-500/20 text-[11px] h-7 px-2.5"
+                                                    >
+                                                        Random Draw
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {(["Group A", "Group B"] as const).map((gName, gIdx) => {
+                                                    const gPairs = activePairs.filter((p) => p.groupId === gName);
+                                                    const isGroupA = gIdx === 0;
+                                                    return (
+                                                        <div
+                                                            key={gName}
+                                                            className={`p-3 rounded-xl bg-slate-900/70 border ${
+                                                                isGroupA ? "border-cyan-500/30" : "border-amber-500/30"
+                                                            } space-y-2`}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <span
+                                                                    className={`text-xs font-bold ${
+                                                                        isGroupA ? "text-cyan-400" : "text-amber-400"
+                                                                    }`}
+                                                                >
+                                                                    {gName} ({gPairs.length})
+                                                                </span>
+                                                            </div>
+                                                            <div className="space-y-1.5">
+                                                                {gPairs.map((pair) => (
+                                                                    <div
+                                                                        key={pair.pairId}
+                                                                        className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                                                                    >
+                                                                        <span className="text-slate-200 font-medium truncate">
+                                                                            #{pair.seed} {pair.pairName}
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                handleAssignTeamToGroup(
+                                                                                    pair.pairId,
+                                                                                    isGroupA ? "Group B" : "Group A"
+                                                                                )
+                                                                            }
+                                                                            className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                                                                                isGroupA
+                                                                                    ? "bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+                                                                                    : "bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/25"
+                                                                            }`}
+                                                                        >
+                                                                            {isGroupA ? "→ Group B" : "← Group A"}
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                                    Stage 2 Knockout Advancement (Per Group)
+                                                </label>
+                                                <span className="text-sm font-bold text-amber-400">
+                                                    {qualifiersPerGroup === 0
+                                                        ? "Group Stage Only (No Knockout)"
+                                                        : `Top ${qualifiersPerGroup} per Group (${qualifiersPerGroup * 2} Teams Total)`}
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                {[
+                                                    {
+                                                        value: 2,
+                                                        title: "Top 2 per Group (Semifinals)",
+                                                        desc: "4 Qualifiers • 1st A vs 2nd B & 1st B vs 2nd A",
+                                                    },
+                                                    {
+                                                        value: 4,
+                                                        title: "Top 4 per Group (Quarterfinals)",
+                                                        desc: "8 Qualifiers • Cross-Group Quarterfinals (1A vs 4B...)",
+                                                    },
+                                                    {
+                                                        value: 1,
+                                                        title: "Top 1 per Group (Direct Final)",
+                                                        desc: "2 Qualifiers • 1st Group A vs 1st Group B",
+                                                    },
+                                                    {
+                                                        value: 0,
+                                                        title: "No Knockout Stage",
+                                                        desc: "Group A vs Group B standings only",
+                                                    },
+                                                ].map((opt) => (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() => setQualifiersPerGroup(opt.value)}
+                                                        className={`p-3 rounded-xl border text-left transition-all ${
+                                                            qualifiersPerGroup === opt.value
+                                                                ? "bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm"
+                                                                : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                                                        }`}
+                                                    >
+                                                        <span className="block text-xs font-bold">{opt.title}</span>
+                                                        <span className="block text-[10px] opacity-80 mt-0.5">{opt.desc}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(mode === "knockout" ||
+                                    mode === "round_robin_knockout" ||
+                                    (mode === "group_vs_group" && qualifiersPerGroup >= 2)) && (
                                     <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-slate-800">
                                         <div>
                                             <span className="text-sm font-semibold text-white block">3rd Place Playoff</span>
@@ -2215,6 +2762,47 @@ export default function TournamentCreatePage({
                                 </span>
                             </div>
                         </div>
+
+                        {previewResult.groups && previewResult.groups.length > 1 && previewResult.pairs && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {previewResult.groups.map((grp, gIdx) => {
+                                    const grpPairs = previewResult.pairs!.filter((p) =>
+                                        grp.pairIds.includes(p.pairId)
+                                    );
+                                    return (
+                                        <div
+                                            key={grp.groupId}
+                                            className={`p-3.5 rounded-xl bg-slate-900 border ${
+                                                gIdx === 0 ? "border-cyan-500/30" : "border-amber-500/30"
+                                            } space-y-2`}
+                                        >
+                                            <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                                                <span
+                                                    className={`text-xs font-bold uppercase tracking-wider ${
+                                                        gIdx === 0 ? "text-cyan-400" : "text-amber-400"
+                                                    }`}
+                                                >
+                                                    {grp.groupId} Roster
+                                                </span>
+                                                <Badge className="bg-slate-950 border-slate-800 text-slate-300 text-[10px]">
+                                                    {grpPairs.length} Teams
+                                                </Badge>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {grpPairs.map((p) => (
+                                                    <span
+                                                        key={p.pairId}
+                                                        className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 font-medium"
+                                                    >
+                                                        {p.pairName}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">

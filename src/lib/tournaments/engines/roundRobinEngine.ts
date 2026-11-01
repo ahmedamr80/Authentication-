@@ -26,6 +26,22 @@ export function assignGroupsSnake(pairs: TournamentPair[], numGroups: number): R
     }
     const groupNames: string[] = [];
     for (let i = 0; i < numGroups; i++) groupNames.push(`Group ${String.fromCharCode(65 + i)}`);
+    const validGroupSet = new Set(groupNames);
+
+    // Check if pairs already have valid preset groupIds covering all groups
+    const allHaveValidPreset = pairs.every((p) => p.groupId && validGroupSet.has(p.groupId));
+    if (allHaveValidPreset) {
+        const presetGroups: Record<string, TournamentPair[]> = {};
+        groupNames.forEach((g) => (presetGroups[g] = []));
+        pairs.forEach((p) => {
+            presetGroups[p.groupId!].push(p);
+        });
+        const allNonEmpty = groupNames.every((g) => presetGroups[g].length > 0);
+        if (allNonEmpty) {
+            return presetGroups;
+        }
+    }
+
     const groups: Record<string, TournamentPair[]> = {};
     groupNames.forEach((g) => (groups[g] = []));
 

@@ -7,6 +7,14 @@ import {
     isMatchClosed,
 } from "./types";
 
+function normalizeWinnerSide(w?: string | null): "Side A" | "Side B" | "Draw" | null {
+    if (!w) return null;
+    if (w === "Side A" || w === "Team 1") return "Side A";
+    if (w === "Side B" || w === "Team 2") return "Side B";
+    if (w === "Draw") return "Draw";
+    return null;
+}
+
 /**
  * Helper to extract effective match games, sets won, and winner for a closed match.
  */
@@ -17,7 +25,7 @@ function extractClosedMatchMetrics(m: TournamentMatch) {
     if (hasCustomSets) {
         const numSets = (res.sets!.length === 5 ? 5 : res.sets!.length === 3 ? 3 : 1) as 1 | 3 | 5;
         const evalRes = evaluateMatchSets(res.sets, numSets, m.teamAId, m.teamBId);
-        const winner = res.winner || evalRes.winner;
+        const winner = normalizeWinnerSide(res.winner) || normalizeWinnerSide(evalRes.winner);
         const isDraw = res.isDraw !== undefined ? res.isDraw : winner === "Draw";
         return {
             gamesA: evalRes.totalGamesA,
@@ -31,7 +39,7 @@ function extractClosedMatchMetrics(m: TournamentMatch) {
 
     const sA = Number(res?.scoreA) || 0;
     const sB = Number(res?.scoreB) || 0;
-    let winner = res?.winner || null;
+    let winner = normalizeWinnerSide(res?.winner);
     if (!winner) {
         if (sA > sB) winner = "Side A";
         else if (sB > sA) winner = "Side B";
